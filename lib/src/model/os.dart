@@ -1,0 +1,17 @@
+import 'package:path/path.dart' as p;
+
+/// The family of operating system muster runs on, which sets how its paths
+/// are written and where its cache sits.
+enum Os {
+  /// Linux, macOS and every other system with `/` paths.
+  posix,
+
+  /// Windows.
+  windows;
+
+  /// The path style the system writes its paths in.
+  p.Context get paths => switch (this) {
+    .posix => p.posix,
+    .windows => p.windows,
+  };
+}

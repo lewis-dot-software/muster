@@ -90,7 +90,7 @@ A kept lock is a lock muster keeps beside a manifest. Its file is `<name>-<key>.
 
 ## Store
 
-The cache is `MUSTER_CACHE` where it is set, else `$XDG_CACHE_HOME/muster`, else `~/.cache/muster`, and `%LOCALAPPDATA%\muster` on Windows. It holds one bare clone a git URL, its whole history, named by a hash of the URL as written. Its fetch carries every branch and tag, `+refs/heads/*:refs/heads/*` and `+refs/tags/*:refs/tags/*`, since a bare clone keeps no refspec of its own, and runs where the clone lacks the pin's commit.
+The cache is `MUSTER_CACHE` where it is set, else `$XDG_CACHE_HOME/muster`, else `~/.cache/muster`, and `%LOCALAPPDATA%\muster` on Windows. It holds one bare clone a git URL, its whole history, named by a hash of the URL as written. Its fetch carries every branch and tag, `+refs/heads/*:refs/heads/*` and `+refs/tags/*:refs/tags/*`, since a bare clone keeps no refspec of its own, and runs where the clone lacks the pin's commit. A new clone is cloned under a temporary name and moved into place, so one that fails leaves nothing in the cache and one cut short leaves only a directory no load reads, and git takes its object format from the URL's repo. Its fetch prunes each ref the URL no longer has, so a branch deleted there never blocks one named under it. Git reaches a clone by `--git-dir`, since it refuses a bare repo found from a directory where `safe.bareRepository` is `explicit`.
 
 A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory a codebase by its name:
 
@@ -131,6 +131,7 @@ Every expected failure is a value, so a consumer cannot reach a checkout without
 | `CommandFailed` | The command, its exit code and its output |
 | `Unstartable` | The executable that could not start, `git`, `dart` or `flutter` |
 | `StoreFailed` | The path a file act failed on, and what the system said |
+| `PinMissing` | The URL, and the pin's commit, on none of its branches or tags after a fetch |
 
 A consumer handles each case by an exhaustive switch, and a test fails on every case but `Fetched`, so no codebase is skipped in silence.
 
@@ -165,7 +166,7 @@ Each layer is a directory under `lib/src/`.
 
 The outside world reaches muster through three seams:
 
-- Processes, through one runner passed in by constructor, that git and both toolchains go through, the environment a caller passes added to the process's own.
+- Processes, through one runner passed in by constructor, that git and both toolchains go through, each process started with the environment read at the entry and the caller's additions over it, and nothing else. Git starts with none of the variables `git rev-parse --local-env-vars` lists but the two that carry configuration, as git itself does on moving to another repo, so a `GIT_DIR` a hook exports never points it away from muster's repo, and with its terminal prompt off, so it fails where it would ask on the terminal for an HTTP URL's credentials.
 - The environment and the working directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them.
 - Files, through `dart:io` in `store` alone and never faked, since git and pub act on real directories whatever muster fakes.
 
@@ -173,7 +174,7 @@ The outside world reaches muster through three seams:
 
 ## Output
 
-`muster fetch [manifest...]` loads and prints a row a codebase, tab-separated under a header: its name, its outcome and that outcome's own detail, the path for `Fetched`, the lock for `Unlocked`, the command for `CommandFailed`, the executable for `Unstartable` and the path for `StoreFailed`. A refused load prints why and no rows. `muster lock [manifest...]` writes and removes locks and prints a row each. With no manifest named, each reads `muster.yaml` in the current directory and `MUSTER_MANIFESTS`.
+`muster fetch [manifest...]` loads and prints a row a codebase, tab-separated under a header: its name, its outcome and that outcome's own detail, the path for `Fetched`, the lock for `Unlocked`, the command for `CommandFailed`, the executable for `Unstartable`, the path for `StoreFailed` and the commit for `PinMissing`. A refused load prints why and no rows. `muster lock [manifest...]` writes and removes locks and prints a row each. With no manifest named, each reads `muster.yaml` in the current directory and `MUSTER_MANIFESTS`.
 
 The exit codes are one enum in `cli`, and its doc comment is their home.
 
