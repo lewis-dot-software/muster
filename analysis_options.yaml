@@ -1,0 +1,21 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  errors:
+    todo: error
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    - specify_nonobvious_local_variable_types
+    - public_member_api_docs
+    - exhaustive_cases
+    - no_default_cases
+    - unawaited_futures
+    - discarded_futures
+    - avoid_dynamic_calls
+    - avoid_catches_without_on_clauses
+    - avoid_catching_errors
