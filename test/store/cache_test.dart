@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/commit.dart';
-import 'package:muster/src/model/fetch_failure.dart';
+import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/git_url.dart';
 import 'package:muster/src/store/cache.dart';
 import 'package:path/path.dart' as p;

@@ -50,15 +50,16 @@ Checkouts checkoutsIn(Directory temp, Runner runner) =>
 LocksDirectory locksIn(Directory temp) =>
     .beside(.parse(p.join(consumerIn(temp).path, 'muster.yaml'), .posix)!);
 
-/// The codebase `app` of [origin], pinned at [commit], its [root] and
+/// The codebase [name] of [origin], pinned at [commit], its [root] and
 /// [toolchain] as given.
 GitCodebase codebaseOf(
   Origin origin,
   Commit commit, {
+  String name = 'app',
   String root = '.',
   Toolchain toolchain = .dart,
 }) => (
-  name: .parse('app')!,
+  name: .parse(name)!,
   url: origin.url,
   commit: commit,
   root: .parse(root)!,

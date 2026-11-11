@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import '../model/fetch_failure.dart';
+import '../model/fetch_outcome.dart';
 import 'file_act.dart';
 import 'store_fault.dart';
 

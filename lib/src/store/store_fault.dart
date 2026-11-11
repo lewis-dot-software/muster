@@ -1,4 +1,4 @@
-import '../model/fetch_failure.dart';
+import '../model/fetch_outcome.dart';
 
 /// An expected failure of the store's, thrown inside muster and carried out
 /// of it as its [failure].

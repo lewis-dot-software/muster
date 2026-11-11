@@ -14,4 +14,11 @@ enum Os {
     .posix => p.posix,
     .windows => p.windows,
   };
+
+  /// The character a list of paths in one variable is split on, as `PATH`
+  /// is: `:`, and `;` on Windows, whose paths hold `:`.
+  String get pathListSeparator => switch (this) {
+    .posix => ':',
+    .windows => ';',
+  };
 }

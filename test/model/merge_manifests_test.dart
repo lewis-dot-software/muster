@@ -7,7 +7,8 @@ import '../support/manifests.dart';
 void main() {
   final String hash = 'ab' * 20;
 
-  test('the manifests join into their codebases, in their order', () {
+  test('the manifests join into their codebases, in their order, each '
+      'beside the manifest that named it', () {
     expect(
       mergeManifests([
         .new([codebase('b', '/srv/b.git', hash, '.', .dart)]),
@@ -18,9 +19,11 @@ void main() {
         ]),
       ]),
       isA<Merged>().having(
-        (m) => m.codebases.map((c) => c.name.name),
+        (m) => [
+          for (final c in m.codebases) (c.codebase.name.name, c.manifest),
+        ],
         'names',
-        ['b', 'a', 'c'],
+        [('b', 0), ('a', 2), ('c', 2)],
       ),
     );
   });

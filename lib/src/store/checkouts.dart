@@ -10,7 +10,7 @@ import '../model/clone_path.dart';
 import '../model/command.dart';
 import '../model/consumer_root.dart';
 import '../model/content_hash.dart';
-import '../model/fetch_failure.dart';
+import '../model/fetch_outcome.dart';
 import '../model/git_codebase.dart';
 import '../model/kept_lock_path.dart';
 import '../model/lock_choice.dart';

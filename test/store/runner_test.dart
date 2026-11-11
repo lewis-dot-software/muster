@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/executable.dart';
-import 'package:muster/src/model/fetch_failure.dart';
+import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:test/test.dart';

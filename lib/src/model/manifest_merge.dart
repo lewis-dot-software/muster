@@ -1,5 +1,5 @@
 import 'codebase_name.dart';
-import 'git_codebase.dart';
+import 'named_codebase.dart';
 
 /// What joining a load's manifests gave: every codebase they name, or the
 /// name met twice that refuses the load.
@@ -12,8 +12,9 @@ final class Merged extends ManifestMerge {
   /// The join that gave [codebases].
   const Merged(this.codebases);
 
-  /// The codebases in the manifests' order, each manifest's in its own.
-  final List<GitCodebase> codebases;
+  /// The codebases in the manifests' order, each manifest's in its own, each
+  /// beside the manifest that named it.
+  final List<NamedCodebase> codebases;
 }
 
 /// A name met twice across the manifests.

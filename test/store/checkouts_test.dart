@@ -5,7 +5,7 @@ import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/commit.dart';
-import 'package:muster/src/model/fetch_failure.dart';
+import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/lock_source.dart';

@@ -3,9 +3,30 @@ import 'commit.dart';
 import 'executable.dart';
 import 'git_url.dart';
 import 'kept_lock_path.dart';
+import 'package_path.dart';
+import 'sdk_version.dart';
+
+/// What a load gave one codebase: its package at its pin, resolved, or why
+/// it could not be brought there.
+sealed class FetchOutcome {
+  const FetchOutcome();
+}
+
+/// A codebase brought to its pin and resolved.
+final class Fetched extends FetchOutcome {
+  /// The codebase whose [package], the one to hand a tool, was resolved by
+  /// [sdk].
+  const Fetched(this.package, this.sdk);
+
+  /// The package to hand a tool, inside the codebase's checkout.
+  final PackagePath package;
+
+  /// The version of the SDK that resolved it.
+  final SdkVersion sdk;
+}
 
 /// Why a codebase could not be brought to its pin.
-sealed class FetchFailure {
+sealed class FetchFailure extends FetchOutcome {
   const FetchFailure();
 }
 

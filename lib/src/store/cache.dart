@@ -3,7 +3,7 @@ import 'dart:io';
 import '../model/cache_directory.dart';
 import '../model/clone_path.dart';
 import '../model/commit.dart';
-import '../model/fetch_failure.dart';
+import '../model/fetch_outcome.dart';
 import '../model/git_url.dart';
 import 'file_act.dart';
 import 'git_on.dart';

@@ -6,12 +6,15 @@ sealed class ManifestRefusal {
   const ManifestRefusal();
 }
 
-/// The text is not one YAML document.
+/// The text is not one YAML document, or its bytes are not UTF-8, which
+/// YAML is read in.
 final class NotYaml extends ManifestRefusal {
-  /// The refusal of text YAML could not read, for the [reason] it gave.
+  /// The refusal of text that could not be read as YAML, for the [reason]
+  /// given.
   const NotYaml(this.reason);
 
-  /// What the YAML reader said, with the line and column it stopped at.
+  /// What the reader said, with where it stopped: the line and column for
+  /// YAML, and the byte's offset for bytes that are not UTF-8.
   final String reason;
 }
 

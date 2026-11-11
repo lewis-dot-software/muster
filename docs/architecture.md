@@ -41,7 +41,7 @@ A hosted package skips Clone. The codebases load one after another, and more at 
 
 ## Manifest
 
-`muster.yaml` sits at the consumer's root, and `MUSTER_MANIFESTS` names further manifests, a path list in the platform's separator, so a repo's tests reach codebases it cannot name. `Muster.load` takes the same as arguments, and its root, the current directory where it is left out. Wherever its manifests sit, a load's checkouts stand under its root.
+`muster.yaml` sits at the consumer's root, and `MUSTER_MANIFESTS` names further manifests, a path list in the platform's separator with an empty entry passed over, so a repo's tests reach codebases it cannot name. `Muster.load` takes manifests as arguments in place of both, and its root, the current directory where it is left out. A relative path, a manifest's or the root's, is read against the current directory. Wherever its manifests sit, a load's checkouts stand under its root.
 
 ```yaml
 codebases:
@@ -119,8 +119,8 @@ Every expected failure is a value, so a consumer cannot reach a checkout without
 
 | Case | Carries |
 |---|---|
-| `Loaded` | The `Muster`, each codebase's `FetchOutcome` in the manifests' order, keyed by name |
-| `Refused` | Why the manifests refused the load, before any fetch: a key's path in a manifest, a manifest missing, unreadable or not YAML, or no manifest at all |
+| `Loaded` | Each codebase's `FetchOutcome` in the manifests' order, keyed by name |
+| `Refused` | Why the load refused, before any process or file write: a manifest whose file name does not end `.yaml`, one missing, unreadable or not YAML, a key's path in one, a name met twice, no manifest at all, a working directory the system cannot give, or no cache |
 
 `FetchOutcome` is a sealed type:
 

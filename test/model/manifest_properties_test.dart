@@ -280,7 +280,10 @@ void main() {
     expect(
       merge,
       isA<Merged>().having((m) => m.codebases, 'codebases', [
-        for (final List<GitCodebase> codebases in manifests) ...codebases,
+        for (final (int index, List<GitCodebase> codebases)
+            in manifests.indexed)
+          for (final GitCodebase codebase in codebases)
+            (codebase: codebase, manifest: index),
       ]),
     );
   });
