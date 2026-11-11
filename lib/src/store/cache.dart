@@ -2,10 +2,11 @@ import 'dart:io';
 
 import '../model/cache_directory.dart';
 import '../model/clone_path.dart';
-import '../model/command.dart';
 import '../model/commit.dart';
 import '../model/fetch_failure.dart';
 import '../model/git_url.dart';
+import 'file_act.dart';
+import 'git_on.dart';
 import 'ran.dart';
 import 'runner.dart';
 import 'store_fault.dart';
@@ -37,14 +38,14 @@ class Cache {
   /// of [StoreFailed] where a file act does.
   Future<ClonePath> clone(GitUrl url, Commit pin) async {
     final ClonePath clone = .of(directory, url);
-    if (!await _file(clone.path, Directory(clone.path).exists)) {
+    if (!await fileAct(clone.path, Directory(clone.path).exists)) {
       await _make(clone, url);
     }
     if (await _holds(clone, pin)) {
       return clone;
     }
     await _runner.run(
-      _git(clone, ['fetch', '--prune', url.url, ..._everyBranchAndTag]),
+      gitOn(clone, ['fetch', '--prune', url.url, ..._everyBranchAndTag]),
     );
     if (await _holds(clone, pin)) {
       return clone;
@@ -53,7 +54,7 @@ class Cache {
   }
 
   Future<void> _make(ClonePath clone, GitUrl url) async {
-    final Directory made = await _file(directory.path, () async {
+    final Directory made = await fileAct(directory.path, () async {
       final Directory cache = await .new(
         directory.path,
       ).create(recursive: true);
@@ -71,7 +72,7 @@ class Cache {
           made.path,
         ],
       ));
-      await _file(made.path, () => made.rename(clone.path));
+      await fileAct(made.path, () => made.rename(clone.path));
     } on StoreFault {
       try {
         await made.delete(recursive: true);
@@ -88,7 +89,7 @@ class Cache {
   /// it does an annotated tag's, is held by no commit.
   Future<bool> _holds(ClonePath clone, Commit pin) async {
     final Ran ran = await _runner.run(
-      _git(clone, [
+      gitOn(clone, [
         'rev-parse',
         '--verify',
         '--quiet',
@@ -106,20 +107,3 @@ const List<String> _everyBranchAndTag = [
   '+refs/heads/*:refs/heads/*',
   '+refs/tags/*:refs/tags/*',
 ];
-
-/// Git's [arguments] on [clone], named by `--git-dir`, since git refuses a
-/// bare repo found from a directory where `safe.bareRepository` is
-/// `explicit`.
-Command _git(ClonePath clone, List<String> arguments) =>
-    (executable: .git, arguments: ['--git-dir=${clone.path}', ...arguments]);
-
-/// [act] on [path], its failure thrown as a [StoreFault] of [StoreFailed].
-Future<T> _file<T>(String path, Future<T> Function() act) async {
-  try {
-    return await act();
-  } on FileSystemException catch (e) {
-    throw StoreFault(
-      StoreFailed(e.path ?? path, e.osError?.message ?? e.message),
-    );
-  }
-}

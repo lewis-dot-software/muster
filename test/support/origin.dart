@@ -18,7 +18,7 @@ enum OriginFormat {
 /// A bare repo a test makes, cloned from by its path, its default branch
 /// `main`.
 class Origin {
-  Origin._(this.directory, this._runner, this._tree);
+  Origin._(this.directory, this._work, this._runner, this._tree);
 
   /// The repo made in `origin` under [parent], in [format], its git run by
   /// [runner].
@@ -52,11 +52,19 @@ class Origin {
         '/dev/null',
       ],
     ));
-    return ._(directory, runner, tree.stdout.trim());
+    return ._(
+      directory,
+      p.join(parent.path, 'origin-work'),
+      runner,
+      tree.stdout.trim(),
+    );
   }
 
   /// The repo's directory.
   final Directory directory;
+
+  /// The directory a commit's files are written in before git reads them.
+  final String _work;
 
   final Runner _runner;
 
@@ -69,16 +77,47 @@ class Origin {
   GitUrl get url => .parse(directory.path)!;
 
   /// A new commit, its parent [parent] where one is given, and none where it
-  /// is not.
-  Future<Commit> commit([Commit? parent]) async {
+  /// is not, holding [files], each path relative to the repo's top in `/`
+  /// separators beside its contents, and no file where none is given.
+  Future<Commit> commit([
+    Commit? parent,
+    Map<String, String> files = const {},
+  ]) async {
     final Ran ran = await _git([
       'commit-tree',
-      _tree,
+      files.isEmpty ? _tree : await _treeOf(files),
       if (parent != null) ...['-p', parent.hash],
       '-m',
       'commit ${_made++}',
     ]);
     return .parse(ran.stdout.trim())!;
+  }
+
+  /// The tree holding [files] alone, written to the repo, every file taken
+  /// whatever a `.gitignore` among them ignores.
+  Future<String> _treeOf(Map<String, String> files) async {
+    final Directory work = .new(_work);
+    if (await work.exists()) {
+      await work.delete(recursive: true);
+    }
+    for (final MapEntry<String, String>(:key, :value) in files.entries) {
+      await File(p.joinAll([_work, ...key.split('/')]))
+          .create(recursive: true)
+          .then((File file) => file.writeAsString(value));
+    }
+    Future<Ran> inWork(List<String> arguments) => _runner.run((
+      executable: .git,
+      arguments: [
+        '-C',
+        _work,
+        '--git-dir=${directory.path}',
+        '--work-tree=.',
+        ...arguments,
+      ],
+    ));
+    await inWork(['read-tree', '--empty']);
+    await inWork(['add', '--all', '--force']);
+    return (await inWork(['write-tree'])).stdout.trim();
   }
 
   /// Sets the ref [name], `refs/heads/main` as one is, at [commit].

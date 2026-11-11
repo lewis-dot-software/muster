@@ -2,13 +2,15 @@ import 'command.dart';
 import 'commit.dart';
 import 'executable.dart';
 import 'git_url.dart';
+import 'kept_lock_path.dart';
 
 /// Why a codebase could not be brought to its pin.
 sealed class FetchFailure {
   const FetchFailure();
 }
 
-/// A command that ran and exited with a code it should not have.
+/// A command that ran and exited with a code it should not have, or wrote
+/// what muster could not read.
 final class CommandFailed extends FetchFailure {
   /// The failure of [command], which exited [exitCode], writing [stdout] and
   /// [stderr].
@@ -58,4 +60,14 @@ final class PinMissing extends FetchFailure {
 
   /// The commit, on none of its branches or tags.
   final Commit commit;
+}
+
+/// A package that has no lock to resolve on: its commit holds none, and its
+/// kept lock is not there.
+final class Unlocked extends FetchFailure {
+  /// The failure of a package whose kept lock, at [lock], is not there.
+  const Unlocked(this.lock);
+
+  /// The kept lock the package needs.
+  final KeptLockPath lock;
 }

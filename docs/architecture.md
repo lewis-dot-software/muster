@@ -29,12 +29,12 @@ flowchart LR
 | Phase | Makes | I/O |
 |---|---|---|
 | Read | Every codebase from the manifests, each beside the manifest that named it | Yes |
-| Survey | Each checkout's stamp, whether its directory is there, the hash of each `package_config.json` it holds and of each kept lock it could take, `HEAD`, tracked changes and the toolchain's SDK version | Yes |
+| Survey | Each checkout's stamp, whether its directory is there, the hash of each package's `pubspec.lock` and `package_config.json` it holds and of each kept lock it could take, `HEAD` and tracked changes from one `git status`, and the toolchain's SDK version | Yes |
 | Stand | Whether the checkout stands, from the survey alone | No |
 | Clone | The clone of the codebase's URL, holding the pin's commit, and which of its packages that commit holds a lock for | Yes |
 | Choose | The lock each package resolves to, or `Unlocked` | No |
 | Check out | The checkout at its pin, or a hosted package unpacked | Yes |
-| Resolve | The toolchain's `pub get --enforce-lockfile` on each lock chosen | Yes |
+| Resolve | The toolchain's `pub get --enforce-lockfile --no-example` on each package alone, once every lock chosen is in place | Yes |
 | Stamp | The stamp that lets the next load hand the checkout out untouched | Yes |
 
 A hosted package skips Clone. The codebases load one after another, and more at once come only with a measurement that earns them.
@@ -97,9 +97,9 @@ A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory
 - A git codebase's checkout is a worktree of its clone, so it shares the clone's objects and carries the whole history, and git keeps its commit from collection. The load prunes the clone's worktrees before it adds one, so a checkout deleted by hand never blocks its own return.
 - A hosted package is unpacked by `dart pub unpack`, and pub's own cache holds its archive.
 
-The stamp is a file beside each checkout, written last. It names every manifest value the resolve turns on, each lock's hash, the hash of each `package_config.json` the resolve wrote, and the SDK version that resolved it. A checkout stands where its directory is there, its stamp matches what the survey read, and each `package_config.json` is the one stamped. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
+The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make touches the checkout and written last. It names every manifest value the resolve turns on, each lock's source and its hash as placed in its package, the hash of each `package_config.json` the resolve wrote, and the SDK version that resolved it: the Dart SDK's from `dart --version`, or the Flutter framework's from `flutter --version --machine`. A kept lock is copied into its package as `pubspec.lock` before the resolve, so a git checkout carries it as a file its pin lacks. A checkout stands where its directory is there, its stamp matches what the survey read, and each package's lock and `package_config.json` is the one stamped, a kept lock's source beside its manifest too. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
 
-Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx`, or removed and added afresh where its clone or its directory is gone, and a hosted one unpacked afresh.
+Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
 
 Deleting `.dart_tool/muster/` or the cache is always safe, and costs one fetch.
 
