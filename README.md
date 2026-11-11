@@ -6,4 +6,8 @@ muster brings the real codebases your Dart and Flutter tools are tested against 
 
 <!-- office doc index -->
 
+## Docs
+
+- [Architecture](docs/architecture.md) `knowledge` - A load reads a consumer's manifests, brings each codebase to its pin in a checkout of the consumer's own, resolves it with its toolchain, and returns one outcome a codebase.
+
 <!-- /office doc index -->
