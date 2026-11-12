@@ -166,11 +166,11 @@ Each layer is a directory under `lib/src/`.
 
 The outside world reaches muster through three seams:
 
-- Processes, through one runner passed in by constructor, that git and both toolchains go through, each process started with the environment read at the entry and the caller's additions over it, and nothing else. Git starts with none of the variables `git rev-parse --local-env-vars` lists but the two that carry configuration, as git itself does on moving to another repo, so a `GIT_DIR` a hook exports never points it away from muster's repo, and with its terminal prompt off, so it fails where it would ask on the terminal for an HTTP URL's credentials.
+- Processes, through one runner passed in by constructor, that git and both toolchains go through, each process started with the environment read at the entry and the caller's additions over it, and nothing else. Git starts with none of the variables `git rev-parse --local-env-vars` lists but the two that carry configuration, as git itself does on moving to another repo, so a `GIT_DIR` a hook exports never points it away from muster's repo, and no process asks anything: git's terminal prompt is off unless the environment sets `GIT_TERMINAL_PROMPT`, and every askpass is off whatever the environment or git's configuration names, `GIT_ASKPASS` empty and `SSH_ASKPASS` `false` under `SSH_ASKPASS_REQUIRE=force`, so where git, the ssh it runs or pub's git would ask for credentials, a passphrase or a host's trust it fails instead. OpenSSH heeds `SSH_ASKPASS_REQUIRE` from 8.4, and an older ssh still asks on the terminal where one stands. A user's `core.sshCommand`, agent, credential helper and known hosts still serve, since muster sets no `GIT_SSH_COMMAND`.
 - The environment and the working directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them.
 - Files, through `dart:io` in `store` alone and never faked, since git and pub act on real directories whatever muster fakes.
 
-`store`'s tests run on git repos a test makes in a temporary directory, with no network. Hosted packages reach pub.dev, one test a toolchain.
+`store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach pub.dev, one test a toolchain.
 
 ## Output
 

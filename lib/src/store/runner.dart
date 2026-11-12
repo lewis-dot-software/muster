@@ -10,12 +10,18 @@ import 'store_fault.dart';
 /// Starts every process muster runs, each with the environment the runner was
 /// made with and nothing else.
 ///
+/// No process asks anyone anything: git's terminal prompt is off, unless the
+/// environment sets `GIT_TERMINAL_PROMPT` itself, and no askpass program
+/// runs, git's or ssh's, whatever the environment or git's configuration
+/// names. So where git or the ssh it runs would ask for an HTTP URL's
+/// credentials, a key's passphrase or whether to trust a host, it fails
+/// instead, and stored credentials, an agent's keys and known hosts still
+/// serve.
+///
 /// Git starts with none of the variables that point it at a repo of its
 /// caller's, such as the `GIT_DIR` a hook exports, so it acts on the repo
 /// muster names alone, and keeps those that carry its caller's
-/// configuration, as git itself does on moving to another repo. It runs with its terminal prompt off, so where it
-/// would ask on the terminal for an HTTP URL's credentials it fails instead,
-/// unless the environment sets `GIT_TERMINAL_PROMPT` itself.
+/// configuration, as git itself does on moving to another repo.
 class Runner {
   /// The runner that starts each process with [environment], the whole of
   /// what it reads.
@@ -56,15 +62,33 @@ class Runner {
     return ran;
   }
 
-  Map<String, String> _for(Executable executable) => switch (executable) {
-    .git => {
-      'GIT_TERMINAL_PROMPT': '0',
-      for (final MapEntry<String, String>(:key, :value) in _environment.entries)
-        if (!_gitRepoVariables.contains(key)) key: value,
+  Map<String, String> _for(Executable executable) => {
+    'GIT_TERMINAL_PROMPT': '0',
+    ...switch (executable) {
+      .git => {
+        for (final MapEntry<String, String>(:key, :value)
+            in _environment.entries)
+          if (!_gitRepoVariables.contains(key)) key: value,
+      },
+      .dart || .flutter => _environment,
     },
-    .dart || .flutter => _environment,
+    ..._noAskpass,
   };
 }
+
+/// The variables that keep every askpass program from running, set over the
+/// environment's own.
+///
+/// `GIT_ASKPASS` is empty, which git reads as no program, and which it heeds
+/// before `core.askPass` and `SSH_ASKPASS`. `SSH_ASKPASS_REQUIRE` makes ssh
+/// put every question to `SSH_ASKPASS` in place of the terminal, and `false`
+/// answers none. OpenSSH heeds it from 8.4, and an older ssh still asks on
+/// the terminal where one stands.
+const Map<String, String> _noAskpass = {
+  'GIT_ASKPASS': '',
+  'SSH_ASKPASS': 'false',
+  'SSH_ASKPASS_REQUIRE': 'force',
+};
 
 /// The variables that tell git which repo it is in: those
 /// `git rev-parse --local-env-vars` lists, less `GIT_CONFIG_PARAMETERS` and

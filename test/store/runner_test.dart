@@ -64,6 +64,29 @@ void main() {
     expect(ran.stdout.trim(), 'here,-,kept');
   });
 
+  test('dart runs with its prompts off and no askpass, over the names its '
+      'environment gives, so the git pub runs asks nothing either', () async {
+    final Directory temp = await .systemTemp.createTemp('muster-');
+    addTearDown(() => temp.delete(recursive: true));
+    final File script = await File('${temp.path}/script.dart').writeAsString(
+      "import 'dart:io';\n"
+      "void main() => print(['GIT_TERMINAL_PROMPT', 'GIT_ASKPASS', "
+      "'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']"
+      ".map((String n) => '\$n=\${Platform.environment[n]}').join(','));\n",
+    );
+    final Ran ran = await Runner({
+      ..._path,
+      'GIT_ASKPASS': 'muster-asks',
+      'SSH_ASKPASS': 'muster-asks',
+      'SSH_ASKPASS_REQUIRE': 'never',
+    }).run((executable: .dart, arguments: [script.path]));
+    expect(
+      ran.stdout.trim(),
+      'GIT_TERMINAL_PROMPT=0,GIT_ASKPASS=,SSH_ASKPASS=false,'
+      'SSH_ASKPASS_REQUIRE=force',
+    );
+  });
+
   test('git runs with its terminal prompt off', () async {
     final Ran ran = await Runner(_path).run(_probe);
     expect(_printed(ran)[1], '0');
