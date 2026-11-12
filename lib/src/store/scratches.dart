@@ -12,6 +12,7 @@ import 'claims.dart';
 import 'file_act.dart';
 import 'git_on.dart';
 import 'move_worktree.dart';
+import 'remove_directory.dart';
 import 'runner.dart';
 import 'store_fault.dart';
 
@@ -62,8 +63,8 @@ class Scratches {
       });
     } on StoreFault {
       try {
-        await made.delete(recursive: true);
-      } on FileSystemException {
+        await removeDirectory(made.path);
+      } on StoreFault {
         // The make's own failure is the one its caller acts on. A directory
         // the removal leaves is one the system's sweep of its temporary
         // directory takes.
@@ -98,12 +99,7 @@ class Scratches {
   /// Throws a [StoreFault] of [CommandFailed] or [Unstartable] where git
   /// fails, and of [StoreFailed] where a file act does, a claim's among them.
   Future<void> remove(ScratchPath scratch, GitCodebase codebase) async {
-    await fileAct(scratch.path, () async {
-      final Directory directory = .new(scratch.path);
-      if (await directory.exists()) {
-        await directory.delete(recursive: true);
-      }
-    });
+    await removeDirectory(scratch.path);
     final ClonePath clone = .of(_cache.directory, codebase.url);
     if (!await fileAct(clone.path, Directory(clone.path).exists)) {
       return;

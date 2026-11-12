@@ -5,6 +5,7 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
@@ -142,7 +143,85 @@ enum _Refusal {
 /// A fault a codebase can meet.
 enum _Fault { none, pinMissing, noRepo, unlocked, badStamp, unresolvable }
 
+/// The version command [toolchain] runs, as a [SpyRunner] gives it.
+String _versionGiven(Toolchain toolchain) =>
+    '${toolchain.executable.name} ${toolchain.version.arguments.join(' ')}';
+
+/// What each toolchain's version command writes in a test that answers it.
+const Map<Toolchain, String> _versionText = {
+  .dart: 'Dart SDK version: 3.13.0 (stable)',
+  .flutter: '{"frameworkVersion": "3.47.9"}',
+};
+
 void main() {
+  Glados(
+    any
+        .nonEmptyList(
+          any.combine2(
+            any.choose(Toolchain.values),
+            any.bool,
+            (Toolchain toolchain, bool reached) =>
+                (toolchain: toolchain, reached: reached),
+          ),
+        )
+        .shrinkingAtMost(gitTries),
+    ExploreConfig(numRuns: 15),
+  ).test(
+    'A load reads each toolchain\'s SDK version at most once, however many '
+    'codebases it names.',
+    (List<({Toolchain toolchain, bool reached})> drawn) =>
+        inTemp((Directory temp) async {
+          final _Bench bench = await .make(temp);
+          bench.runner.answer = (Command command) {
+            for (final MapEntry<Toolchain, String>(:key, :value)
+                in _versionText.entries) {
+              if (_versionGiven(key) ==
+                  '${command.executable.name} '
+                      '${command.arguments.join(' ')}') {
+                return (exitCode: 0, stdout: value, stderr: '');
+              }
+            }
+            return null;
+          };
+          final List<GitCodebase> codebases = [];
+          for (final (int i, (:toolchain, :reached)) in drawn.take(6).indexed) {
+            final GitCodebase made = await bench.codebase(
+              'c$i',
+              packageFiles('c$i'),
+            );
+            // Only a Dart codebase is resolved, since a Flutter one would
+            // need Flutter's SDK, and every other fails at its clone.
+            codebases.add((
+              name: made.name,
+              url: reached && toolchain == .dart
+                  ? made.url
+                  : .parse(p.join(temp.path, 'no-repo-$i'))!,
+              commit: made.commit,
+              root: made.root,
+              toolchain: toolchain,
+            ));
+          }
+          await writeManifest(atRoot(temp), codebases);
+          bench.runner.commands.clear();
+          expect(await bench.load(), isA<Loaded>());
+          for (final Toolchain toolchain in Toolchain.values) {
+            expect(
+              bench.runner.given.where(
+                (String given) => given == _versionGiven(toolchain),
+              ),
+              hasLength(
+                codebases.any(
+                      (GitCodebase codebase) => codebase.toolchain == toolchain,
+                    )
+                    ? 1
+                    : 0,
+              ),
+              reason: toolchain.name,
+            );
+          }
+        }),
+  );
+
   Glados3(
     _notYamlName,
     any.choose(_By.values).shrinkingAtMost(gitTries),

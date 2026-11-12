@@ -34,6 +34,7 @@ import '../store/claims.dart';
 import '../store/names_in.dart';
 import '../store/remove_file.dart';
 import '../store/runner.dart';
+import '../store/sdk_versions.dart';
 import '../store/store_fault.dart';
 import 'load.dart';
 import 'loads.dart';
@@ -273,7 +274,13 @@ class Loader implements Loads {
       manifests: List<ManifestPath>.unmodifiable(paths),
       codebases: codebases,
       clones: clones,
-      checkouts: Checkouts(consumer, clones, _runner, _claims),
+      checkouts: Checkouts(
+        consumer,
+        clones,
+        _runner,
+        _claims,
+        SdkVersions(_runner),
+      ),
     );
   }
 }

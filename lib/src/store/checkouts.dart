@@ -3,11 +3,12 @@ import 'dart:io';
 
 import '../model/at_commit.dart';
 import '../model/checkout.dart';
+import '../model/checkout_found.dart';
 import '../model/checkout_path.dart';
+import '../model/choose_checkout_step.dart';
 import '../model/choose_locks.dart';
 import '../model/at_commit_files.dart';
 import '../model/clone_path.dart';
-import '../model/command.dart';
 import '../model/consumer_root.dart';
 import '../model/content_hash.dart';
 import '../model/fetch_outcome.dart';
@@ -31,7 +32,6 @@ import '../model/stamped_package.dart';
 import '../model/stands.dart';
 import '../model/survey.dart';
 import '../model/surveyed_package.dart';
-import '../model/toolchain.dart';
 import '../model/worktree.dart';
 import 'add_worktree.dart';
 import 'cache.dart';
@@ -42,7 +42,10 @@ import 'git_on.dart';
 import 'move_worktree.dart';
 import 'bytes_if_there.dart';
 import 'ran.dart';
+import 'remove_directory.dart';
+import 'remove_file.dart';
 import 'runner.dart';
+import 'sdk_versions.dart';
 import 'store_fault.dart';
 
 /// A consumer's checkouts, one a git codebase under its root, each a worktree
@@ -51,8 +54,8 @@ import 'store_fault.dart';
 class Checkouts {
   /// The checkouts under [root], cloned into [_cache], their git and
   /// toolchains run by [_runner], each acted on under its claim in
-  /// [_claims].
-  Checkouts(this.root, this._cache, this._runner, this._claims);
+  /// [_claims], and each toolchain's SDK version read from [_sdks].
+  Checkouts(this.root, this._cache, this._runner, this._claims, this._sdks);
 
   /// The consumer's root, the checkouts under its `.dart_tool/muster/`.
   final ConsumerRoot root;
@@ -63,6 +66,8 @@ class Checkouts {
 
   final Claims _claims;
 
+  final SdkVersions _sdks;
+
   /// [codebase]'s checkout at its pin, resolved, its kept locks read from
   /// [locks].
   ///
@@ -72,7 +77,8 @@ class Checkouts {
   /// load that waited on one finds the checkout standing.
   ///
   /// A checkout that stands is handed out with nothing run but the survey:
-  /// the toolchain's version and the checkout's git status. Any other is
+  /// the checkout's git status, and the toolchain's version where [_sdks]
+  /// has not read it yet. Any other is
   /// made again at the pin, every tracked file's edit reverted and every file
   /// the pin lacks removed, by a checkout and a clean of the worktree where it
   /// is one of the clone's, or added afresh where it is not. Its packages are
@@ -176,11 +182,7 @@ class Checkouts {
 
   /// Deletes the stamp of the checkout at [at], where it is there, so a make
   /// cut short leaves none.
-  Future<void> _unstamp(CheckoutPath at) => fileAct(at.stamp.path, () async {
-    if (await File(at.stamp.path).exists()) {
-      await File(at.stamp.path).delete();
-    }
-  });
+  Future<void> _unstamp(CheckoutPath at) => removeFile(at.stamp.path);
 
   /// [codebase]'s checkout at [at] made at its pin from its clone, its
   /// packages resolved on their locks and its stamp written last, the
@@ -254,7 +256,7 @@ class Checkouts {
     LocksDirectory locks,
     CheckoutPath at,
   ) async {
-    final SdkVersion sdk = await _version(codebase.toolchain);
+    final SdkVersion sdk = await _sdks.of(codebase.toolchain);
     final Stamp? stamp = switch (await bytesIfThere(at.stamp.path)) {
       final List<int> bytes => parseStamp(
         utf8.decode(bytes, allowMalformed: true),
@@ -280,16 +282,6 @@ class Checkouts {
       packages: .unmodifiable(packages),
     );
     return survey;
-  }
-
-  /// The version of [toolchain]'s SDK on `PATH`.
-  Future<SdkVersion> _version(Toolchain toolchain) async {
-    final Command command = toolchain.version;
-    final Ran ran = await _runner.run(command);
-    return .read(toolchain, ran.stdout) ??
-        (throw StoreFault(
-          CommandFailed(command, ran.exitCode, ran.stdout, ran.stderr),
-        ));
   }
 
   /// The worktree at [at] as git reads it, or null where git finds no
@@ -337,18 +329,25 @@ class Checkouts {
     ClonePath clone,
     GitCodebase codebase,
   ) async {
-    if (await _there(at)) {
-      if (await _worktreeOf(at, clone)) {
+    switch (chooseCheckoutStep(await _found(at, clone))) {
+      case .move:
         await moveWorktree(_runner, at, codebase.commit);
-        return;
-      }
-      await fileAct(at.path, () => Directory(at.path).delete(recursive: true));
+      case .replace:
+        await removeDirectory(at.path);
+        await fileAct(
+          at.path,
+          () => Directory(at.os.paths.dirname(at.path)).create(recursive: true),
+        );
+        await addWorktree(_runner, clone, at, codebase.commit);
     }
-    await fileAct(
-      at.path,
-      () => Directory(at.os.paths.dirname(at.path)).create(recursive: true),
-    );
-    await addWorktree(_runner, clone, at, codebase.commit);
+  }
+
+  /// What stands at [at], read against [clone].
+  Future<CheckoutFound> _found(CheckoutPath at, ClonePath clone) async {
+    if (!await _there(at)) {
+      return .nothing;
+    }
+    return await _worktreeOf(at, clone) ? .worktreeOfClone : .other;
   }
 
   /// Whether the directory at [at] is a worktree of [clone].

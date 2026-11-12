@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import '../model/cache_directory.dart';
+import '../model/choose_clone_step.dart';
 import '../model/clone_path.dart';
+import '../model/clone_state.dart';
 import '../model/commit.dart';
 import '../model/fetch_outcome.dart';
 import '../model/git_url.dart';
@@ -10,6 +12,7 @@ import 'claims.dart';
 import 'file_act.dart';
 import 'git_on.dart';
 import 'ran.dart';
+import 'remove_directory.dart';
 import 'runner.dart';
 import 'store_fault.dart';
 
@@ -50,19 +53,28 @@ class Cache {
   Future<ClonePath> clone(GitUrl url, Commit pin) async {
     final ClonePath clone = .of(directory, url);
     await _sweep(clone);
-    if (!await fileAct(clone.path, Directory(clone.path).exists)) {
-      await _make(clone, url);
+    CloneState state = await fileAct(clone.path, Directory(clone.path).exists)
+        ? await _state(clone, pin)
+        : .missing;
+    bool fetched = false;
+    // Only the first read can find the clone missing, so the loop clones and
+    // fetches once each at most.
+    while (true) {
+      switch (chooseCloneStep(state, fetched: fetched)) {
+        case .clone:
+          await _make(clone, url);
+        case .fetch:
+          await _runner.run(
+            gitOn(clone, ['fetch', '--prune', url.url, ..._everyBranchAndTag]),
+          );
+          fetched = true;
+        case .use:
+          return clone;
+        case .pinMissing:
+          throw StoreFault(PinMissing(url, pin));
+      }
+      state = await _state(clone, pin);
     }
-    if (await _holds(clone, pin)) {
-      return clone;
-    }
-    await _runner.run(
-      gitOn(clone, ['fetch', '--prune', url.url, ..._everyBranchAndTag]),
-    );
-    if (await _holds(clone, pin)) {
-      return clone;
-    }
-    throw StoreFault(PinMissing(url, pin));
   }
 
   /// Removes every temporary clone in the cache whose clone's claim no other
@@ -85,24 +97,15 @@ class Cache {
     });
     for (final ClonePath clone in left) {
       if (clone == own) {
-        await _remove(clone.temporary);
+        await removeDirectory(clone.temporary.path);
       } else {
         await _claims.holdingIfFree(
           clone.claim,
-          () => _remove(clone.temporary),
+          () => removeDirectory(clone.temporary.path),
         );
       }
     }
   }
-
-  /// Removes [temporary], where it is there.
-  Future<void> _remove(TemporaryClonePath temporary) =>
-      fileAct(temporary.path, () async {
-        final Directory directory = .new(temporary.path);
-        if (await directory.exists()) {
-          await directory.delete(recursive: true);
-        }
-      });
 
   Future<void> _make(ClonePath clone, GitUrl url) async {
     final TemporaryClonePath temporary = clone.temporary;
@@ -125,8 +128,8 @@ class Cache {
       await fileAct(made.path, () => made.rename(clone.path));
     } on StoreFault {
       try {
-        await made.delete(recursive: true);
-      } on FileSystemException {
+        await removeDirectory(made.path);
+      } on StoreFault {
         // The clone's own failure is the one its caller acts on. A temporary
         // clone the removal leaves goes at the cache's next clone.
       }
@@ -134,9 +137,10 @@ class Cache {
     }
   }
 
-  /// Whether [clone] holds [pin] as a commit. A hash git peels to another, as
-  /// it does an annotated tag's, is held by no commit.
-  Future<bool> _holds(ClonePath clone, Commit pin) async {
+  /// What [clone], which is there, holds of [pin]: holding it as a commit,
+  /// or lacking it. A hash git peels to another, as it does an annotated
+  /// tag's, is held by no commit.
+  Future<CloneState> _state(ClonePath clone, Commit pin) async {
     final Ran ran = await _runner.run(
       gitOn(clone, [
         'rev-parse',
@@ -147,7 +151,9 @@ class Cache {
       ]),
       exits: const {0, 1},
     );
-    return ran.exitCode == 0 && ran.stdout.trim() == pin.hash;
+    return ran.exitCode == 0 && ran.stdout.trim() == pin.hash
+        ? .holding
+        : .lacking;
   }
 }
 

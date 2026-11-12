@@ -124,7 +124,11 @@ void main() {
       await onMain(packageFiles('app')),
     );
     final Checkout first = await warm(codebase);
-    final Checkout second = await checkouts.checkout(codebase, locks);
+    // A new load's, since a load reads each SDK version once.
+    final Checkout second = await checkoutsIn(
+      temp,
+      runner,
+    ).checkout(codebase, locks);
     expect(second, first);
     expect(runner.given, [
       'dart --version',
@@ -409,6 +413,8 @@ void main() {
               stderr: '',
             )
           : null;
+      // A new load's, since a load reads each SDK version once.
+      checkouts = checkoutsIn(temp, runner);
       final Checkout checkout = await checkouts.checkout(codebase, locks);
       expect(checkout.sdk, SdkVersion.parse('9.9.9'));
       expect((await stamp())?.sdk, SdkVersion.parse('9.9.9'));
@@ -435,6 +441,13 @@ void main() {
       await checkouts.checkout(codebase, locks);
       await remade();
       expect(await File(inCheckout('stray')).exists(), isFalse);
+    });
+
+    test('a link to nothing stands where the checkout goes', () async {
+      await Directory(checkoutOf().path).delete(recursive: true);
+      await Link(checkoutOf().path).create(p.join(temp.path, 'nowhere'));
+      await checkouts.checkout(codebase, locks);
+      await remade();
     });
   });
 

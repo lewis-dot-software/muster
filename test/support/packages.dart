@@ -42,9 +42,14 @@ ConsumerRoot consumerIn(Directory temp) =>
     .new(p.join(temp.path, 'consumer'), .posix);
 
 /// The checkouts of a consumer in [temp], cloned into a cache there, their
-/// processes run by [runner].
-Checkouts checkoutsIn(Directory temp, Runner runner) =>
-    .new(consumerIn(temp), cacheIn(temp, runner), runner, .new(testLocker));
+/// processes run by [runner], each toolchain's SDK version read once.
+Checkouts checkoutsIn(Directory temp, Runner runner) => .new(
+  consumerIn(temp),
+  cacheIn(temp, runner),
+  runner,
+  .new(testLocker),
+  .new(runner),
+);
 
 /// The codebase [name] of [origin], pinned at [commit], its [root] and
 /// [toolchain] as given.

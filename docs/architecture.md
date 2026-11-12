@@ -29,7 +29,7 @@ flowchart LR
 | Phase | Makes | I/O |
 |---|---|---|
 | Read | Every codebase from the manifests, each beside the manifest that named it | Yes |
-| Survey | Each checkout's stamp, whether its directory is there, the hash of each package's `pubspec.lock` and `package_config.json` it holds and of each kept lock it could take, `HEAD` and tracked changes from one `git status`, and the toolchain's SDK version | Yes |
+| Survey | Each checkout's stamp, whether its directory is there, the hash of each package's `pubspec.lock` and `package_config.json` it holds and of each kept lock it could take, `HEAD` and tracked changes from one `git status`, and the toolchain's SDK version, read once a load | Yes |
 | Stand | Whether the checkout stands, from the survey alone | No |
 | Clone | The clone of the codebase's URL, holding the pin's commit, and which of its packages that commit holds a lock for | Yes |
 | Choose | The lock each package resolves to, or `Unlocked` | No |
@@ -161,9 +161,9 @@ flowchart LR
 | Layer | Holds | Imports |
 |---|---|---|
 | `cli` | The commands, their flags, their rows and the exit codes, run by `bin/muster.dart` | `load`, `model` |
-| `load` | `Muster.load`, `Muster.scratch` and the kept lock's write: the phases in order, and the outcomes | `store`, `model` |
-| `store` | The cache, the checkouts, the scratches, the stamps, the claims, git and the toolchains | `model` |
-| `model` | The manifest and its parse, the codebase types, every choice a phase makes, the stamp's form, the outcomes | Nothing of muster's |
+| `load` | `Muster.load`, `Muster.scratch` and `muster lock`'s run: Read, each codebase handed to `store` in the manifests' order, the removal of locks no codebase names, and the outcomes | `store`, `model` |
+| `store` | The cache, the checkouts, the scratches, the stamps, the claims, git and the toolchains: each checkout's phases from Survey to Stamp in order, and the kept lock's write | `model` |
+| `model` | The manifest and its parse, the codebase types, the stamp's form, the outcomes, and every choice a phase makes: Stand's, Choose's, and the act Clone and Check out each take | Nothing of muster's |
 
 The table is the rule's home, and the rules new code obeys are:
 

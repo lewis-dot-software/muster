@@ -253,7 +253,8 @@ void main() {
         await bench.write(key, value);
       }
       bench.runner.commands.clear();
-      await bench.checkouts.checkout(codebase, bench.locks);
+      // A new load's, since a load reads each SDK version once.
+      await checkoutsIn(temp, bench.runner).checkout(codebase, bench.locks);
       expect(bench.runner.given, hasLength(2));
       expect(bench.runner.given.last, contains(' status '));
       for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
