@@ -8,14 +8,16 @@ import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/files_under.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
-import '../support/scratches.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
+import '../support/write_file.dart';
 
 /// One codebase of a draw: whether its commit holds an example, whether it
 /// holds its packages' locks, whether a kept lock stands for each package
@@ -38,8 +40,8 @@ const String _standing = '# kept before the lock\n$lockText';
 
 void main() {
   Glados2(
-    any.nonEmptyList(_codebase),
-    any.list(any.packageName),
+    any.nonEmptyList(_codebase).shrinkingAtMost(gitTries),
+    any.list(any.packageName).shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 10),
   ).test(
     '`muster lock` writes a kept lock for each codebase that needs one and '

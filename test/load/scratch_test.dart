@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/chmod.dart';
+import '../support/files_under.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/locker.dart';
@@ -17,6 +18,7 @@ import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
 import '../support/spy_runner.dart';
+import '../support/waiting_into.dart';
 
 void main() {
   late Directory temp;
@@ -56,11 +58,13 @@ void main() {
     };
   }
 
-  Future<Scratch> scratchOf(Muster muster, String name) async =>
-      switch (await muster.scratch(.parse(name)!)) {
-        Scratched(:final Scratch scratch) => scratch,
-        final Scratching other => fail('$other'),
-      };
+  Future<Scratch> scratchOf(Muster muster, String name) async {
+    final Scratching made = await muster.scratch(.parse(name)!);
+    return switch (made) {
+      Scratched(:final Scratch scratch) => scratch,
+      NotNamed() || ScratchFailed() => fail('$made'),
+    };
+  }
 
   test('a consumer checks out older commits in a scratch while its checkout '
       'stays at its pin', () async {
@@ -338,12 +342,7 @@ void main() {
     final Load load = await loaderIn(
       temp,
       runner,
-      claims: .new(testLocker, () async {
-        if (!waiting.isCompleted) {
-          waiting.complete();
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }),
+      claims: waitingInto(waiting),
     ).load();
     final Muster muster = (load as Loaded).muster;
     runner.commands.clear();

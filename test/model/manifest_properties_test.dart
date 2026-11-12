@@ -7,6 +7,7 @@ import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/merge_manifests.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:muster/src/model/repo_root.dart';
+import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/wanted.dart';
 
@@ -67,11 +68,21 @@ final Generator<String> _badCommit = any.combine3(
   },
 );
 
-/// A toolchain that is neither `dart` nor `flutter`.
+/// A toolchain that names no [Toolchain]: one of each written in capitals,
+/// capitalised or padded, the empty word, or any other word.
 final Generator<String> _badToolchain = any.either(
-  any.choose(['Dart', 'FLUTTER', 'dart ', ' flutter', '']),
+  any.choose([
+    for (final Toolchain(:String name) in Toolchain.values) ...[
+      name.toUpperCase(),
+      '${name[0].toUpperCase()}${name.substring(1)}',
+      '$name ',
+      ' $name',
+    ],
+    '',
+  ]),
   any.nonEmptyLetters.map(
-    (String word) => word == 'dart' || word == 'flutter' ? '${word}x' : word,
+    (String word) =>
+        Toolchain.values.asNameMap().containsKey(word) ? '${word}x' : word,
   ),
 );
 

@@ -4,7 +4,6 @@ import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/consumer_root.dart';
 import 'package:muster/src/model/git_codebase.dart';
-import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/checkouts.dart';
 import 'package:muster/src/store/runner.dart';
@@ -46,10 +45,6 @@ ConsumerRoot consumerIn(Directory temp) =>
 /// processes run by [runner].
 Checkouts checkoutsIn(Directory temp, Runner runner) =>
     .new(consumerIn(temp), cacheIn(temp, runner), runner, .new(testLocker));
-
-/// The kept locks of the consumer's `muster.yaml` in [temp].
-LocksDirectory locksIn(Directory temp) =>
-    .beside(.parse(p.join(consumerIn(temp).path, 'muster.yaml'), .posix)!);
 
 /// The codebase [name] of [origin], pinned at [commit], its [root] and
 /// [toolchain] as given.

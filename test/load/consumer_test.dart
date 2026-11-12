@@ -11,6 +11,7 @@ import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/write_file.dart';
 
 /// A consumer's test that loads every codebase its manifests name and fails
 /// on any outcome but `Fetched`, each package's pubspec its own and its
@@ -72,8 +73,7 @@ void main() {
       await writeManifest(atRoot(temp), [codebaseOf(origin, app)]);
       await writeManifest(second, [benchCodebase]);
       final KeptLockPath kept = .of(locksBeside(second), benchCodebase, .root);
-      await File(kept.path).create(recursive: true);
-      await File(kept.path).writeAsString(lockText);
+      await writeFile(kept.path, lockText);
       final String muster = await musterRoot();
       final String consumer = consumerIn(temp).path;
       await File(p.join(consumer, 'pubspec.yaml')).writeAsString(
@@ -83,9 +83,10 @@ void main() {
         '  muster:\n    path: $muster\n'
         '  test: any\n',
       );
-      await File(p.join(consumer, 'test', 'bench_test.dart'))
-          .create(recursive: true)
-          .then((File f) => f.writeAsString(_consumerTest));
+      await writeFile(
+        p.join(consumer, 'test', 'bench_test.dart'),
+        _consumerTest,
+      );
       final ProcessResult got = await Process.run(
         'dart',
         ['pub', 'get', '--offline'],

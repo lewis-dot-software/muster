@@ -17,27 +17,10 @@ import '../support/locker.dart';
 import '../support/locks.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/probe_gone.dart';
 import '../support/spy_runner.dart';
-
-/// A program that deletes its own working directory, then locks the
-/// manifest its argument names, writing the refusal's type where the lock
-/// refuses for it.
-const String _goneProbe = r'''
-import 'dart:io';
-
-import 'package:muster/muster.dart';
-import 'package:muster/src/load/locking.dart';
-import 'package:muster/src/load/process_loads.dart';
-
-Future<void> main(List<String> arguments) async {
-  Directory.current.deleteSync();
-  final Locking locking = await const ProcessLoads().lock(named: arguments);
-  stdout.write(switch (locking) {
-    LockRefused(:final NoWorkingDirectory reason) => '${reason.runtimeType}',
-    _ => '$locking',
-  });
-}
-''';
+import '../support/waiting_into.dart';
+import '../support/write_file.dart';
 
 void main() {
   late Directory temp;
@@ -404,16 +387,7 @@ void main() {
       final Completer<void> waited = .new();
       late Future<Locking> locking;
       await Claims(testLocker).holding(claimOf(app), () async {
-        locking = loaderIn(
-          temp,
-          runner,
-          claims: .new(testLocker, () async {
-            if (!waited.isCompleted) {
-              waited.complete();
-            }
-            await Future<void>.delayed(.zero);
-          }),
-        ).lock();
+        locking = loaderIn(temp, runner, claims: waitingInto(waited)).lock();
         await waited.future;
         expect(runner.given, isEmpty);
       });
@@ -428,17 +402,9 @@ void main() {
 
   test('a lock of the process refuses where the working directory is gone, '
       'throwing nothing', () async {
-    final String muster = await musterRoot();
     final String manifest = p.join(temp.path, 'empty.yaml');
     await writeManifest(manifest, []);
-    final File probe = .new(p.join(temp.path, 'probe.dart'));
-    await probe.writeAsString(_goneProbe);
-    final Directory gone = await Directory(p.join(temp.path, 'gone')).create();
-    final ProcessResult ran = await Process.run('dart', [
-      '--packages=${p.join(muster, '.dart_tool', 'package_config.json')}',
-      probe.path,
-      manifest,
-    ], workingDirectory: gone.path);
+    final ProcessResult ran = await probeGone(temp, .lock, manifest);
     expect(ran.stdout, 'NoWorkingDirectory', reason: '${ran.stderr}');
   });
 }

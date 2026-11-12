@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:muster/src/model/command.dart';
@@ -42,9 +43,67 @@ void main() {
     expect(_printed(ran), ['here', '0', '']);
   });
 
-  test('the process\'s own environment, handed in, reaches it whole', () async {
-    final Ran ran = await Runner(Platform.environment).run(_probe);
-    expect(_printed(ran)[2], Platform.environment['HOME']);
+  /// An environment of the test's own choosing, so no launcher's own
+  /// variables come into it, with the user's `PATH` and `HOME` for git and
+  /// dart to start.
+  final Map<String, String> handed = {
+    ..._path,
+    'HOME': Platform.environment['HOME']!,
+    'USER': 'muster',
+    'MUSTER_PROBE': 'here',
+    'MUSTER_SPACED': 'two words',
+  };
+
+  /// What [handed] reaches each process as, past its `PATH`: every other
+  /// variable of it, its prompts off and no askpass over it.
+  final Map<String, String> reaches = {
+    for (final MapEntry(:key, :value) in handed.entries)
+      if (key != 'PATH') key: value,
+    'GIT_TERMINAL_PROMPT': '0',
+    'GIT_ASKPASS': '',
+    'SSH_ASKPASS': 'false',
+    'SSH_ASKPASS_REQUIRE': 'force',
+  };
+
+  /// Expects [printed], one `name=value` to a line, to name every variable
+  /// of [reaches] with its value, and a `PATH` that ends in the one handed
+  /// in, since git puts its own directory ahead of it.
+  void expectReached(String printed) {
+    final Map<String, String> lines = {
+      for (final String line in const LineSplitter().convert(printed))
+        if (line.indexOf('=') case final int at when at > 0)
+          line.substring(0, at): line.substring(at + 1),
+    };
+    expect({
+      for (final String name in reaches.keys) name: lines[name],
+    }, reaches);
+    expect(lines['PATH'], endsWith(handed['PATH']!));
+  }
+
+  test('an environment handed in reaches git whole, with its prompts off and '
+      'no askpass over it', () async {
+    final Ran ran = await Runner(handed).run((
+      executable: .git,
+      arguments: ['-c', 'alias.muster-env=!env', 'muster-env'],
+    ));
+    expectReached(ran.stdout);
+  });
+
+  test('an environment handed in reaches dart whole, with its prompts off and '
+      'no askpass over it', () async {
+    final Directory temp = await .systemTemp.createTemp('muster-');
+    addTearDown(() => temp.delete(recursive: true));
+    final File script = await File('${temp.path}/script.dart').writeAsString(
+      "import 'dart:io';\n"
+      'void main() {\n'
+      '  for (final MapEntry(:key, :value) in Platform.environment.entries) {\n'
+      "    print('\$key=\$value');\n"
+      '  }\n'
+      '}\n',
+    );
+    final Ran ran = await Runner(handed)
+        .run((executable: .dart, arguments: [script.path]));
+    expectReached(ran.stdout);
   });
 
   test('dart reads the environment its runner was made with, and nothing '

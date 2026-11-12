@@ -6,14 +6,8 @@ import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
-/// The hash an origin names its objects by, each by git's own name for it.
-enum OriginFormat {
-  /// SHA-1.
-  sha1,
-
-  /// SHA-256.
-  sha256,
-}
+import 'origin_format.dart';
+import 'write_file.dart';
 
 /// A bare repo a test makes, cloned from by its path, its default branch
 /// `main`.
@@ -101,9 +95,7 @@ class Origin {
       await work.delete(recursive: true);
     }
     for (final MapEntry<String, String>(:key, :value) in files.entries) {
-      await File(p.joinAll([_work, ...key.split('/')]))
-          .create(recursive: true)
-          .then((File file) => file.writeAsString(value));
+      await writeFile(p.joinAll([_work, ...key.split('/')]), value);
     }
     Future<Ran> inWork(List<String> arguments) => _runner.run((
       executable: .git,

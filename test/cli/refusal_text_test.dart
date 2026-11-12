@@ -4,7 +4,7 @@ import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:test/test.dart';
 
-import '../support/outcomes.dart';
+import '../support/refusal_case.dart';
 
 /// What each refusal's line names, so a person can act on it.
 List<String> _named(LoadRefusal refusal) => switch (refusal) {
@@ -62,7 +62,7 @@ String _refusalOf(String text) => switch (parseManifest(text)) {
 final String _sha1 = 'ab' * 20;
 
 void main() {
-  for (final LoadRefusal refusal in everyRefusal) {
+  for (final LoadRefusal refusal in RefusalCase.every) {
     test('a refusal of ${refusal.runtimeType} is one line naming what to '
         'act on', () {
       final String text = refusalText(refusal);

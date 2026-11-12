@@ -15,15 +15,22 @@ enum Pause {
 
   /// Whether [command] is the one this pause names.
   bool holds(Command command) => switch (this) {
-    .clone =>
-      command.executable == .git &&
-          (command.arguments.first == 'clone' ||
-              command.arguments.first.startsWith('--git-dir=')),
-    .place =>
-      command.executable == .git &&
-          ((command.arguments.contains('worktree') &&
-                  command.arguments.contains('add')) ||
-              command.arguments.contains('checkout')),
-    .resolve => command.executable != .git && command.arguments.contains('get'),
+    .clone => switch (command.executable) {
+      .git =>
+        command.arguments.first == 'clone' ||
+            command.arguments.first.startsWith('--git-dir='),
+      .dart || .flutter => false,
+    },
+    .place => switch (command.executable) {
+      .git =>
+        (command.arguments.contains('worktree') &&
+                command.arguments.contains('add')) ||
+            command.arguments.contains('checkout'),
+      .dart || .flutter => false,
+    },
+    .resolve => switch (command.executable) {
+      .git => false,
+      .dart || .flutter => command.arguments.contains('get'),
+    },
   };
 }

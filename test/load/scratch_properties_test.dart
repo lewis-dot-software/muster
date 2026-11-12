@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:glados/glados.dart';
@@ -6,12 +5,16 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
 
+import '../support/files_under.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
+import '../support/tree_under.dart';
+import '../support/write_file.dart';
 
 /// The files a commit may hold beside its package's, each drawn or not.
 const List<String> _pool = ['lib/a.dart', 'lib/b/c.dart', 'README.md'];
@@ -39,21 +42,23 @@ enum _Dirt {
 /// the consumer does to the scratch before it.
 typedef _Draw = ({List<Set<int>> history, int pin, List<(int, _Dirt)> moves});
 
-final Generator<_Draw> _draw = any.combine3(
-  any.listWithLengthInRange(2, 5, any.set(any.intInRange(0, _pool.length))),
-  any.intInRange(0, 5),
-  any.listWithLengthInRange(
-    1,
-    5,
-    any.combine2(
+final Generator<_Draw> _draw = any
+    .combine3(
+      any.listWithLengthInRange(2, 5, any.set(any.intInRange(0, _pool.length))),
       any.intInRange(0, 5),
-      any.choose(_Dirt.values),
-      (int at, _Dirt dirt) => (at, dirt),
-    ),
-  ),
-  (List<Set<int>> history, int pin, List<(int, _Dirt)> moves) =>
-      (history: history, pin: pin, moves: moves),
-);
+      any.listWithLengthInRange(
+        1,
+        5,
+        any.combine2(
+          any.intInRange(0, 5),
+          any.choose(_Dirt.values),
+          (int at, _Dirt dirt) => (at, dirt),
+        ),
+      ),
+      (List<Set<int>> history, int pin, List<(int, _Dirt)> moves) =>
+          (history: history, pin: pin, moves: moves),
+    )
+    .shrinkingAtMost(gitTries);
 
 /// The files of the commit at [index] of a history, holding the package
 /// `app`, the `.gitignore` and the files of [_pool] at [pool].
@@ -61,18 +66,6 @@ Map<String, String> _commitFiles(int index, Set<int> pool) => {
   ...packageFiles('app'),
   '.gitignore': _gitignore,
   for (final int i in pool) _pool[i]: 'file $i of commit $index\n',
-};
-
-/// Every file and directory under [directory], beside a file's bytes in
-/// base64 and a directory's mark.
-Future<Map<String, String>> _tree(String directory) async => {
-  await for (final FileSystemEntity entity in Directory(
-    directory,
-  ).list(recursive: true, followLinks: false))
-    p.relative(entity.path, from: directory): switch (entity) {
-      File() => base64Encode(await entity.readAsBytes()),
-      _ => '<${entity.runtimeType}>',
-    },
 };
 
 /// A fault that keeps a scratch from being made.
@@ -131,11 +124,12 @@ void main() {
           muster ??= (load as Loaded).muster;
         }
         final Map<String, Map<String, String>> before = {
-          for (final String root in roots) root: await _tree(root),
+          for (final String root in roots) root: await treeUnder(root),
         };
-        final Scratch scratch = switch (await muster!.scratch(app.name)) {
+        final Scratching made = await muster!.scratch(app.name);
+        final Scratch scratch = switch (made) {
           Scratched(:final Scratch scratch) => scratch,
-          final Scratching other => fail('$other'),
+          NotNamed() || ScratchFailed() => fail('$made'),
         };
         final String at = scratch.package.path;
         for (final (int index, _Dirt dirt) in draw.moves) {
@@ -145,20 +139,16 @@ void main() {
             case .editTracked:
               await File(p.join(at, 'pubspec.yaml')).writeAsString('edited');
             case .addUntracked:
-              await File(p.join(at, 'stray', 'a.txt'))
-                  .create(recursive: true)
-                  .then((File f) => f.writeAsString('stray'));
+              await writeFile(p.join(at, 'stray', 'a.txt'), 'stray');
             case .addIgnored:
-              await File(p.join(at, 'ignored', 'a.txt'))
-                  .create(recursive: true)
-                  .then((File f) => f.writeAsString('ignored'));
+              await writeFile(p.join(at, 'ignored', 'a.txt'), 'ignored');
           }
           final int to = index % commits.length;
           expect(await scratch.move(commits[to]), isA<Moved>());
           expect(await headOf(at, runner), commits[to].hash);
           expect(await filesUnder(at), _commitFiles(to, draw.history[to]));
           for (final String root in roots) {
-            expect(await _tree(root), before[root], reason: root);
+            expect(await treeUnder(root), before[root], reason: root);
           }
         }
         expect(await scratch.dispose(), isA<Disposed>());
@@ -173,7 +163,7 @@ void main() {
           ]..sort(),
         );
         for (final String root in roots) {
-          expect(await _tree(root), before[root], reason: root);
+          expect(await treeUnder(root), before[root], reason: root);
           runner.commands.clear();
           expect(await loadAt(root), loadedWith({'app': isA<Fetched>()}));
           expect(runner.given, isNot(contains(contains('worktree add'))));
@@ -184,8 +174,8 @@ void main() {
   );
 
   Glados2(
-    any.choose(_Fault.values),
-    any.lowercaseLetters,
+    any.choose(_Fault.values).shrinkingAtMost(gitTries),
+    any.lowercaseLetters.shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 18),
   ).test('A scratch that cannot be made comes back as an outcome, never a '
       'throw.', (_Fault fault, String letters) async {
@@ -193,8 +183,15 @@ void main() {
       final SpyRunner runner = .new(hermetic(temp));
       final Origin origin = await .make(temp, runner);
       final Commit commit = await origin.commit(null, packageFiles('app'));
-      if (fault != .pinMissing) {
-        await origin.ref('refs/heads/main', commit);
+      switch (fault) {
+        case .pinMissing:
+          break;
+        case .notNamed ||
+            .unstartable ||
+            .notARepo ||
+            .cacheBlocked ||
+            .tempBlocked:
+          await origin.ref('refs/heads/main', commit);
       }
       final GitCodebase app = codebaseOf(origin, commit);
       await writeManifest(atRoot(temp), [
@@ -206,23 +203,52 @@ void main() {
             root: app.root,
             toolchain: app.toolchain,
           ),
-          _ => app,
+          .notNamed ||
+          .unstartable ||
+          .pinMissing ||
+          .cacheBlocked ||
+          .tempBlocked => app,
         },
       ]);
       final String blocked = p.join(temp.path, 'blocked');
       await File(blocked).writeAsString('');
-      if (fault == .tempBlocked) {
-        await File(scratchesIn(temp).path).writeAsString('');
+      switch (fault) {
+        case .tempBlocked:
+          await File(scratchesIn(temp).path).writeAsString('');
+        case .notNamed ||
+            .unstartable ||
+            .pinMissing ||
+            .notARepo ||
+            .cacheBlocked:
+          break;
       }
       final Load load = await loaderIn(
         temp,
-        fault == .unstartable ? unstartableIn(temp) : runner,
-        variables: {if (fault == .cacheBlocked) 'MUSTER_CACHE': blocked},
+        switch (fault) {
+          .unstartable => unstartableIn(temp),
+          .notNamed ||
+          .pinMissing ||
+          .notARepo ||
+          .cacheBlocked ||
+          .tempBlocked => runner,
+        },
+        variables: switch (fault) {
+          .cacheBlocked => {'MUSTER_CACHE': blocked},
+          .notNamed ||
+          .unstartable ||
+          .pinMissing ||
+          .notARepo ||
+          .tempBlocked => const {},
+        },
       ).load();
       final Muster muster = (load as Loaded).muster;
       final CodebaseName name = switch (fault) {
         .notNamed => .parse('x$letters')!,
-        _ => app.name,
+        .unstartable ||
+        .pinMissing ||
+        .notARepo ||
+        .cacheBlocked ||
+        .tempBlocked => app.name,
       };
       final Scratching made = await muster.scratch(name);
       expect(made, switch (fault) {
@@ -236,8 +262,15 @@ void main() {
         .notARepo => _failedWith(isA<CommandFailed>()),
         .cacheBlocked || .tempBlocked => _failedWith(isA<StoreFailed>()),
       });
-      if (fault != .tempBlocked) {
-        expect(await scratchesLeft(temp), isEmpty);
+      switch (fault) {
+        case .tempBlocked:
+          break;
+        case .notNamed ||
+            .unstartable ||
+            .pinMissing ||
+            .notARepo ||
+            .cacheBlocked:
+          expect(await scratchesLeft(temp), isEmpty);
       }
     });
   });

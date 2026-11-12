@@ -33,15 +33,11 @@ Matcher sameStamp(Stamp stamp) => isA<Stamp>()
     .having((Stamp s) => s.packages, 'packages', equals(stamp.packages))
     .having((Stamp s) => s.sdk, 'sdk', stamp.sdk);
 
-const String _hex = '0123456789abcdef';
-
 /// The generators the stamp's property tests draw from.
 extension StampAnys on Any {
   /// A file's hash.
-  Generator<ContentHash> get contentHash => listWithLength(
-    64,
-    choose(_hex.split('')),
-  ).map((List<String> digits) => .parse(digits.join())!);
+  Generator<ContentHash> get contentHash =>
+      hexOfLength(64).map((String hex) => .parse(hex)!);
 
   /// An SDK's version.
   Generator<SdkVersion> get sdkVersion => combine3(
@@ -61,7 +57,7 @@ extension StampAnys on Any {
   );
 
   /// A stamp's packages, the root's always among them and the example's
-  /// where [example] holds.
+  /// drawn or not.
   Generator<Map<Package, StampedPackage>> get stampedPackages => combine3(
     stampedPackage,
     stampedPackage,

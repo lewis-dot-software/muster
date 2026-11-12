@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -59,9 +57,3 @@ KeptLockPath keptOf(
   GitCodebase codebase, [
   Package package = .root,
 ]) => .of(locksBeside(manifest), codebase, package);
-
-/// Writes [text] as the file at [path], its directory made.
-Future<void> writeFile(String path, String text) async {
-  await File(path).create(recursive: true);
-  await File(path).writeAsString(text);
-}

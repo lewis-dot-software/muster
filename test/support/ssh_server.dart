@@ -57,8 +57,11 @@ class SshServer {
   final String _sshd;
   final String _user;
 
-  /// A repo's URL on the server.
-  GitUrl get url => .parse('ssh://$_user@$_host/repo')!;
+  /// The user and host ssh is given to reach the server.
+  String get destination => '$_user@$_host';
+
+  /// The URL on the server of the repo at the absolute path [repo].
+  GitUrl url(String repo) => .parse('ssh://$destination$repo')!;
 
   /// The `core.sshCommand` that reaches the server with no agent and no
   /// configuration of the user's, offering a key whose passphrase is asked

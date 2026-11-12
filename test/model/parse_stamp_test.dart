@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/parse_stamp.dart';
 import 'package:muster/src/model/render_stamp.dart';
+import 'package:muster/src/model/stamp.dart';
 import 'package:test/test.dart';
 
 import '../support/manifests.dart';
@@ -11,19 +12,18 @@ import '../support/stamps.dart';
 void main() {
   final ContentHash hash = .of([1]);
 
-  /// A stamp's JSON object, as `renderStamp` writes one.
-  Map<String, Object?> stampJson() => jsonDecode(
-    renderStamp(
-      stampOf(
-        codebase('app', 'https://example.com/app.git', 'a' * 40, '.', .dart),
-        {.root: (source: .committed, lock: hash, packageConfig: hash)},
-        .parse('3.13.7')!,
-      ),
-    ),
-  ) as Map<String, Object?>;
+  final Stamp stamp = stampOf(
+    codebase('app', 'https://example.com/app.git', 'a' * 40, '.', .dart),
+    {.root: (source: .committed, lock: hash, packageConfig: hash)},
+    .parse('3.13.7')!,
+  );
+
+  /// The stamp's JSON object, as `renderStamp` writes it.
+  Map<String, Object?> stampJson() =>
+      jsonDecode(renderStamp(stamp)) as Map<String, Object?>;
 
   test('a stamp as written is read back', () {
-    expect(parseStamp(jsonEncode(stampJson())), isNotNull);
+    expect(parseStamp(jsonEncode(stampJson())), sameStamp(stamp));
   });
 
   test('text that holds no stamp reads as none', () {

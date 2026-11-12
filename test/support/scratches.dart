@@ -3,22 +3,8 @@ import 'dart:io';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
-import 'package:path/path.dart' as p;
 
 import 'loads.dart';
-
-/// Every file under [directory], from its top in `/` separators, beside its
-/// contents, less any `.git`.
-Future<Map<String, String>> filesUnder(String directory) async => {
-  await for (final FileSystemEntity entity in Directory(
-    directory,
-  ).list(recursive: true, followLinks: false))
-    if (entity is File)
-      if (p.posix.joinAll(p.split(p.relative(entity.path, from: directory)))
-          case final String path
-          when path != '.git' && !path.startsWith('.git/'))
-        path: await entity.readAsString(),
-};
 
 /// The commit `HEAD` names in the worktree at [worktree], read by [runner].
 Future<String> headOf(String worktree, Runner runner) async {

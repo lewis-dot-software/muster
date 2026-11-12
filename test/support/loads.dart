@@ -3,7 +3,6 @@ import 'dart:isolate';
 
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
-import 'package:muster/src/model/cache_directory.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/environment.dart';
@@ -19,17 +18,18 @@ import 'git.dart';
 import 'locker.dart';
 import 'manifests.dart';
 import 'packages.dart';
+import 'write_file.dart';
 
 /// The environment a test's load reads, in [temp]: [hermetic]'s, less any
-/// `MUSTER_MANIFESTS` it carries, its cache in [temp], and [variables] over
-/// the rest.
+/// `MUSTER_MANIFESTS` it carries, its cache [cacheDirectoryIn]'s, and
+/// [variables] over the rest.
 Environment loadEnvironment(
   Directory temp, [
   Map<String, String> variables = const {},
 ]) => (
   variables: {
     ...hermetic(temp)..remove('MUSTER_MANIFESTS'),
-    'MUSTER_CACHE': p.join(temp.path, 'cache'),
+    'MUSTER_CACHE': cacheDirectoryIn(temp).path,
     ...variables,
   },
   os: .posix,
@@ -43,12 +43,9 @@ const Set<String> cacheVariables = {
   'LOCALAPPDATA',
 };
 
-/// The cache a test's load in [temp] clones into.
-CacheDirectory loadCacheIn(Directory temp) => .of(loadEnvironment(temp))!;
-
 /// The clone of [codebase]'s URL in the cache of a test's load in [temp].
 ClonePath cloneOf(Directory temp, GitCodebase codebase) =>
-    .of(loadCacheIn(temp), codebase.url);
+    .of(cacheDirectoryIn(temp), codebase.url);
 
 /// A loader in [temp], reading [loadEnvironment] with [variables], and with
 /// none of the variables a cache is taken from where [cached] does not hold,
@@ -83,11 +80,6 @@ Loader loaderIn(
 TempDirectory scratchesIn(Directory temp) =>
     .new(p.join(temp.path, 'scratches'), .posix);
 
-/// A runner in [temp] that can start no process, since its `PATH` holds no
-/// executable.
-Runner unstartableIn(Directory temp) =>
-    .new({...hermetic(temp), 'PATH': '/muster-no-such-directory'});
-
 /// The directory of muster's own package, read from its package config.
 Future<String> musterRoot() async => p.dirname(
   p.dirname(
@@ -106,8 +98,7 @@ String atRoot(Directory temp, [String name = 'muster.yaml']) =>
 
 /// Writes the manifest naming [codebases] at [path], its directory made.
 Future<void> writeManifest(String path, List<GitCodebase> codebases) async {
-  final File file = await File(path).create(recursive: true);
-  await file.writeAsString(renderManifest(codebases.map(entryOf).toList()));
+  await writeFile(path, renderManifest(codebases.map(entryOf).toList()));
 }
 
 /// The kept locks beside the manifest at [path].

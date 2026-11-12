@@ -14,25 +14,9 @@ import '../support/locker.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/probe_gone.dart';
 import '../support/spy_runner.dart';
-
-/// A program that deletes its own working directory, then loads the
-/// manifest its argument names, writing the refusal's type where the load
-/// refuses for it.
-const String _goneProbe = r'''
-import 'dart:io';
-
-import 'package:muster/muster.dart';
-
-Future<void> main(List<String> arguments) async {
-  Directory.current.deleteSync();
-  final Load load = await Muster.load(manifests: arguments);
-  stdout.write(switch (load) {
-    Refused(:final NoWorkingDirectory reason) => '${reason.runtimeType}',
-    _ => '$load',
-  });
-}
-''';
+import '../support/write_file.dart';
 
 void main() {
   late Directory temp;
@@ -47,8 +31,8 @@ void main() {
 
   tearDown(() => temp.delete(recursive: true));
 
-  /// A codebase [name] of the origin, at a new commit on `main` holding
-  /// [files], the package `app` with its lock where none is given.
+  /// A codebase [name] of the origin, at a new commit on its own branch
+  /// holding [files], the package `app` with its lock where none is given.
   Future<GitCodebase> codebaseNamed(
     String name, [
     Map<String, String>? files,
@@ -83,8 +67,7 @@ void main() {
     await writeManifest(atRoot(temp), [app]);
     await writeManifest(second, [bench]);
     final KeptLockPath kept = .of(locksBeside(second), bench, .root);
-    await File(kept.path).create(recursive: true);
-    await File(kept.path).writeAsString(lockText);
+    await writeFile(kept.path, lockText);
     expect(
       await load(variables: {'MUSTER_MANIFESTS': second}),
       loadedWith({
@@ -336,8 +319,7 @@ void main() {
     });
 
     test('on a manifest that is not YAML, naming it and why', () async {
-      await File(atRoot(temp)).create(recursive: true);
-      await File(atRoot(temp)).writeAsString('codebases: [');
+      await writeFile(atRoot(temp), 'codebases: [');
       await refuses(
         isA<ManifestInvalid>()
             .having(
@@ -378,8 +360,8 @@ void main() {
     test('on a key muster does not know, naming its path', () async {
       final GitCodebase app = await codebaseNamed('app');
       final (String name, List<Field> fields) = entryOf(app);
-      await File(atRoot(temp)).create(recursive: true);
-      await File(atRoot(temp)).writeAsString(
+      await writeFile(
+        atRoot(temp),
         renderManifest([
           (name, [...fields, ('depth', '1')]),
         ]),
@@ -446,18 +428,9 @@ void main() {
     test(
       'refuses where the working directory is gone, throwing nothing',
       () async {
-        final String muster = await musterRoot();
         final String manifest = p.join(temp.path, 'empty.yaml');
         await writeManifest(manifest, []);
-        final File probe = .new(p.join(temp.path, 'probe.dart'));
-        await probe.writeAsString(_goneProbe);
-        final Directory gone = await Directory(p.join(temp.path, 'gone'))
-            .create();
-        final ProcessResult ran = await Process.run('dart', [
-          '--packages=${p.join(muster, '.dart_tool', 'package_config.json')}',
-          probe.path,
-          manifest,
-        ], workingDirectory: gone.path);
+        final ProcessResult ran = await probeGone(temp, .fetch, manifest);
         expect(ran.stdout, 'NoWorkingDirectory', reason: '${ran.stderr}');
       },
     );

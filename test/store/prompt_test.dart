@@ -7,53 +7,35 @@ import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-import '../support/faults.dart';
-import '../support/git.dart';
 import '../support/askpass.dart';
 import '../support/asking_server.dart';
+import '../support/faults.dart';
+import '../support/git.dart';
+import '../support/quiet_in.dart';
 import '../support/ssh_server.dart';
 
 /// A pin the clone never reaches, since each clone here fails first.
 final Commit _pin = .parse('0' * 40)!;
 
-/// The variables a caller's environment could hold that would have git or
-/// ssh ask on the terminal or through a program of its own.
-const List<String> _askers = [
-  'GIT_ASKPASS',
-  'GIT_TERMINAL_PROMPT',
-  'SSH_ASKPASS',
-  'SSH_ASKPASS_REQUIRE',
-];
-
 void main() {
   late Directory temp;
   late Askpass askpass;
 
-  /// The test process's environment, made hermetic, with none of [_askers].
+  /// The test process's environment, quiet as [quietIn] makes it.
   late Map<String, String> quiet;
 
   setUp(() async {
     temp = await .systemTemp.createTemp('muster-');
     askpass = await .make(temp);
-    quiet = hermetic(temp)
-      ..removeWhere((String key, _) => _askers.contains(key));
+    quiet = quietIn(temp);
   });
 
   tearDown(() => temp.delete(recursive: true));
 
-  /// The environment of a caller that names [askpass] for every prompt, git's
-  /// and ssh's.
-  Map<String, String> answering() => {
-    ...quiet,
-    'GIT_ASKPASS': askpass.path,
-    'SSH_ASKPASS': askpass.path,
-    'SSH_ASKPASS_REQUIRE': 'force',
-  };
-
   /// Sets [key] to [value] in the user's own git configuration.
   Future<void> configure(String key, String value) => Runner(quiet).run((
     executable: .git,
-    arguments: ['config', '--file', p.join(temp.path, 'gitconfig'), key, value],
+    arguments: ['config', '--file', gitConfigIn(temp), key, value],
   ));
 
   /// Expects the cache's clone of [url], its git run under [environment], to
@@ -78,41 +60,41 @@ void main() {
     expect(await askpass.asked, isFalse, reason: 'the askpass was asked');
   }
 
-  group('a clone of an SSH URL', () {
+  group('a clone of an SSH URL whose caller names an askpass for every '
+      "prompt, git's and ssh's,", () {
     late SshServer server;
+    late GitUrl url;
 
-    setUp(() async => server = await .make(temp));
+    setUp(() async {
+      server = await .make(temp);
+      url = server.url(p.join(temp.path, 'repo'));
+    });
 
-    for (final (String caller, Map<String, String> Function() environment) in [
-      ('with no askpass of its caller\'s', () => quiet),
-      ('whose caller names an askpass of its own', answering),
-    ]) {
-      test('to a host not yet known fails, never asking whether to trust it, '
-          '$caller', () async {
-        await configure(
-          'core.sshCommand',
-          server.command(locked: false, knownHost: false),
-        );
-        await failsUnasked(
-          server.url,
-          environment(),
-          'Host key verification failed.',
-        );
-      });
+    /// The environment of a caller that names [askpass] for every prompt.
+    Map<String, String> answering() => {
+      ...quiet,
+      'GIT_ASKPASS': askpass.path,
+      'SSH_ASKPASS': askpass.path,
+      'SSH_ASKPASS_REQUIRE': 'force',
+    };
 
-      test('with a key whose passphrase is wanted fails, never asking for '
-          'it, $caller', () async {
-        await configure(
-          'core.sshCommand',
-          server.command(locked: true, knownHost: true),
-        );
-        await failsUnasked(
-          server.url,
-          environment(),
-          'Permission denied (publickey)',
-        );
-      });
-    }
+    test('to a host not yet known fails, never asking whether to trust '
+        'it', () async {
+      await configure(
+        'core.sshCommand',
+        server.command(locked: false, knownHost: false),
+      );
+      await failsUnasked(url, answering(), 'Host key verification failed.');
+    });
+
+    test('with a key whose passphrase is wanted fails, never asking for '
+        'it', () async {
+      await configure(
+        'core.sshCommand',
+        server.command(locked: true, knownHost: true),
+      );
+      await failsUnasked(url, answering(), 'Permission denied (publickey)');
+    });
   });
 
   group('a clone of an HTTP URL whose credentials are wanted fails, never '

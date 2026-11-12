@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/commit.dart';
+import 'package:muster/src/model/executable.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/git_url.dart';
 import 'package:muster/src/store/cache.dart';
@@ -233,7 +234,15 @@ void main() {
     await File(clone.path).create(recursive: true);
     await expectLater(
       cache.clone(origin.url, await onMain()),
-      throwsA(storeFault(isA<StoreFailed>())),
+      throwsA(
+        storeFault(
+          isA<StoreFailed>().having(
+            (StoreFailed f) => f.path,
+            'path',
+            clone.temporary.path,
+          ),
+        ),
+      ),
     );
     expect(await cached(), [p.basename(clone.path)]);
   });
@@ -354,13 +363,18 @@ void main() {
   });
 
   test('git that cannot start fails, naming git', () async {
-    final Cache unstartable = cacheIn(
-      temp,
-      .new({...hermetic(temp), 'PATH': '/muster-no-such-directory'}),
-    );
+    final Cache unstartable = cacheIn(temp, unstartableIn(temp));
     await expectLater(
       unstartable.clone(origin.url, .parse('a' * 40)!),
-      throwsA(storeFault(isA<Unstartable>())),
+      throwsA(
+        storeFault(
+          isA<Unstartable>().having(
+            (Unstartable u) => u.executable,
+            'executable',
+            Executable.git,
+          ),
+        ),
+      ),
     );
   });
 

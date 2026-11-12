@@ -6,13 +6,16 @@ import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-import '../support/contenders.dart';
+import '../support/apart.dart';
+import '../support/contender.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
+import '../support/outcome_case.dart';
 import '../support/packages.dart';
 import '../support/spy_runner.dart';
+import '../support/waiting_into.dart';
 
 void main() {
   late Directory temp;
@@ -68,18 +71,13 @@ void main() {
       final Future<Load> second = loaderIn(
         temp,
         runner,
-        claims: .new(testLocker, () async {
-          if (!waited.isCompleted) {
-            waited.complete();
-          }
-          await Future<void>.delayed(.zero);
-        }),
+        claims: waitingInto(waited),
       ).load();
       await waited.future;
       expect(runner.given, isEmpty);
       await first.tell(.go);
       expect(await first.done(), {
-        'app': (outcome: 'Fetched', path: checkoutAt(temp, 'app')),
+        'app': (outcome: OutcomeCase.fetched, path: checkoutAt(temp, 'app')),
       });
       expect(
         await second,
@@ -154,7 +152,7 @@ void main() {
       );
       await making.tell(.go);
       expect(await making.done(), {
-        'app': (outcome: 'Fetched', path: checkoutAt(temp, 'app')),
+        'app': (outcome: OutcomeCase.fetched, path: checkoutAt(temp, 'app')),
       });
       expect(
         await Directory(cloneOf(temp, app).temporary.path).exists(),

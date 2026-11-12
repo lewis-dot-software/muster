@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:glados/glados.dart';
@@ -14,7 +13,10 @@ import '../support/loads.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
+import '../support/tree_under.dart';
+import '../support/write_file.dart';
 
 /// How a manifest reaches a load.
 enum _By {
@@ -91,19 +93,6 @@ class _Bench {
       checkoutAt(temp, codebase.name.name);
 }
 
-/// Every file and directory under [temp], beside a file's bytes in base64
-/// and a directory's mark.
-Future<Map<String, String>> _tree(Directory temp) async => {
-  await for (final FileSystemEntity entity in temp.list(
-    recursive: true,
-    followLinks: false,
-  ))
-    p.relative(entity.path, from: temp.path): switch (entity) {
-      File() => base64Encode(await entity.readAsBytes()),
-      _ => '<${entity.runtimeType}>',
-    },
-};
-
 /// Matches an outcome that is a failure, never [Fetched].
 final Matcher _failure = isA<FetchFailure>();
 
@@ -119,11 +108,21 @@ const List<String> _notYaml = [
 ];
 
 /// A file name whose ending is no `.yaml`.
-final Generator<String> _notYamlName = any.combine2(
-  any.nonEmptyLetters,
-  any.choose(['', '.yml', '.YAML', '.yaml.bak', '.json', '_yaml', '.yaml~']),
-  (String stem, String ending) => '$stem$ending',
-);
+final Generator<String> _notYamlName = any
+    .combine2(
+      any.nonEmptyLetters,
+      any.choose([
+        '',
+        '.yml',
+        '.YAML',
+        '.yaml.bak',
+        '.json',
+        '_yaml',
+        '.yaml~',
+      ]),
+      (String stem, String ending) => '$stem$ending',
+    )
+    .shrinkingAtMost(gitTries);
 
 /// A fault a named manifest can meet.
 enum _ManifestFault { missing, unreadable, notYaml }
@@ -146,8 +145,8 @@ enum _Fault { none, pinMissing, noRepo, unlocked, badStamp, unresolvable }
 void main() {
   Glados3(
     _notYamlName,
-    any.choose(_By.values),
-    any.intInRange(0, 3),
+    any.choose(_By.values).shrinkingAtMost(gitTries),
+    any.intInRange(0, 3).shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 40),
   ).test('A manifest whose file name does not end `.yaml` refuses the load.', (
     String name,
@@ -177,13 +176,15 @@ void main() {
   });
 
   Glados3(
-    any.choose(_ManifestFault.values),
-    any.choose(_By.values),
-    any.combine2(
-      any.intInRange(0, 3),
-      any.choose(_notYaml),
-      (int before, String text) => (before, text),
-    ),
+    any.choose(_ManifestFault.values).shrinkingAtMost(gitTries),
+    any.choose(_By.values).shrinkingAtMost(gitTries),
+    any
+        .combine2(
+          any.intInRange(0, 3),
+          any.choose(_notYaml),
+          (int before, String text) => (before, text),
+        )
+        .shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 40),
   ).test('A named manifest that is missing, unreadable or not YAML refuses the '
       'load, naming the file and why.', (
@@ -248,7 +249,10 @@ void main() {
     });
   });
 
-  Glados(any.choose([null, '', ':', '::']), ExploreConfig(numRuns: 8)).test(
+  Glados(
+    any.choose([null, '', ':', '::']).shrinkingAtMost(gitTries),
+    ExploreConfig(numRuns: 8),
+  ).test(
     'A load with no manifest at all refuses: no `muster.yaml` at the root and '
     'nothing in `MUSTER_MANIFESTS`.',
     (String? listed) => inTemp((Directory temp) async {
@@ -264,16 +268,18 @@ void main() {
   );
 
   Glados2(
-    any.nonEmptyList(
-      any.list(
-        any.combine2(
-          any.intInRange(0, 6),
-          any.bool,
-          (int n, bool good) => (n, good),
-        ),
-      ),
-    ),
-    any.bool,
+    any
+        .nonEmptyList(
+          any.list(
+            any.combine2(
+              any.intInRange(0, 6),
+              any.bool,
+              (int n, bool good) => (n, good),
+            ),
+          ),
+        )
+        .shrinkingAtMost(gitTries),
+    any.bool.shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 10),
   ).test(
     "Every codebase the manifests name gets exactly one outcome, in the "
@@ -322,8 +328,8 @@ void main() {
   );
 
   Glados2(
-    any.choose(_Refusal.values),
-    any.intInRange(0, 3),
+    any.choose(_Refusal.values).shrinkingAtMost(gitTries),
+    any.intInRange(0, 3).shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 24),
   ).test('A refused load starts no process and writes no file.', (
     _Refusal refusal,
@@ -333,7 +339,21 @@ void main() {
       final _Bench bench = await .make(temp);
       // A load with no manifest at all is given none, good or faulty.
       final List<GitCodebase> good = [
-        for (int i = 0; i < (refusal == .none ? 0 : before); i++)
+        for (
+          int i = 0;
+          i <
+              switch (refusal) {
+                .none => 0,
+                .notManifestName ||
+                .missing ||
+                .unreadable ||
+                .notYaml ||
+                .unknownKey ||
+                .namedTwice ||
+                .noCache => before,
+              };
+          i++
+        )
           await bench.codebase('g$i', packageFiles('g$i')),
       ];
       for (final (int i, GitCodebase codebase) in good.indexed) {
@@ -385,29 +405,31 @@ void main() {
         .none ||
         .namedTwice => bench.loader(),
       };
-      final Map<String, String> tree = await _tree(temp);
+      final Map<String, String> tree = await treeUnder(temp.path);
       bench.runner.commands.clear();
       expect(await loader.load(), isA<Refused>());
       expect(bench.runner.given, isEmpty);
-      expect(await _tree(temp), tree);
+      expect(await treeUnder(temp.path), tree);
     });
   });
 
   Glados(
-    any.nonEmptyList(
-      any.combine4(
-        any.bool,
-        any.bool,
-        any.bool,
-        any.bool,
-        (bool nested, bool example, bool committed, bool listed) => (
-          nested: nested,
-          example: example,
-          committed: committed,
-          listed: listed,
-        ),
-      ),
-    ),
+    any
+        .nonEmptyList(
+          any.combine4(
+            any.bool,
+            any.bool,
+            any.bool,
+            any.bool,
+            (bool nested, bool example, bool committed, bool listed) => (
+              nested: nested,
+              example: example,
+              committed: committed,
+              listed: listed,
+            ),
+          ),
+        )
+        .shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 10),
   ).test(
     'A load right after another load hands out the same paths, and clones, '
@@ -438,8 +460,7 @@ void main() {
               codebase,
               package,
             );
-            await File(kept.path).create(recursive: true);
-            await File(kept.path).writeAsString(lockText);
+            await writeFile(kept.path, lockText);
           }
         }
       }
@@ -468,8 +489,8 @@ void main() {
   );
 
   Glados2(
-    any.nonEmptyList(any.choose(_Fault.values)),
-    any.intInRange(0, 4).map((int n) => n == 0),
+    any.nonEmptyList(any.choose(_Fault.values)).shrinkingAtMost(gitTries),
+    any.intInRange(0, 4).map((int n) => n == 0).shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 12),
   ).test(
     'Every failure a codebase meets comes back as an outcome other than '
@@ -504,9 +525,12 @@ void main() {
           ),
           .none || .unlocked || .badStamp || .unresolvable => made,
         });
-        if (fault == .badStamp) {
-          await Directory('${bench.checkoutOf(made)}.stamp')
-              .create(recursive: true);
+        switch (fault) {
+          case .badStamp:
+            await Directory('${bench.checkoutOf(made)}.stamp')
+                .create(recursive: true);
+          case .none || .pinMissing || .noRepo || .unlocked || .unresolvable:
+            break;
         }
         expected[name] = unstartable
             ? isA<Unstartable>()
@@ -533,7 +557,15 @@ void main() {
       );
       expect(load, loadedWith(expected));
       for (final (int i, _Fault fault) in faults.take(4).indexed) {
-        if (fault != .none || unstartable) {
+        if (unstartable ||
+            switch (fault) {
+              .none => false,
+              .pinMissing ||
+              .noRepo ||
+              .unlocked ||
+              .badStamp ||
+              .unresolvable => true,
+            }) {
           expect(
             (load as Loaded).outcomes[CodebaseName.parse('c$i')!],
             _failure,
@@ -544,9 +576,9 @@ void main() {
   );
 
   Glados3(
-    any.nonEmptyList(any.bool),
-    any.set(any.intInRange(0, 3)),
-    any.set(any.intInRange(0, 2)),
+    any.nonEmptyList(any.bool).shrinkingAtMost(gitTries),
+    any.set(any.intInRange(0, 3)).shrinkingAtMost(gitTries),
+    any.set(any.intInRange(0, 2)).shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 10),
   ).test('A checkout or a clone deleted by hand comes back on the next load.', (
     List<bool> fromSecond,

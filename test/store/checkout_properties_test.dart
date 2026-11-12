@@ -6,12 +6,15 @@ import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/store/checkouts.dart';
-import 'package:path/path.dart' as p;
 
+import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
+import '../support/write_file.dart';
 
 /// The files a pin may hold beside its package's, each drawn or not.
 const List<String> _pool = [
@@ -68,34 +71,36 @@ typedef _Draw = ({
   List<(_Act, int)> acts,
 });
 
-final Generator<_Draw> _draw = any.combine5(
-  any.set(any.intInRange(0, _pool.length)),
-  any.intInRange(0, 1000),
-  any.choose(_forcing.toList()),
-  any.bool,
-  any.listWithLengthInRange(
-    0,
-    4,
-    any.combine2(
-      any.choose(_Act.values),
-      any.intInRange(0, 20),
-      (_Act act, int at) => (act, at),
-    ),
-  ),
-  (
-    Set<int> pool,
-    int seed,
-    _Act forcing,
-    bool elsewhere,
-    List<(_Act, int)> acts,
-  ) => (
-    pool: pool,
-    seed: seed,
-    forcing: forcing,
-    elsewhere: elsewhere,
-    acts: acts,
-  ),
-);
+final Generator<_Draw> _draw = any
+    .combine5(
+      any.set(any.intInRange(0, _pool.length)),
+      any.intInRange(0, 1000),
+      any.choose(_forcing.toList()),
+      any.bool,
+      any.listWithLengthInRange(
+        0,
+        4,
+        any.combine2(
+          any.choose(_Act.values),
+          any.intInRange(0, 20),
+          (_Act act, int at) => (act, at),
+        ),
+      ),
+      (
+        Set<int> pool,
+        int seed,
+        _Act forcing,
+        bool elsewhere,
+        List<(_Act, int)> acts,
+      ) => (
+        pool: pool,
+        seed: seed,
+        forcing: forcing,
+        elsewhere: elsewhere,
+        acts: acts,
+      ),
+    )
+    .shrinkingAtMost(gitTries);
 
 /// What a tool writes beside a checkout's tracked files.
 enum _Kind { untracked, ignored, inDartTool }
@@ -104,14 +109,16 @@ enum _Kind { untracked, ignored, inDartTool }
 /// contents.
 typedef _Writes = List<(_Kind, int, String)>;
 
-final Generator<_Writes> _writes = any.nonEmptyList(
-  any.combine3(
-    any.choose(_Kind.values),
-    any.intInRange(0, 10),
-    any.letterOrDigits,
-    (_Kind kind, int at, String contents) => (kind, at, contents),
-  ),
-);
+final Generator<_Writes> _writes = any
+    .nonEmptyList(
+      any.combine3(
+        any.choose(_Kind.values),
+        any.intInRange(0, 10),
+        any.letterOrDigits,
+        (_Kind kind, int at, String contents) => (kind, at, contents),
+      ),
+    )
+    .shrinkingAtMost(gitTries);
 
 /// The path, from the checkout's top in `/` separators, of the file of
 /// [kind] that [at] names.
@@ -129,20 +136,6 @@ Map<String, String> _pinFiles(Set<int> pool, int seed) => {
   for (final int i in pool) _pool[i]: 'file $i of $seed\n',
 };
 
-/// Every file under [checkout], from its top in `/` separators, beside its
-/// contents, less its `.git` and its root's `.dart_tool/`, which the resolve
-/// writes.
-Future<Map<String, String>> _files(CheckoutPath checkout) async => {
-  await for (final FileSystemEntity entity in Directory(
-    checkout.path,
-  ).list(recursive: true, followLinks: false))
-    if (entity is File)
-      if (p.posix.joinAll(p.split(p.relative(entity.path, from: checkout.path)))
-          case final String path
-          when path != '.git' && !path.startsWith('.dart_tool/'))
-        path: await entity.readAsString(),
-};
-
 /// A bench for one draw: an origin, its checkouts, and what a test reads of
 /// them.
 class _Bench {
@@ -155,7 +148,7 @@ class _Bench {
       runner,
       await .make(temp, runner),
       checkoutsIn(temp, runner),
-      locksIn(temp),
+      locksBeside(atRoot(temp)),
     );
   }
 
@@ -169,11 +162,8 @@ class _Bench {
 
   String inCheckout(String file) => fileIn(checkout, file);
 
-  Future<void> write(String file, String contents) async {
-    final File at = .new(inCheckout(file));
-    await at.create(recursive: true);
-    await at.writeAsString(contents);
-  }
+  Future<void> write(String file, String contents) =>
+      writeFile(inCheckout(file), contents);
 }
 
 void main() {
@@ -233,7 +223,10 @@ void main() {
         }
       }
       await bench.checkouts.checkout(codebase, bench.locks);
-      expect(await _files(bench.checkout), files);
+      expect(
+        await filesUnder(bench.checkout.path, less: ['.git', '.dart_tool']),
+        files,
+      );
       for (int at = 0; at < 20; at++) {
         expect(
           await File(bench.inCheckout(_written(.inDartTool, at))).exists(),

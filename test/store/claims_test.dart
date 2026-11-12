@@ -9,12 +9,15 @@ import 'package:muster/src/store/libc.dart';
 import 'package:muster/src/store/locker.dart';
 import 'package:test/test.dart';
 
-import '../support/contenders.dart';
-import '../support/contention.dart';
+import '../support/act.dart';
+import '../support/apart.dart';
+import '../support/contender.dart';
 import '../support/failing_flock.dart';
 import '../support/faults.dart';
 import '../support/locker.dart';
 import '../support/packages.dart';
+import '../support/take.dart';
+import '../support/waiting_into.dart';
 
 void main() {
   late Directory temp;
@@ -28,25 +31,18 @@ void main() {
   ClaimPath claimOf(String name) =>
       CheckoutPath.of(consumerIn(temp), .parse(name)!).claim;
 
-  /// Claims whose every wait completes [waited], the first time.
-  Claims waitingInto(Completer<void> waited) => .new(testLocker, () async {
-    if (!waited.isCompleted) {
-      waited.complete();
-    }
-    await Future<void>.delayed(.zero);
-  });
-
   /// Claims that fail the test where a claim is ever found held.
   Claims neverWaiting() =>
       .new(testLocker, () async => fail('a claim no one holds was waited on'));
 
-  /// Whether a claim, taken by [take] for an act that does [act], is let go,
-  /// as a contender in a process of its own finds it, on the checkout
-  /// `apart`, which no open of the test's process has had.
-  Future<bool> letGoApart(Take take, Act act) async {
+  /// Whether the claim on the checkout [name], taken by [take] for an act
+  /// that does [act], is let go, as a contender in a process of its own
+  /// finds it, which starts no other, so no fork of another test file's
+  /// carries the claim.
+  Future<bool> letGoApart(String name, Take take, Act act) async {
     final Contender relet = await .reletting(
       consumerIn(temp).path,
-      'apart',
+      name,
       take,
       act,
     );
@@ -108,7 +104,7 @@ void main() {
           .holdingIfFree(claim, () async => fail('the act ran')),
       isFalse,
     );
-    expect(await neverWaiting().holdingIfFree(claim, () async {}), isTrue);
+    expect(await letGoApart('app', .once, .returns), isTrue);
   });
 
   test("a hold whose C library's flock fails for any other reason fails as a "
@@ -131,7 +127,7 @@ void main() {
         ),
       ),
     );
-    expect(await neverWaiting().holdingIfFree(claim, () async {}), isTrue);
+    expect(await letGoApart('app', .once, .returns), isTrue);
   });
 
   test('claims on two checkouts are held at once', () async {
@@ -155,7 +151,7 @@ void main() {
           .holding(claim, () async => throw const FormatException()),
       throwsA(isA<FormatException>()),
     );
-    expect(await letGoApart(.waiting, .throws), isTrue);
+    expect(await letGoApart('apart', .waiting, .throws), isTrue);
   });
 
   test('a claim whose file cannot be made fails as StoreFailed', () async {
@@ -186,7 +182,7 @@ void main() {
       isTrue,
     );
     expect(ran, isTrue);
-    expect(await letGoApart(.once, .returns), isTrue);
+    expect(await letGoApart('apart', .once, .returns), isTrue);
   });
 
   test('a claim tried once is let go when its act throws, and the throw '
@@ -196,7 +192,7 @@ void main() {
       neverWaiting().holdingIfFree(claim, () => throw StateError('act')),
       throwsStateError,
     );
-    expect(await letGoApart(.once, .throws), isTrue);
+    expect(await letGoApart('apart', .once, .throws), isTrue);
   });
 
   test(
@@ -262,19 +258,15 @@ void main() {
   }
 
   test('a process started under a hold carries no claim past it', () async {
+    final ClaimPath claim = claimOf('app');
     late Process child;
-    await Claims(testLocker).holding(claimOf('app'), () async {
-      child = await Process.start('sleep', ['600']);
+    await Claims(testLocker).holding(claim, () async {
+      child = await .start('cat', const []);
     });
-    final Contender other = await .holding(
-      .process,
-      consumerIn(temp).path,
-      'app',
-    );
-    await other.told(.held);
-    await other.tell(.release);
-    await other.end();
-    child.kill();
-    await child.exitCode;
+    addTearDown(() async {
+      child.kill();
+      await child.exitCode;
+    });
+    expect(await letGoApart('app', .once, .returns), isTrue);
   });
 }

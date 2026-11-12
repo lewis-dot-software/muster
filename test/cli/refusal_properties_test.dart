@@ -8,6 +8,7 @@ import 'package:muster/src/model/cache_directory.dart';
 
 import '../support/git.dart';
 import '../support/loads.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 
 final String _sha1 = 'ab' * 20;
@@ -135,17 +136,19 @@ final Generator<String> _codebaseFault = any.either(
 /// A manifest's bytes: a codebase with one fault drawn, or lines drawn from
 /// [_lines] and from [_characters], with a byte no UTF-8 holds after them
 /// where one is drawn.
-final Generator<List<int>> _manifest = any.either(
-  _codebaseFault.map(utf8.encode),
-  any.combine2(
-    any.list(any.either(any.choose(_lines), any.stringOf(_characters))),
-    any.bool,
-    (List<String> lines, bool notUtf8) => [
-      ...utf8.encode(lines.join('\n')),
-      if (notUtf8) 0xff,
-    ],
-  ),
-);
+final Generator<List<int>> _manifest = any
+    .either(
+      _codebaseFault.map(utf8.encode),
+      any.combine2(
+        any.list(any.either(any.choose(_lines), any.stringOf(_characters))),
+        any.bool,
+        (List<String> lines, bool notUtf8) => [
+          ...utf8.encode(lines.join('\n')),
+          if (notUtf8) 0xff,
+        ],
+      ),
+    )
+    .shrinkingAtMost(gitTries);
 
 /// The lines [text] runs over, broken at every line break Unicode names.
 List<String> _linesOf(String text) => text.split(_lineBreak);

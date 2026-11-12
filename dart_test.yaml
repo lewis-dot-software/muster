@@ -1,7 +1,4 @@
-# Ten minutes, many times any test's passing run, so the Mac's load never
-# fails a run that would pass, and a failing glados draw whose body awaits,
-# as every property that runs git or a toolchain does, fails in place of
-# shrinking for hours. A test's own timeout never fires under a package's
-# `none`, so the bound sits here. No timer cuts a synchronous body's shrink,
-# since it never returns to the event loop.
-timeout: 10m
+# No test's own clock bounds it, so the Mac's load never fails a run that
+# would pass, and a hang falls to the check's bound. A property whose every
+# try runs git or a toolchain bounds its own shrink by a count of tries.
+timeout: none

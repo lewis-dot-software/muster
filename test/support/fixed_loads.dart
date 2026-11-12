@@ -34,7 +34,7 @@ class FixedLoads implements Loads {
   }
 
   @override
-  Future<Locking> lock({List<String> named = const [], String? root}) async {
+  Future<Locking> lock({List<String> named = const []}) async {
     this.named.add(named);
     return _locks;
   }

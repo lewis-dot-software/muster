@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../support/git.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 
 /// How a ref off the default branch holds its commits.
@@ -36,19 +37,21 @@ final Generator<_Side> _side = any.combine3(
   (_Ref ref, int base, int length) => (ref: ref, base: base, length: length),
 );
 
-final Generator<_Draw> _draw = any.combine5(
-  any.intInRange(1, 4),
-  any.listWithLengthInRange(1, 4, _side),
-  any.intInRange(0, 8),
-  any.intInRange(0, 8),
-  any.bool,
-  (int main, List<_Side> sides, int first, int second, bool warm) => (
-    shape: (main: main, sides: sides),
-    first: first,
-    second: second,
-    warm: warm,
-  ),
-);
+final Generator<_Draw> _draw = any
+    .combine5(
+      any.intInRange(1, 4),
+      any.listWithLengthInRange(1, 4, _side),
+      any.intInRange(0, 8),
+      any.intInRange(0, 8),
+      any.bool,
+      (int main, List<_Side> sides, int first, int second, bool warm) => (
+        shape: (main: main, sides: sides),
+        first: first,
+        second: second,
+        warm: warm,
+      ),
+    )
+    .shrinkingAtMost(gitTries);
 
 /// `main`'s commits of [shape], made in [origin].
 Future<List<Commit>> _main(Origin origin, _Shape shape) async {
@@ -95,11 +98,13 @@ final ExploreConfig _explore = .new(numRuns: 40);
 /// own URL left one, and for each other URL, whether a hold has its claim.
 typedef _Left = ({bool own, List<bool> held});
 
-final Generator<_Left> _left = any.combine2(
-  any.bool,
-  any.listWithLengthInRange(0, 5, any.bool),
-  (bool own, List<bool> held) => (own: own, held: held),
-);
+final Generator<_Left> _left = any
+    .combine2(
+      any.bool,
+      any.listWithLengthInRange(0, 5, any.bool),
+      (bool own, List<bool> held) => (own: own, held: held),
+    )
+    .shrinkingAtMost(gitTries);
 
 void main() {
   Glados(_draw, _explore).test(

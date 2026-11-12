@@ -6,13 +6,16 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/contenders.dart';
-import '../support/contention.dart';
+import '../support/apart.dart';
+import '../support/contender.dart';
+import '../support/outcome_case.dart';
 import '../support/pause.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/said.dart';
+import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 
 /// What the second of two loads shares with the first.
@@ -104,26 +107,28 @@ bool _makes(Command command) => Pause.place.holds(command);
 
 void main() {
   Glados(
-    any.combine5(
-      any.choose(Apart.values),
-      any.choose(Apart.values),
-      any.choose(Pause.values),
-      any.choose(_Shared.values),
-      any.choose(_Before.values),
-      (
-        Apart first,
-        Apart second,
-        Pause pause,
-        _Shared shared,
-        _Before before,
-      ) => (
-        first: first,
-        second: second,
-        pause: pause,
-        shared: shared,
-        before: before,
-      ),
-    ),
+    any
+        .combine5(
+          any.choose(Apart.values),
+          any.choose(Apart.values),
+          any.choose(Pause.values),
+          any.choose(_Shared.values),
+          any.choose(_Before.values),
+          (
+            Apart first,
+            Apart second,
+            Pause pause,
+            _Shared shared,
+            _Before before,
+          ) => (
+            first: first,
+            second: second,
+            pause: pause,
+            shared: shared,
+            before: before,
+          ),
+        )
+        .shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 12),
   ).test(
     'Two loads at once, as isolates of one process or as separate processes, '
@@ -162,10 +167,16 @@ void main() {
       expect(second.ran.where(acts), isEmpty);
       await first.tell(.go);
       expect(await first.done(), {
-        'app': (outcome: 'Fetched', path: bench.checkoutUnder(bench.root)),
+        'app': (
+          outcome: OutcomeCase.fetched,
+          path: bench.checkoutUnder(bench.root),
+        ),
       });
       expect(await second.done(), {
-        'app': (outcome: 'Fetched', path: bench.checkoutUnder(secondRoot)),
+        'app': (
+          outcome: OutcomeCase.fetched,
+          path: bench.checkoutUnder(secondRoot),
+        ),
       });
       switch (draw.shared) {
         case .checkout:
@@ -191,14 +202,16 @@ void main() {
   );
 
   Glados(
-    any.combine4(
-      any.choose(Apart.values),
-      any.choose(Pause.values),
-      any.choose(_Ending.values),
-      any.choose(_Before.values),
-      (Apart apart, Pause pause, _Ending ending, _Before before) =>
-          (apart: apart, pause: pause, ending: ending, before: before),
-    ),
+    any
+        .combine4(
+          any.choose(Apart.values),
+          any.choose(Pause.values),
+          any.choose(_Ending.values),
+          any.choose(_Before.values),
+          (Apart apart, Pause pause, _Ending ending, _Before before) =>
+              (apart: apart, pause: pause, ending: ending, before: before),
+        )
+        .shrinkingAtMost(gitTries),
     ExploreConfig(numRuns: 12),
   ).test(
     'A claim left by a load that ended without releasing it, whether by a '
@@ -217,7 +230,10 @@ void main() {
               await ended.kill();
             case .error:
               await ended.tell(.fail);
-              expect((await ended.done())['app']?.outcome, 'CommandFailed');
+              expect(
+                (await ended.done())['app']?.outcome,
+                OutcomeCase.commandFailed,
+              );
           }
           final String checkout = bench.checkoutUnder(bench.root);
           expect(await bench.load(), loadedWith({'app': fetchedAt(checkout)}));

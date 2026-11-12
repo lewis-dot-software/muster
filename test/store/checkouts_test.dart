@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/checkout_path.dart';
-import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
@@ -22,9 +21,12 @@ import 'package:test/test.dart';
 
 import '../support/faults.dart';
 import '../support/git.dart';
+import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
+import '../support/scratches.dart';
 import '../support/spy_runner.dart';
+import '../support/write_file.dart';
 
 void main() {
   late Directory temp;
@@ -38,7 +40,7 @@ void main() {
     runner = .new(hermetic(temp));
     origin = await .make(temp, runner);
     checkouts = checkoutsIn(temp, runner);
-    locks = locksIn(temp);
+    locks = locksBeside(atRoot(temp));
   });
 
   tearDown(() => temp.delete(recursive: true));
@@ -72,15 +74,11 @@ void main() {
   ).resolveSymbolicLinks();
 
   /// The clone of [codebase]'s URL in the cache, its links resolved.
-  Future<String> cloneOf(GitCodebase codebase) => Directory(
-    ClonePath.of(cacheIn(temp, runner).directory, codebase.url).path,
-  ).resolveSymbolicLinks();
+  Future<String> resolvedClone(GitCodebase codebase) =>
+      Directory(cloneOf(temp, codebase).path).resolveSymbolicLinks();
 
   /// The commit the checkout's `HEAD` stands at.
-  Future<String> head() async => (await runner.run((
-    executable: .git,
-    arguments: ['-C', checkoutOf().path, 'rev-parse', 'HEAD'],
-  ))).stdout.trim();
+  Future<String> head() => headOf(checkoutOf().path, runner);
 
   /// The version of the Dart SDK on `PATH`.
   Future<SdkVersion> dartVersion() async =>
@@ -114,7 +112,7 @@ void main() {
     expect(checkout.package.path, checkoutOf().path);
     expect(checkout.sdk, await dartVersion());
     expect(await head(), pin.hash);
-    expect(await commonDir(), await cloneOf(codebaseOf(origin, pin)));
+    expect(await commonDir(), await resolvedClone(codebaseOf(origin, pin)));
     expect(await File(checkout.package.packageConfig.path).exists(), isTrue);
     expect((await stamp())?.commit, pin);
   });
@@ -191,8 +189,7 @@ void main() {
       );
       final KeptLockPath kept = .of(locks, codebase, .root);
       final String text = '# kept\n$lockText';
-      await File(kept.path).create(recursive: true);
-      await File(kept.path).writeAsString(text);
+      await writeFile(kept.path, text);
       await checkouts.checkout(codebase, locks);
       expect(await File(inCheckout('pubspec.lock')).readAsString(), text);
       expect(
@@ -212,8 +209,7 @@ void main() {
       );
       final KeptLockPath kept = .of(locks, codebase, .example);
       final String text = '# kept\n$lockText';
-      await File(kept.path).create(recursive: true);
-      await File(kept.path).writeAsString(text);
+      await writeFile(kept.path, text);
       await checkouts.checkout(codebase, locks);
       expect(
         await File(inCheckout('example/pubspec.lock')).readAsString(),
@@ -240,8 +236,7 @@ void main() {
         }),
       );
       final KeptLockPath kept = .of(locks, codebase, .example);
-      await File(kept.path).create(recursive: true);
-      await File(kept.path).writeAsString(lockText);
+      await writeFile(kept.path, lockText);
       final PackagePath example = .of(checkoutOf(), codebase.root, .example);
       // What each resolve found of the example as it began, by the
       // directory it resolves.
@@ -268,8 +263,7 @@ void main() {
         await onMain(packageFiles('app')),
       );
       final KeptLockPath kept = .of(locks, codebase, .root);
-      await File(kept.path).create(recursive: true);
-      await File(kept.path).writeAsString('# kept\n$lockText');
+      await writeFile(kept.path, '# kept\n$lockText');
       await checkouts.checkout(codebase, locks);
       expect(await File(inCheckout('pubspec.lock')).readAsString(), lockText);
     });
@@ -428,8 +422,7 @@ void main() {
     });
 
     test('the cache is deleted, its clone with it', () async {
-      await Directory(checkouts.root.os.paths.join(temp.path, 'cache'))
-          .delete(recursive: true);
+      await Directory(cacheDirectoryIn(temp).path).delete(recursive: true);
       await checkouts.checkout(codebase, locks);
       await remade();
     });
@@ -472,7 +465,7 @@ void main() {
         toolchain: codebase.toolchain,
       );
       await checkouts.checkout(respelled, locks);
-      expect(await commonDir(), await cloneOf(respelled));
+      expect(await commonDir(), await resolvedClone(respelled));
     });
   });
 
@@ -483,8 +476,7 @@ void main() {
       await onMain(packageFiles('app', locked: false)),
     );
     final KeptLockPath kept = .of(locks, codebase, .root);
-    await File(kept.path).create(recursive: true);
-    await File(kept.path).writeAsString(lockText);
+    await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(kept.path).writeAsString('# again\n$lockText');
     await checkouts.checkout(codebase, locks);
@@ -502,8 +494,7 @@ void main() {
       await onMain(packageFiles('app', locked: false)),
     );
     final KeptLockPath kept = .of(locks, codebase, .root);
-    await File(kept.path).create(recursive: true);
-    await File(kept.path).writeAsString(lockText);
+    await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(inCheckout('pubspec.lock')).writeAsString('# edited\n$lockText');
     await checkouts.checkout(codebase, locks);
@@ -537,7 +528,7 @@ void main() {
     runner.commands.clear();
     await checkouts.checkout(codebase, locks);
     expect(madeAgain(), isTrue);
-    expect(await commonDir(), await cloneOf(codebase));
+    expect(await commonDir(), await resolvedClone(codebase));
     expect(await head(), codebase.commit.hash);
     expect(await outer(['rev-parse', 'HEAD']), codebase.commit.hash);
     expect(await File(mine).readAsString(), 'mine');
@@ -605,10 +596,7 @@ void main() {
   test(
     'a toolchain that cannot start fails as Unstartable, naming it',
     () async {
-      final Checkouts unstartable = checkoutsIn(
-        temp,
-        .new({...hermetic(temp), 'PATH': '/muster-no-such-directory'}),
-      );
+      final Checkouts unstartable = checkoutsIn(temp, unstartableIn(temp));
       await expectLater(
         unstartable.checkout(
           codebaseOf(origin, await onMain(packageFiles('app'))),

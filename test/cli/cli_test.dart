@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:muster/muster.dart';
 import 'package:muster/src/cli/cli.dart';
 import 'package:muster/src/cli/exit_code.dart';
+import 'package:muster/src/cli/verb.dart';
 import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/load/loads.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -17,7 +18,7 @@ import '../support/loads.dart';
 import '../support/locks.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
-import '../support/outcomes.dart';
+import '../support/outcome_case.dart';
 import '../support/packages.dart';
 
 /// What a run of the command line gave: the [code] it exits with, and what
@@ -30,6 +31,16 @@ Future<_Run> _run(Loads loads, List<String> arguments) async {
   final ExitCode code = await Cli(loads, out, err).run(arguments);
   return (code: code, out: '$out', err: '$err');
 }
+
+/// An outcome of [kind] for [codebase], as a command that exited 1 writing
+/// `out` leaves it, its kept lock the root's and its executable git.
+FetchOutcome _outcome(OutcomeCase kind, GitCodebase codebase) => kind.outcome(
+  codebase,
+  exitCode: 1,
+  output: 'out',
+  package: .root,
+  executable: .git,
+);
 
 /// The rows [out] holds under its header, each split into its cells.
 List<List<String>> _rows(String out) {
@@ -104,7 +115,7 @@ void main() {
       );
       await writeManifest(atRoot(temp), [app]);
       final _Run fetched = await run(['fetch']);
-      expect(fetched.code, ExitCode.failed);
+      expect(fetched.code.code, 1);
       expect(_rows(fetched.out), [
         ['app', 'Unlocked', keptOf(atRoot(temp), app).path],
       ]);
@@ -136,6 +147,9 @@ void main() {
       await writeManifest(named, [
         await codebaseNamed('app', packageFiles('app')),
       ]);
+      await writeManifest(atRoot(temp), [
+        await codebaseNamed('bench', packageFiles('bench', locked: false)),
+      ]);
       expect(_rows((await run(['lock', named])).out), isEmpty);
       expect(_rows((await run(['fetch', named])).out), [
         ['app', 'Fetched', checkoutAt(temp, 'app')],
@@ -144,8 +158,8 @@ void main() {
 
     test('a refused run writes why to the error stream and no rows, and '
         'exits 2', () async {
-      for (final String verb in ['fetch', 'lock']) {
-        final _Run refused = await run([verb]);
+      for (final Verb verb in Verb.values) {
+        final _Run refused = await run([verb.name]);
         expect(refused.code, ExitCode.refused);
         expect(refused.out, isEmpty);
         expect(refused.err, startsWith('no manifest: '));
@@ -201,24 +215,22 @@ void main() {
       '.',
       .dart,
     );
-    for (final FetchOutcome outcome in [
-      for (final OutcomeCase kind in [
-        .commandFailed,
-        .unstartable,
-        .storeFailed,
-        .pinMissing,
-      ])
-        outcomeOf(kind, app, 1, 'out'),
-    ]) {
+    for (final OutcomeCase kind in OutcomeCase.values) {
+      final FetchOutcome outcome = _outcome(kind, app);
+      final ActFailure failure;
+      switch (outcome) {
+        case Fetched() || Unlocked():
+          continue;
+        case final ActFailure actFailure:
+          failure = actFailure;
+      }
       test(
         'exits 1 on a codebase whose write fails as '
         '${outcome.runtimeType}, its row the failure as fetch prints it',
         () async {
           final _Run lock = await _run(
             FixedLoads(
-              locks: Locked({
-                app.name: LockFailed(outcome as ActFailure),
-              }, const []),
+              locks: Locked({app.name: LockFailed(failure)}, const []),
             ),
             ['lock'],
           );
@@ -226,7 +238,7 @@ void main() {
             FixedLoads.loading({app.name: outcome}),
             ['fetch'],
           );
-          expect(lock.code, ExitCode.failed);
+          expect(lock.code.code, 1);
           expect(_rows(lock.out), _rows(fetch.out));
           expect(lock.err, fetch.err);
         },
@@ -243,7 +255,7 @@ void main() {
         ),
         ['lock'],
       );
-      expect(run.code, ExitCode.failed);
+      expect(run.code.code, 1);
       expect(_rows(run.out), [
         ['', 'StoreFailed', '/locks/gone.lock'],
       ]);
@@ -257,7 +269,7 @@ void main() {
           locks: Locked(
             {
               app.name: LockFailed(
-                outcomeOf(.commandFailed, app, 1, 'out') as ActFailure,
+                _outcome(.commandFailed, app) as CommandFailed,
               ),
             },
             const [

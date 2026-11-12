@@ -91,10 +91,12 @@ extension ManifestAnys on Any {
     (String head, String tail) => '$head$tail',
   );
 
+  /// [length] lowercase hexadecimal digits.
+  Generator<String> hexOfLength(int length) =>
+      listWithLength(length, choose(_hex.split(''))).map(_joined);
+
   /// A full hash, SHA-1's or SHA-256's.
-  Generator<String> get fullHash => choose([40, 64]).bind(
-    (int length) => listWithLength(length, choose(_hex.split(''))).map(_joined),
-  );
+  Generator<String> get fullHash => choose([40, 64]).bind(hexOfLength);
 
   /// A root inside its repo, in its normal spelling.
   Generator<String> get normalRoot =>

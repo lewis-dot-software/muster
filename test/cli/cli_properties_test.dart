@@ -5,7 +5,8 @@ import 'package:muster/src/cli/exit_code.dart';
 import 'package:muster/src/model/git_codebase.dart';
 
 import '../support/fixed_loads.dart';
-import '../support/outcomes.dart';
+import '../support/outcome_anys.dart';
+import '../support/refusal_case.dart';
 
 /// The detail an outcome's row carries, read off the outcome by its case.
 String _detail(FetchOutcome outcome) => switch (outcome) {
@@ -23,7 +24,7 @@ String _detail(FetchOutcome outcome) => switch (outcome) {
 void main() {
   Glados2(
     any.list(any.outcome),
-    any.intInRange(-everyRefusal.length, everyRefusal.length),
+    any.intInRange(-RefusalCase.every.length, RefusalCase.every.length),
   ).test(
     '`muster fetch` prints one row for each codebase, its name, its outcome '
     "and that outcome's own detail, and exits non-zero when any outcome is "
@@ -38,7 +39,7 @@ void main() {
       final ExitCode code = await Cli(
         refusal < 0
             ? FixedLoads.loading(outcomes)
-            : FixedLoads(loads: Refused(everyRefusal[refusal])),
+            : FixedLoads(loads: Refused(RefusalCase.every[refusal])),
         out,
         err,
       ).run(['fetch']);
@@ -57,7 +58,12 @@ void main() {
       ]);
       expect(
         code.code == 0,
-        outcomes.values.every((FetchOutcome o) => o is Fetched),
+        outcomes.values.every(
+          (FetchOutcome o) => switch (o) {
+            Fetched() => true,
+            FetchFailure() => false,
+          },
+        ),
       );
     },
   );
