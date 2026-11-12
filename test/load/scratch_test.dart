@@ -9,6 +9,7 @@ import 'package:muster/src/store/store_fault.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/chmod.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
@@ -189,7 +190,7 @@ void main() {
       p.join(scratch.package.path, 'locked'),
     ).create();
     await File(p.join(locked.path, 'kept.txt')).writeAsString('');
-    await Process.run('chmod', ['500', locked.path]);
+    await chmod('500', locked);
     try {
       expect(
         await scratch.dispose(),
@@ -200,7 +201,7 @@ void main() {
         ),
       );
     } finally {
-      await Process.run('chmod', ['700', locked.path]);
+      await chmod('700', locked);
     }
     expect(await scratch.dispose(), isA<Disposed>());
     expect(await Directory(scratch.package.path).exists(), isFalse);

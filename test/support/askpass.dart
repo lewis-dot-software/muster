@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'chmod.dart';
 import 'shell_quoted.dart';
 
 /// A program a test's caller names to answer a prompt, which writes each
@@ -16,7 +17,7 @@ class Askpass {
         .writeAsString(
           '#!/bin/sh\nprintf "%s\\n" "\$1" >> ${shellQuoted(asked)}\nexit 1\n',
         );
-    await Process.run('chmod', ['+x', program.path]);
+    await chmod('+x', program);
     return ._(program.path, File(asked));
   }
 

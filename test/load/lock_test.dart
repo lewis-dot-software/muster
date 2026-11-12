@@ -10,6 +10,7 @@ import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/chmod.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
@@ -232,8 +233,8 @@ void main() {
     for (final String stray in gone) {
       await writeFile(stray, 'left\n');
     }
-    await Process.run('chmod', ['555', locks.path]);
-    addTearDown(() => Process.run('chmod', ['755', locks.path]));
+    await chmod('555', locks);
+    addTearDown(() => chmod('755', locks));
     expect(
       await lock(),
       lockedWith(

@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/faults.dart';
+import '../support/chmod.dart';
 import '../support/git.dart';
 import '../support/origin.dart';
 import '../support/spy_runner.dart';
@@ -308,7 +309,7 @@ void main() {
       p.join(cache.directory.path, left, 'objects'),
     ).create();
     await File(p.join(locked.path, 'pack')).create();
-    await _mode('555', locked);
+    await chmod('555', locked);
     try {
       await expectLater(
         cache.clone(origin.url, await onMain()),
@@ -323,7 +324,7 @@ void main() {
         ),
       );
     } finally {
-      await _mode('755', locked);
+      await chmod('755', locked);
     }
   });
 
@@ -398,13 +399,4 @@ void main() {
       expect(await holds(clone.path, pin, runner), isTrue);
     },
   );
-}
-
-/// Sets [directory]'s permissions to [mode], in octal.
-Future<void> _mode(String mode, Directory directory) async {
-  final ProcessResult result = await Process.run('chmod', [
-    mode,
-    directory.path,
-  ]);
-  expect(result.exitCode, 0, reason: '${result.stderr}');
 }
