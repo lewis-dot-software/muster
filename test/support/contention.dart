@@ -7,12 +7,40 @@ enum Contention {
 
   /// A load of the manifests it is given.
   load,
+
+  /// One checkout's claim taken and let go, then tried once more, in a
+  /// process that starts no other, so no fork carries the claim.
+  relet,
+}
+
+/// How a reletting contender takes its claim first.
+enum Take {
+  /// By `holding`, which waits on a claim found held.
+  waiting,
+
+  /// By `holdingIfFree`, which tries it once.
+  once,
+}
+
+/// What the act a reletting contender holds its claim for does.
+enum Act {
+  /// Returns.
+  returns,
+
+  /// Throws a `FormatException`.
+  throws,
 }
 
 /// What a contender tells its test.
 enum Said {
   /// The claim it holds bare is taken.
   held,
+
+  /// Its claim, let go, was taken again where it was tried once more.
+  free,
+
+  /// Its claim, let go, was found held where it was tried once more.
+  kept,
 
   /// A command it runs, followed by the command as JSON.
   ran,

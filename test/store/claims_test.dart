@@ -8,6 +8,7 @@ import 'package:muster/src/store/claims.dart';
 import 'package:test/test.dart';
 
 import '../support/contenders.dart';
+import '../support/contention.dart';
 import '../support/faults.dart';
 import '../support/packages.dart';
 
@@ -34,6 +35,21 @@ void main() {
   /// Claims that fail the test where a claim is ever found held.
   Claims neverWaiting() =>
       .new(.posix, () async => fail('a claim no one holds was waited on'));
+
+  /// Whether a claim, taken by [take] for an act that does [act], is let go,
+  /// as a contender in a process of its own finds it, on the checkout
+  /// `apart`, which no open of the test's process has had.
+  Future<bool> letGoApart(Take take, Act act) async {
+    final Contender relet = await .reletting(
+      consumerIn(temp).path,
+      'apart',
+      take,
+      act,
+    );
+    final bool free = await relet.letGo();
+    await relet.end();
+    return free;
+  }
 
   test('a claim is held while its act runs, its file made with its '
       'directories where none is there, and the act given back', () async {
@@ -90,7 +106,7 @@ void main() {
       Claims(.posix).holding(claim, () async => throw const FormatException()),
       throwsA(isA<FormatException>()),
     );
-    await neverWaiting().holding(claim, () async {});
+    expect(await letGoApart(.waiting, .throws), isTrue);
   });
 
   test('a claim whose file cannot be made fails as StoreFailed', () async {
@@ -121,7 +137,7 @@ void main() {
       isTrue,
     );
     expect(ran, isTrue);
-    expect(await Claims(.posix).holding(claim, () async => 1), 1);
+    expect(await letGoApart(.once, .returns), isTrue);
   });
 
   test('a claim tried once is let go when its act throws, and the throw '
@@ -131,7 +147,7 @@ void main() {
       neverWaiting().holdingIfFree(claim, () => throw StateError('act')),
       throwsStateError,
     );
-    expect(await Claims(.posix).holding(claim, () async => 1), 1);
+    expect(await letGoApart(.once, .throws), isTrue);
   });
 
   test(
@@ -150,7 +166,7 @@ void main() {
       late Contender holder;
 
       setUp(() async {
-        holder = await Contender.holding(apart, consumerIn(temp).path, 'app');
+        holder = await .holding(apart, consumerIn(temp).path, 'app');
         await holder.told(.held);
       });
 
@@ -201,7 +217,7 @@ void main() {
     await Claims(.posix).holding(claimOf('app'), () async {
       child = await Process.start('sleep', ['600']);
     });
-    final Contender other = await Contender.holding(
+    final Contender other = await .holding(
       .process,
       consumerIn(temp).path,
       'app',

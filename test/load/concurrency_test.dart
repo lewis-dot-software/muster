@@ -54,7 +54,7 @@ void main() {
   for (final Apart apart in Apart.values) {
     test('a load waits on a checkout another ${apart.name} is making, then '
         'hands it out made once', () async {
-      final Contender first = await Contender.loading(
+      final Contender first = await .loading(
         apart,
         root: consumerIn(temp).path,
         variables: loadEnvironment(temp).variables,
@@ -95,7 +95,7 @@ void main() {
   for (final Apart apart in Apart.values) {
     test('a load killed as its ${apart.name} makes the clone leaves a '
         'temporary clone the next load to make a clone removes', () async {
-      final Contender killed = await Contender.loading(
+      final Contender killed = await .loading(
         apart,
         root: consumerIn(temp).path,
         variables: loadEnvironment(temp).variables,
@@ -115,7 +115,7 @@ void main() {
 
     test('a temporary clone another ${apart.name} is making is left to it, '
         'and a load of another URL meanwhile never waits on it', () async {
-      final Contender making = await Contender.loading(
+      final Contender making = await .loading(
         apart,
         root: consumerIn(temp).path,
         variables: loadEnvironment(temp).variables,

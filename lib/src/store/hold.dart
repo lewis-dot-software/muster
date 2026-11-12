@@ -39,9 +39,10 @@ sealed class Hold {
 /// where `fcntl`'s, the one `dart:io` takes, belongs to the whole process and
 /// shuts out no isolate of it.
 ///
-/// The file is opened close-on-exec, so no process a load starts carries the
-/// lock past the hold, and a native finalizer closes it where the hold is
-/// never released, which runs at the end of the isolate group at the latest.
+/// The file is opened close-on-exec, so a process any isolate starts while it
+/// is open carries the lock from its fork to its exec alone, and a native
+/// finalizer closes it where the hold is never released, which runs at the
+/// end of the isolate group at the latest.
 final class _Flock extends Hold implements Finalizable {
   _Flock._(this._descriptor) {
     libc.closer.attach(this, .fromAddress(_descriptor), detach: this);

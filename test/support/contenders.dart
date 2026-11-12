@@ -25,8 +25,9 @@ enum Apart {
 /// path of the package it hands out where it is fetched.
 typedef Told = ({String outcome, String? path});
 
-/// A load, or a claim held bare, run apart from its test as an isolate or a
-/// process, which tells the test each step and waits on its word.
+/// A load, a claim held bare, or a claim taken and tried once more, run apart
+/// from its test as an isolate or a process, which tells the test each step
+/// and waits on its word.
 class Contender {
   Contender._(this._tell, this._kill, Future<void> exited) {
     _exited = exited.then(
@@ -43,6 +44,23 @@ class Contender {
         'root': root,
         'name': name,
       });
+
+  /// A contender in a process of its own taking the claim on the checkout
+  /// [name] under the consumer's [root] by [take], for an act that does
+  /// [act], then trying it once more, which an isolate could not, since a
+  /// process another test file starts would carry the claim until its exec.
+  static Future<Contender> reletting(
+    String root,
+    String name,
+    Take take,
+    Act act,
+  ) => _start(.process, {
+    'contention': Contention.relet.name,
+    'root': root,
+    'name': name,
+    'take': take.name,
+    'act': act.name,
+  });
 
   /// A contender [apart] loading [manifests] with its root at [root], reading
   /// [variables], its load holding the command [pause] names where one is
@@ -165,6 +183,14 @@ class Contender {
 
   /// Waits until the contender says [word] alone.
   Future<void> told(Said word) => until((String line) => line == word.name);
+
+  /// Whether its claim, let go, was taken again where it was tried once
+  /// more, once it has said.
+  Future<bool> letGo() async =>
+      await until(
+        (String line) => line == Said.free.name || line == Said.kept.name,
+      ) ==
+      Said.free.name;
 
   /// Each codebase's outcome, once the load is done.
   Future<Map<String, Told>> done() async {

@@ -1,6 +1,7 @@
-// A load, or a claim held bare, run apart from the test that starts it, as an
-// isolate or a process, telling the test each step it takes and waiting on
-// the test's word where the test says to pause. Started by `Contender` alone.
+// A load, a claim held bare, or a claim taken and tried once more, run apart
+// from the test that starts it, as an isolate or a process, telling the test
+// each step it takes and waiting on the test's word where the test says to
+// pause. Started by `Contender` alone.
 
 import 'dart:async';
 import 'dart:convert';
@@ -32,6 +33,41 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
         line.say(Said.held.name);
         await line.heard(.release);
       });
+    case .relet:
+      final CheckoutPath checkout = .of(
+        .new(root, .posix),
+        .parse(brief['name'] as String)!,
+      );
+      final Claims claims = .new(
+        .posix,
+        () async => throw StateError('a claim no one holds was waited on'),
+      );
+      final Act act = .values.byName(brief['act'] as String);
+      Future<void> acted() async => switch (act) {
+        .returns => null,
+        .throws => throw const FormatException('thrown by its brief'),
+      };
+      try {
+        switch (Take.values.byName(brief['take'] as String)) {
+          case .waiting:
+            await claims.holding(checkout.claim, acted);
+          case .once:
+            if (!await claims.holdingIfFree(checkout.claim, acted)) {
+              throw StateError('a claim no one holds was passed by');
+            }
+        }
+      } on FormatException {
+        // The throw its brief asked of its act, which its test asserts
+        // passes through in a take of its own.
+        if (act != .throws) {
+          rethrow;
+        }
+      }
+      line.say(
+        await claims.holdingIfFree(checkout.claim, () async {})
+            ? Said.free.name
+            : Said.kept.name,
+      );
     case .load:
       final Map<String, String> variables = {
         for (final MapEntry<String, Object?>(:String key, :Object? value)
