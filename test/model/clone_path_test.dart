@@ -52,6 +52,52 @@ void main() {
     );
   });
 
+  test('a temporary clone stands beside its clone, named `<hash>.partial`', () {
+    final ClonePath clone = .of(_cache, .parse('https://example.com/a.git')!);
+    expect(clone.temporary.path, '${clone.path}.partial');
+  });
+
+  test('no name but a temporary clone\'s is read as one', () {
+    final String hash = p.basename(
+      ClonePath.of(_cache, .parse('https://example.com/a.git')!).path,
+    );
+    for (final String name in [
+      hash,
+      '$hash.claim',
+      '$hash.partial.partial',
+      '${hash.toUpperCase()}.partial',
+      '${hash.substring(1)}.partial',
+      'a$hash.partial',
+      '.clone-abc123',
+      'notes.partial',
+    ]) {
+      expect(ClonePath.ofTemporary(_cache, name), isNull, reason: name);
+    }
+  });
+
+  test('a temporary clone is read in its cache\'s own path style', () {
+    final CacheDirectory windows = .of((
+      variables: {'LOCALAPPDATA': r'C:\l'},
+      os: .windows,
+    ))!;
+    final ClonePath clone = .of(windows, .parse('https://example.com/a.git')!);
+    expect(
+      ClonePath.ofTemporary(windows, p.windows.basename(clone.temporary.path)),
+      clone,
+    );
+  });
+
+  Glados(any.gitCodebase()).test(
+    'A temporary clone\'s name is read back as the clone it is made for.',
+    (GitCodebase codebase) {
+      final ClonePath clone = .of(_cache, codebase.url);
+      expect(
+        ClonePath.ofTemporary(_cache, p.basename(clone.temporary.path)),
+        clone,
+      );
+    },
+  );
+
   Glados(_pair).test(
     'Two codebases share a clone exactly when their URLs are the same string.',
     (input) {

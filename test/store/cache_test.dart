@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:muster/src/model/clone_path.dart';
@@ -5,6 +6,7 @@ import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/git_url.dart';
 import 'package:muster/src/store/cache.dart';
+import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -35,6 +37,14 @@ void main() {
     ).list())
       p.basename(entity.path),
   ];
+
+  /// The name of [url]'s temporary clone, left in the cache with a file of
+  /// git's in it, as a make cut short leaves one.
+  Future<String> leftFor(GitUrl url) async {
+    final String temporary = ClonePath.of(cache.directory, url).temporary.path;
+    await File(p.join(temporary, 'HEAD')).create(recursive: true);
+    return p.basename(temporary);
+  }
 
   /// A commit on `main`, at its tip.
   Future<Commit> onMain([Commit? parent]) async {
@@ -226,6 +236,97 @@ void main() {
     expect(await cached(), [p.basename(clone.path)]);
   });
 
+  test('a temporary clone its own URL\'s make left is removed, and the clone '
+      'made afresh', () async {
+    final Commit pin = await onMain();
+    await leftFor(origin.url);
+    final ClonePath clone = await cache.clone(origin.url, pin);
+    expect(await holds(clone.path, pin, runner), isTrue);
+    expect(await cached(), [p.basename(clone.path)]);
+  });
+
+  test('a temporary clone another URL\'s make left, its claim held by no '
+      'one, is removed by a clone the cache already holds', () async {
+    final Commit pin = await onMain();
+    await cache.clone(origin.url, pin);
+    final String left = await leftFor(.parse('https://example.com/left.git')!);
+    runner.commands.clear();
+    await cache.clone(origin.url, pin);
+    expect(await cached(), isNot(contains(left)));
+    expect(runner.fetched, isFalse);
+  });
+
+  test('a temporary clone whose claim another hold has is left to it, and '
+      'never waited on', () async {
+    final GitUrl other = .parse('https://example.com/held.git')!;
+    final String left = await leftFor(other);
+    final Completer<void> held = .new();
+    final Completer<void> go = .new();
+    final Future<void> holder = Claims(.posix)
+        .holding(ClonePath.of(cache.directory, other).claim, () {
+          held.complete();
+          return go.future;
+        });
+    await held.future;
+    final Cache neverWaiting = cacheIn(
+      temp,
+      runner,
+      .new(.posix, () async => fail('a held claim was waited on')),
+    );
+    await neverWaiting.clone(origin.url, await onMain());
+    expect(await cached(), contains(left));
+    go.complete();
+    await holder;
+  });
+
+  test('an entry of the cache that is no temporary clone is left', () async {
+    final List<String> others = [
+      p.basename(
+        ClonePath.of(
+          cache.directory,
+          .parse('https://example.com/b.git')!,
+        ).path,
+      ),
+      '.clone-abc123',
+      'notes.partial',
+    ];
+    for (final String other in others) {
+      await Directory(p.join(cache.directory.path, other))
+          .create(recursive: true);
+    }
+    final ClonePath clone = await cache.clone(origin.url, await onMain());
+    expect(
+      await cached(),
+      unorderedEquals([...others, p.basename(clone.path)]),
+    );
+  });
+
+  test('a temporary clone that cannot be removed fails the clone, naming '
+      'the path', () async {
+    final String left = await leftFor(.parse('https://example.com/left.git')!);
+    final Directory locked = await Directory(
+      p.join(cache.directory.path, left, 'objects'),
+    ).create();
+    await File(p.join(locked.path, 'pack')).create();
+    await _mode('555', locked);
+    try {
+      await expectLater(
+        cache.clone(origin.url, await onMain()),
+        throwsA(
+          storeFault(
+            isA<StoreFailed>().having(
+              (StoreFailed f) => f.path,
+              'path',
+              startsWith(p.join(cache.directory.path, left)),
+            ),
+          ),
+        ),
+      );
+    } finally {
+      await _mode('755', locked);
+    }
+  });
+
   test('a cache that cannot be made fails, naming the path', () async {
     final File blocker = await .new(p.join(temp.path, 'file')).create();
     final Cache blocked = .new(
@@ -234,6 +335,7 @@ void main() {
         os: .posix,
       ))!,
       runner,
+      .new(.posix),
     );
     await expectLater(
       blocked.clone(origin.url, await onMain()),
@@ -296,4 +398,13 @@ void main() {
       expect(await holds(clone.path, pin, runner), isTrue);
     },
   );
+}
+
+/// Sets [directory]'s permissions to [mode], in octal.
+Future<void> _mode(String mode, Directory directory) async {
+  final ProcessResult result = await Process.run('chmod', [
+    mode,
+    directory.path,
+  ]);
+  expect(result.exitCode, 0, reason: '${result.stderr}');
 }

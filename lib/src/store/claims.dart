@@ -26,7 +26,7 @@ class Claims {
   /// Throws a [StoreFault] of [StoreFailed] where the claim's file cannot be
   /// made, opened or locked.
   Future<T> holding<T>(ClaimPath claim, Future<T> Function() act) async {
-    await fileAct(claim.path, () => File(claim.path).create(recursive: true));
+    await _made(claim);
     final Hold hold = await _take(claim);
     try {
       return await act();
@@ -34,6 +34,33 @@ class Claims {
       await hold.release();
     }
   }
+
+  /// Whether [act] ran: run holding the claim at [claim], its file made
+  /// where none is there, where no other hold has it, and let go once [act]
+  /// is done, whether it returned or threw. A claim another hold has is
+  /// never waited on.
+  ///
+  /// Throws a [StoreFault] of [StoreFailed] where the claim's file cannot be
+  /// made, opened or locked.
+  Future<bool> holdingIfFree(
+    ClaimPath claim,
+    Future<void> Function() act,
+  ) async {
+    await _made(claim);
+    final Hold? hold = await Hold.take(claim, _os);
+    if (hold == null) {
+      return false;
+    }
+    try {
+      await act();
+      return true;
+    } finally {
+      await hold.release();
+    }
+  }
+
+  Future<void> _made(ClaimPath claim) =>
+      fileAct(claim.path, () => File(claim.path).create(recursive: true));
 
   Future<Hold> _take(ClaimPath claim) async {
     while (true) {

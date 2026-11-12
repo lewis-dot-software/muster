@@ -109,6 +109,42 @@ void main() {
     );
   });
 
+  test('a claim no hold has is taken at once where it is tried once, its '
+      'file made, its act run and the claim let go after', () async {
+    final ClaimPath claim = claimOf('app');
+    bool ran = false;
+    expect(
+      await neverWaiting().holdingIfFree(claim, () async {
+        expect(await File(claim.path).exists(), isTrue);
+        ran = true;
+      }),
+      isTrue,
+    );
+    expect(ran, isTrue);
+    expect(await Claims(.posix).holding(claim, () async => 1), 1);
+  });
+
+  test('a claim tried once is let go when its act throws, and the throw '
+      'passes', () async {
+    final ClaimPath claim = claimOf('app');
+    await expectLater(
+      neverWaiting().holdingIfFree(claim, () => throw StateError('act')),
+      throwsStateError,
+    );
+    expect(await Claims(.posix).holding(claim, () async => 1), 1);
+  });
+
+  test(
+    'a claim tried once whose file cannot be made fails as StoreFailed',
+    () async {
+      await File(consumerIn(temp).path).create(recursive: true);
+      await expectLater(
+        Claims(.posix).holdingIfFree(claimOf('app'), () async {}),
+        throwsA(storeFault(isA<StoreFailed>())),
+      );
+    },
+  );
+
   for (final Apart apart in Apart.values) {
     group('a claim held by another ${apart.name}', () {
       late Contender holder;
@@ -128,6 +164,21 @@ void main() {
         await holder.tell(.release);
         await hold;
         expect(taken, isTrue);
+        await holder.end();
+      });
+
+      test('is passed by where it is tried once, never waited on, and its '
+          'act never run', () async {
+        bool ran = false;
+        expect(
+          await neverWaiting().holdingIfFree(
+            claimOf('app'),
+            () async => ran = true,
+          ),
+          isFalse,
+        );
+        expect(ran, isFalse);
+        await holder.tell(.release);
         await holder.end();
       });
 

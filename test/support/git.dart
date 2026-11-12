@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/store/cache.dart';
+import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
@@ -32,10 +33,12 @@ Map<String, String> hermetic(Directory temp) {
   };
 }
 
-/// A cache in [temp], its git run by [runner].
-Cache cacheIn(Directory temp, Runner runner) => .new(
+/// A cache in [temp], its git run by [runner] and its claims tried in
+/// [claims].
+Cache cacheIn(Directory temp, Runner runner, [Claims? claims]) => .new(
   .of((variables: {'MUSTER_CACHE': p.join(temp.path, 'cache')}, os: .posix))!,
   runner,
+  claims ?? .new(.posix),
 );
 
 /// Whether the repo at [gitDir] holds [commit] as a commit, read by [runner].

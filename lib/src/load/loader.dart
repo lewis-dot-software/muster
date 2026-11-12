@@ -136,7 +136,7 @@ class Loader {
     if (cache == null) {
       return const Refused(NoCache());
     }
-    final Cache clones = .new(cache, _runner);
+    final Cache clones = .new(cache, _runner, _claims);
     final Checkouts checkouts = .new(consumer, clones, _runner, _claims);
     final Map<CodebaseName, FetchOutcome> outcomes = {};
     for (final (:codebase, :manifest) in codebases) {

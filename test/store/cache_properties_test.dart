@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:glados/glados.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/store/cache.dart';
+import 'package:muster/src/store/claims.dart';
+import 'package:path/path.dart' as p;
 
 import '../support/git.dart';
 import '../support/origin.dart';
@@ -87,6 +90,16 @@ Future<List<Commit>> _off(
 
 final ExploreConfig _explore = .new(numRuns: 40);
 
+/// Temporary clones left in the cache before a clone: whether the clone's
+/// own URL left one, and for each other URL, whether a hold has its claim.
+typedef _Left = ({bool own, List<bool> held});
+
+final Generator<_Left> _left = any.combine2(
+  any.bool,
+  any.listWithLengthInRange(0, 5, any.bool),
+  (bool own, List<bool> held) => (own: own, held: held),
+);
+
 void main() {
   Glados(_draw, _explore).test(
     'A pin reachable only from a branch or tag that isn\'t the default branch '
@@ -125,6 +138,59 @@ void main() {
       runner.commands.clear();
       await cacheIn(temp, runner).clone(origin.url, second);
       expect(runner.fetched, isFalse);
+    }),
+  );
+
+  Glados(_left, .new(numRuns: 20)).test(
+    'A clone removes every temporary clone in the cache whose claim no hold '
+    'has, and leaves every one whose claim is held.',
+    (_Left left) => inTemp((Directory temp) async {
+      final SpyRunner runner = .new(hermetic(temp));
+      final Origin origin = await .make(temp, runner);
+      final Cache cache = cacheIn(temp, runner);
+      final Commit pin = await origin.commit();
+      await origin.ref('refs/heads/main', pin);
+      final List<ClonePath> others = [
+        for (int i = 0; i < left.held.length; i++)
+          .of(cache.directory, .parse('https://example.com/$i.git')!),
+      ];
+      for (final ClonePath clone in [
+        if (left.own) ClonePath.of(cache.directory, origin.url),
+        ...others,
+      ]) {
+        await File(p.join(clone.temporary.path, 'HEAD'))
+            .create(recursive: true);
+      }
+      final Completer<void> go = .new();
+      final List<Future<void>> holders = [];
+      for (final (int i, bool held) in left.held.indexed) {
+        if (held) {
+          final Completer<void> taken = .new();
+          holders.add(
+            Claims(.posix).holding(others[i].claim, () {
+              taken.complete();
+              return go.future;
+            }),
+          );
+          await taken.future;
+        }
+      }
+      await cache.clone(origin.url, pin);
+      final List<String> standing = [
+        await for (final FileSystemEntity entity in Directory(
+          cache.directory.path,
+        ).list())
+          if (entity.path.endsWith('.partial')) p.basename(entity.path),
+      ];
+      expect(
+        standing,
+        unorderedEquals([
+          for (final (int i, bool held) in left.held.indexed)
+            if (held) p.basename(others[i].temporary.path),
+        ]),
+      );
+      go.complete();
+      await Future.wait(holders);
     }),
   );
 }
