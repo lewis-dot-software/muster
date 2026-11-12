@@ -172,7 +172,7 @@ class Loader implements Loads {
     try {
       names = await namesIn(locks);
     } on StoreFault catch (fault) {
-      return [RemovalFailed(_storeFailed(fault))];
+      return [RemovalFailed(fault.fileFailure)];
     }
     final List<LockRemoval> removals = [];
     for (final UnnamedLock unnamed in chooseUnnamed(locks, names, codebases)) {
@@ -185,7 +185,7 @@ class Loader implements Loads {
             await removeFile(partial.path);
         }
       } on StoreFault catch (fault) {
-        removals.add(RemovalFailed(_storeFailed(fault)));
+        removals.add(RemovalFailed(fault.fileFailure));
       }
     }
     return removals;
@@ -218,9 +218,7 @@ class Loader implements Loads {
       try {
         bytes = await bytesIfThere(manifest.path);
       } on StoreFault catch (fault) {
-        throw _Refusal(
-          ManifestUnreadable(manifest, _storeFailed(fault).reason),
-        );
+        throw _Refusal(ManifestUnreadable(manifest, fault.fileFailure.reason));
       }
       if (bytes == null) {
         if (sought.named) {
@@ -296,14 +294,3 @@ final class _Refusal implements Exception {
 
   final LoadRefusal reason;
 }
-
-/// [fault]'s failure, which a file act alone gives.
-///
-/// Throws a [StateError] where it is any other, which no file act gives.
-StoreFailed _storeFailed(StoreFault fault) => switch (fault.failure) {
-  final StoreFailed failed => failed,
-  Unlocked() ||
-  CommandFailed() ||
-  Unstartable() ||
-  PinMissing() => throw StateError('${fault.failure} is no file act\'s'),
-};

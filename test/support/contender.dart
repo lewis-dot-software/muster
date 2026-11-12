@@ -15,6 +15,7 @@ import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/store_fault.dart';
 
 import 'contention.dart';
+import 'locker.dart';
 import 'pause.dart';
 import 'spy_runner.dart';
 
@@ -29,7 +30,7 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
         .new(root, .posix),
         .parse(brief['name'] as String)!,
       );
-      await Claims(.posix).holding(checkout.claim, () async {
+      await Claims(testLocker).holding(checkout.claim, () async {
         line.say(Said.held.name);
         await line.heard(.release);
       });
@@ -39,7 +40,7 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
         .parse(brief['name'] as String)!,
       );
       final Claims claims = .new(
-        .posix,
+        testLocker,
         () async => throw StateError('a claim no one holds was waited on'),
       );
       final Act act = .values.byName(brief['act'] as String);
@@ -82,7 +83,7 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
           final String pause => Pause.values.byName(pause),
           null => null,
         }),
-        .new(.posix, () async {
+        .new(testLocker, () async {
           if (!waited) {
             waited = true;
             line.say(Said.waiting.name);

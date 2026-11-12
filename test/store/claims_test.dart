@@ -5,11 +5,15 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/claim_path.dart';
 import 'package:muster/src/store/claims.dart';
+import 'package:muster/src/store/libc.dart';
+import 'package:muster/src/store/locker.dart';
 import 'package:test/test.dart';
 
 import '../support/contenders.dart';
 import '../support/contention.dart';
+import '../support/failing_flock.dart';
 import '../support/faults.dart';
+import '../support/locker.dart';
 import '../support/packages.dart';
 
 void main() {
@@ -25,7 +29,7 @@ void main() {
       CheckoutPath.of(consumerIn(temp), .parse(name)!).claim;
 
   /// Claims whose every wait completes [waited], the first time.
-  Claims waitingInto(Completer<void> waited) => .new(.posix, () async {
+  Claims waitingInto(Completer<void> waited) => .new(testLocker, () async {
     if (!waited.isCompleted) {
       waited.complete();
     }
@@ -34,7 +38,7 @@ void main() {
 
   /// Claims that fail the test where a claim is ever found held.
   Claims neverWaiting() =>
-      .new(.posix, () async => fail('a claim no one holds was waited on'));
+      .new(testLocker, () async => fail('a claim no one holds was waited on'));
 
   /// Whether a claim, taken by [take] for an act that does [act], is let go,
   /// as a contender in a process of its own finds it, on the checkout
@@ -70,7 +74,7 @@ void main() {
     final Completer<void> go = .new();
     final Completer<void> waited = .new();
     final List<String> acts = [];
-    final Future<void> first = Claims(.posix).holding(claim, () async {
+    final Future<void> first = Claims(testLocker).holding(claim, () async {
       acts.add('first');
       begun.complete();
       await go.future;
@@ -86,10 +90,54 @@ void main() {
     expect(acts, ['first', 'first done', 'second']);
   });
 
+  /// Claims whose hold's `flock` fails every call with [errno], through a
+  /// C library they are handed.
+  Claims failingWith(int errno) => .new(
+    FlockLocker(FailingFlock((testLocker as FlockLocker).libc, errno)),
+    () async => fail('a claim no one holds was waited on'),
+  );
+
+  test('a hold takes its lock through the C library its claims are given, '
+      'so one whose flock finds the lock held finds the claim held, though '
+      'no other hold has it', () async {
+    final ClaimPath claim = claimOf('app');
+    final Libc libc = (testLocker as FlockLocker).libc;
+    await neverWaiting().holdingIfFree(claim, () async {});
+    expect(
+      await failingWith(libc.wouldBlock)
+          .holdingIfFree(claim, () async => fail('the act ran')),
+      isFalse,
+    );
+    expect(await neverWaiting().holdingIfFree(claim, () async {}), isTrue);
+  });
+
+  test("a hold whose C library's flock fails for any other reason fails as a "
+      "StoreFailed naming the claim's file and the system's reason", () async {
+    final ClaimPath claim = claimOf('app');
+    final Libc libc = (testLocker as FlockLocker).libc;
+    const int badDescriptor = 9;
+    await expectLater(
+      failingWith(badDescriptor)
+          .holding(claim, () async => fail('the act ran')),
+      throwsA(
+        storeFault(
+          isA<StoreFailed>()
+              .having((StoreFailed f) => f.path, 'path', claim.path)
+              .having(
+                (StoreFailed f) => f.reason,
+                'reason',
+                libc.message(badDescriptor),
+              ),
+        ),
+      ),
+    );
+    expect(await neverWaiting().holdingIfFree(claim, () async {}), isTrue);
+  });
+
   test('claims on two checkouts are held at once', () async {
     final Completer<void> begun = .new();
     final Completer<void> go = .new();
-    final Future<void> first = Claims(.posix).holding(claimOf('app'), () {
+    final Future<void> first = Claims(testLocker).holding(claimOf('app'), () {
       begun.complete();
       return go.future;
     });
@@ -103,7 +151,8 @@ void main() {
       'through', () async {
     final ClaimPath claim = claimOf('app');
     await expectLater(
-      Claims(.posix).holding(claim, () async => throw const FormatException()),
+      Claims(testLocker)
+          .holding(claim, () async => throw const FormatException()),
       throwsA(isA<FormatException>()),
     );
     expect(await letGoApart(.waiting, .throws), isTrue);
@@ -112,7 +161,7 @@ void main() {
   test('a claim whose file cannot be made fails as StoreFailed', () async {
     await File(consumerIn(temp).path).create(recursive: true);
     await expectLater(
-      Claims(.posix).holding(claimOf('app'), () async {}),
+      Claims(testLocker).holding(claimOf('app'), () async {}),
       throwsA(
         storeFault(
           isA<StoreFailed>().having(
@@ -155,7 +204,7 @@ void main() {
     () async {
       await File(consumerIn(temp).path).create(recursive: true);
       await expectLater(
-        Claims(.posix).holdingIfFree(claimOf('app'), () async {}),
+        Claims(testLocker).holdingIfFree(claimOf('app'), () async {}),
         throwsA(storeFault(isA<StoreFailed>())),
       );
     },
@@ -214,7 +263,7 @@ void main() {
 
   test('a process started under a hold carries no claim past it', () async {
     late Process child;
-    await Claims(.posix).holding(claimOf('app'), () async {
+    await Claims(testLocker).holding(claimOf('app'), () async {
       child = await Process.start('sleep', ['600']);
     });
     final Contender other = await .holding(

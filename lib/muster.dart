@@ -45,7 +45,8 @@ export 'src/model/load_refusal.dart'
         ManifestInvalid,
         CodebaseNamedTwice,
         NoWorkingDirectory,
-        NoCache;
+        NoCache,
+        NoClaim;
 export 'src/model/lock_path.dart' show LockPath;
 export 'src/model/manifest_path.dart' show ManifestPath;
 export 'src/model/move.dart' show Move, Moved, MoveFailed;

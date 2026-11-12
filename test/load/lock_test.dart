@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 import '../support/chmod.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
+import '../support/locker.dart';
 import '../support/locks.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
@@ -402,11 +403,11 @@ void main() {
       runner.commands.clear();
       final Completer<void> waited = .new();
       late Future<Locking> locking;
-      await Claims(.posix).holding(claimOf(app), () async {
+      await Claims(testLocker).holding(claimOf(app), () async {
         locking = loaderIn(
           temp,
           runner,
-          claims: .new(.posix, () async {
+          claims: .new(testLocker, () async {
             if (!waited.isCompleted) {
               waited.complete();
             }

@@ -39,6 +39,7 @@ List<String> _named(LoadRefusal refusal) => switch (refusal) {
       .windows => ['LOCALAPPDATA'],
     },
   ],
+  NoClaim(:final String system) => [system],
 };
 
 /// What a refusal's line calls [written].
@@ -146,6 +147,7 @@ void main() {
           CodebaseNamedTwice(.parse('app')!, first: broken, second: plain),
         ),
         refusalText(const NoWorkingDirectory('gone\r')),
+        refusalText(const NoClaim('free\nbsd')),
       ],
       [
         r'"/consumer/a\nb.yml": a manifest'
@@ -156,6 +158,8 @@ void main() {
         r'/consumer/c.yaml: not YAML: "line 1\nline 2"',
         r'app: named in "/consumer/a\nb.yaml" and again in /consumer/c.yaml',
         r'no working directory: "gone\r"',
+        r'no claim: muster knows no C library to lock a claim with on '
+            r'"free\nbsd"',
       ],
     );
   });
@@ -169,6 +173,13 @@ void main() {
     expect(
       refusalText(const NoCache(.windows)),
       'no cache: neither MUSTER_CACHE nor LOCALAPPDATA is set',
+    );
+  });
+
+  test('no claim names the system', () {
+    expect(
+      refusalText(const NoClaim('freebsd')),
+      'no claim: muster knows no C library to lock a claim with on freebsd',
     );
   });
 }

@@ -9,6 +9,7 @@ import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/git.dart';
+import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/spy_runner.dart';
 
@@ -167,7 +168,7 @@ void main() {
         if (held) {
           final Completer<void> taken = .new();
           holders.add(
-            Claims(.posix).holding(others[i].claim, () {
+            Claims(testLocker).holding(others[i].claim, () {
               taken.complete();
               return go.future;
             }),

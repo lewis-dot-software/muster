@@ -11,6 +11,7 @@ import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
 import 'git.dart';
+import 'locker.dart';
 import 'origin.dart';
 
 /// The pubspec of a package named [name] with no dependencies, which
@@ -44,7 +45,7 @@ ConsumerRoot consumerIn(Directory temp) =>
 /// The checkouts of a consumer in [temp], cloned into a cache there, their
 /// processes run by [runner].
 Checkouts checkoutsIn(Directory temp, Runner runner) =>
-    .new(consumerIn(temp), cacheIn(temp, runner), runner, .new(.posix));
+    .new(consumerIn(temp), cacheIn(temp, runner), runner, .new(testLocker));
 
 /// The kept locks of the consumer's `muster.yaml` in [temp].
 LocksDirectory locksIn(Directory temp) =>

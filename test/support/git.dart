@@ -7,6 +7,8 @@ import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
+import 'locker.dart';
+
 /// A directory of a test's own, deleted when [body] is done with it.
 Future<T> inTemp<T>(Future<T> Function(Directory temp) body) async {
   final Directory temp = await .systemTemp.createTemp('muster-');
@@ -38,7 +40,7 @@ Map<String, String> hermetic(Directory temp) {
 Cache cacheIn(Directory temp, Runner runner, [Claims? claims]) => .new(
   .of((variables: {'MUSTER_CACHE': p.join(temp.path, 'cache')}, os: .posix))!,
   runner,
-  claims ?? .new(.posix),
+  claims ?? .new(testLocker),
 );
 
 /// Whether the repo at [gitDir] holds [commit] as a commit, read by [runner].

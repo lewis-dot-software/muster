@@ -10,6 +10,7 @@ import 'package:test/test.dart';
 
 import '../support/git.dart';
 import '../support/loads.dart';
+import '../support/locker.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
@@ -423,7 +424,7 @@ void main() {
           (variables: const {}, os: os),
           .new(consumerIn(temp).path, .posix),
           runner,
-          .new(.posix),
+          .new(testLocker),
           scratchesIn(temp),
         ).load(named: [atRoot(temp)]);
         expect(

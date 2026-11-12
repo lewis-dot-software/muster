@@ -10,7 +10,7 @@ enum ExitCode {
   failed(1),
 
   /// A run refused before any process or file write: a manifest that does
-  /// not hold, none at all, no working directory or no cache.
+  /// not hold, none at all, no working directory, no cache or no claim.
   refused(2),
 
   /// A command line muster does not take, the usage written beside it.

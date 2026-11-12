@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 import '../support/contenders.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
+import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/spy_runner.dart';
@@ -67,7 +68,7 @@ void main() {
       final Future<Load> second = loaderIn(
         temp,
         runner,
-        claims: .new(.posix, () async {
+        claims: .new(testLocker, () async {
           if (!waited.isCompleted) {
             waited.complete();
           }
@@ -138,7 +139,10 @@ void main() {
           temp,
           .new(hermetic(temp)),
           root: root,
-          claims: .new(.posix, () async => fail('a held claim was waited on')),
+          claims: .new(
+            testLocker,
+            () async => fail('a held claim was waited on'),
+          ),
         ).load(named: [manifest]),
         loadedWith({
           'other': fetchedAt(p.join(root, '.dart_tool', 'muster', 'other')),

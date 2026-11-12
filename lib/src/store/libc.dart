@@ -1,39 +1,15 @@
 import 'dart:ffi';
-import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 
-/// The C library a POSIX hold calls, which differs between systems in where
-/// it keeps `errno` and in how it spells two constants.
-enum _Kernel {
-  darwin(errno: '__error', readOnlyCloseOnExec: 0x1000000, wouldBlock: 35),
-  linux(
-    errno: '__errno_location',
-    readOnlyCloseOnExec: 0x80000,
-    wouldBlock: 11,
-  );
+import 'kernel.dart';
 
-  const _Kernel({
-    required this.errno,
-    required this.readOnlyCloseOnExec,
-    required this.wouldBlock,
-  });
-
-  /// The function that gives the calling thread's `errno`'s address.
-  final String errno;
-
-  /// `O_RDONLY | O_CLOEXEC`, `O_RDONLY` being 0 on both.
-  final int readOnlyCloseOnExec;
-
-  /// `EWOULDBLOCK`, which `flock` fails with where another open holds the
-  /// lock.
-  final int wouldBlock;
-}
-
-/// The C library's calls a claim's hold makes on a POSIX system, each bound once, all together,
-/// so the first take binds none between a call and its read of `errno`.
-final class Libc {
-  Libc._(_Kernel kernel, DynamicLibrary libc)
+/// The C library's calls a claim's hold makes on a POSIX system, each bound
+/// once, all together, so no take binds one between a call and its read of
+/// `errno`.
+interface class Libc {
+  /// The calls of [libc], the C library of a system of [kernel].
+  Libc(Kernel kernel, DynamicLibrary libc)
     : wouldBlock = kernel.wouldBlock,
       readOnlyCloseOnExec = kernel.readOnlyCloseOnExec,
       // `open` takes a variadic mode, passed only with `O_CREAT`, so its
@@ -96,13 +72,3 @@ final class Libc {
   /// What the system says of [errno].
   String message(int errno) => _strerror(errno).toDartString();
 }
-
-/// The C library of the POSIX system muster runs on, bound when the first
-/// claim is taken there.
-final Libc libc = ._(switch (Platform.operatingSystem) {
-  'macos' => .darwin,
-  'linux' => .linux,
-  final String system => throw UnsupportedError(
-    'a claim on $system has no C library muster knows',
-  ),
-}, .process());

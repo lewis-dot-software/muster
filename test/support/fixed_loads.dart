@@ -6,6 +6,8 @@ import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:muster/src/store/scratches.dart';
 
+import 'locker.dart';
+
 /// Runs that give what they were made with, starting no process and
 /// touching no file, keeping the manifests each was named.
 class FixedLoads implements Loads {
@@ -55,4 +57,4 @@ final Muster _muster = .new(
 
 final Runner _none = .new(const {});
 
-final Claims _claims = .new(.posix);
+final Claims _claims = .new(testLocker);

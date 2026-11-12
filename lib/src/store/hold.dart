@@ -5,9 +5,9 @@ import 'package:ffi/ffi.dart';
 
 import '../model/claim_path.dart';
 import '../model/fetch_outcome.dart';
-import '../model/os.dart';
 import 'file_act.dart';
 import 'libc.dart';
+import 'locker.dart';
 import 'store_fault.dart';
 
 /// A claim held: the kernel's lock on the claim's file, taken through an open
@@ -21,15 +21,16 @@ import 'store_fault.dart';
 sealed class Hold {
   const Hold();
 
-  /// The claim at [claim] held, or null where another open of its file holds
+  /// The claim at [claim] held by [locker], or null where another open of its file holds
   /// it. The file must be there.
   ///
   /// Throws a [StoreFault] of [StoreFailed] where the file cannot be opened
   /// or locked.
-  static Future<Hold?> take(ClaimPath claim, Os os) async => switch (os) {
-    .posix => _Flock.take(claim),
-    .windows => await _LockFileEx.take(claim),
-  };
+  static Future<Hold?> take(ClaimPath claim, Locker locker) async =>
+      switch (locker) {
+        FlockLocker(:final Libc libc) => _Flock.take(claim, libc),
+        LockFileExLocker() => await _LockFileEx.take(claim),
+      };
 
   /// Lets the claim go.
   Future<void> release();
@@ -44,13 +45,15 @@ sealed class Hold {
 /// finalizer closes it where the hold is never released, which runs at the
 /// end of the isolate group at the latest.
 final class _Flock extends Hold implements Finalizable {
-  _Flock._(this._descriptor) {
-    libc.closer.attach(this, .fromAddress(_descriptor), detach: this);
+  _Flock._(this._libc, this._descriptor) {
+    _libc.closer.attach(this, .fromAddress(_descriptor), detach: this);
   }
+
+  final Libc _libc;
 
   final int _descriptor;
 
-  static Hold? take(ClaimPath claim) {
+  static Hold? take(ClaimPath claim, Libc libc) {
     final Pointer<Utf8> path = claim.path.toNativeUtf8();
     final int descriptor = libc.open(path, libc.readOnlyCloseOnExec);
     final int opening = libc.errno;
@@ -58,7 +61,7 @@ final class _Flock extends Hold implements Finalizable {
     if (descriptor < 0) {
       throw StoreFault(StoreFailed(claim.path, libc.message(opening)));
     }
-    final _Flock hold = ._(descriptor);
+    final _Flock hold = ._(libc, descriptor);
     if (libc.flock(descriptor, _exclusive | _nonBlocking) == 0) {
       return hold;
     }
@@ -74,8 +77,8 @@ final class _Flock extends Hold implements Finalizable {
   Future<void> release() async => _close();
 
   void _close() {
-    libc.closer.detach(this);
-    libc.close(_descriptor);
+    _libc.closer.detach(this);
+    _libc.close(_descriptor);
   }
 }
 

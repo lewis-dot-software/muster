@@ -12,6 +12,7 @@ import 'package:test/test.dart';
 import '../support/chmod.dart';
 import '../support/git.dart';
 import '../support/loads.dart';
+import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
@@ -337,7 +338,7 @@ void main() {
     final Load load = await loaderIn(
       temp,
       runner,
-      claims: .new(.posix, () async {
+      claims: .new(testLocker, () async {
         if (!waiting.isCompleted) {
           waiting.complete();
         }
@@ -347,7 +348,7 @@ void main() {
     final Muster muster = (load as Loaded).muster;
     runner.commands.clear();
     late final Future<Scratching> made;
-    await Claims(.posix).holding(cloneOf(temp, app).claim, () async {
+    await Claims(testLocker).holding(cloneOf(temp, app).claim, () async {
       made = muster.scratch(app.name);
       await waiting.future;
       expect(runner.given, isNot(contains(contains('worktree add'))));

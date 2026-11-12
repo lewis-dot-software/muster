@@ -27,6 +27,9 @@ String refusalText(LoadRefusal refusal) => switch (refusal) {
   NoWorkingDirectory(:final String reason) =>
     'no working directory: ${_line(reason)}',
   NoCache(:final Os os) => 'no cache: ${_cacheText(os)}',
+  NoClaim(:final String system) =>
+    'no claim: muster knows no C library to lock a claim with on '
+        '${_line(system)}',
 };
 
 /// The variables [os] takes the cache from, none of them set.

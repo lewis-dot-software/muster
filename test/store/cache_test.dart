@@ -10,9 +10,10 @@ import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-import '../support/faults.dart';
 import '../support/chmod.dart';
+import '../support/faults.dart';
 import '../support/git.dart';
+import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/spy_runner.dart';
 
@@ -263,7 +264,7 @@ void main() {
     final String left = await leftFor(other);
     final Completer<void> held = .new();
     final Completer<void> go = .new();
-    final Future<void> holder = Claims(.posix)
+    final Future<void> holder = Claims(testLocker)
         .holding(ClonePath.of(cache.directory, other).claim, () {
           held.complete();
           return go.future;
@@ -272,7 +273,7 @@ void main() {
     final Cache neverWaiting = cacheIn(
       temp,
       runner,
-      .new(.posix, () async => fail('a held claim was waited on')),
+      .new(testLocker, () async => fail('a held claim was waited on')),
     );
     await neverWaiting.clone(origin.url, await onMain());
     expect(await cached(), contains(left));
@@ -336,7 +337,7 @@ void main() {
         os: .posix,
       ))!,
       runner,
-      .new(.posix),
+      .new(testLocker),
     );
     await expectLater(
       blocked.clone(origin.url, await onMain()),

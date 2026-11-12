@@ -93,6 +93,7 @@ final List<LoadRefusal> everyRefusal = [
   ),
   const NoWorkingDirectory('No such file or directory'),
   for (final Os os in Os.values) NoCache(os),
+  const NoClaim('freebsd'),
 ];
 
 ManifestPath _manifest(String stem) => .parse('/consumer/$stem.yaml', .posix)!;

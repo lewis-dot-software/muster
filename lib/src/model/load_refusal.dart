@@ -98,3 +98,14 @@ final class NoCache extends LoadRefusal {
   /// cache from.
   final Os os;
 }
+
+/// A load on a system muster takes no claim on: a POSIX system whose C
+/// library it does not know, so it has no lock to hold a clone or a checkout
+/// with.
+final class NoClaim extends LoadRefusal {
+  /// The refusal of a load on the system `dart:io` names [system].
+  const NoClaim(this.system);
+
+  /// The system's name, as `dart:io` gives it.
+  final String system;
+}

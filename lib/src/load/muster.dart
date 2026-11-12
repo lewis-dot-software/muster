@@ -26,12 +26,13 @@ final class Muster {
   /// is the working directory where it is left out, and a relative path,
   /// [root] among them, is read against the working directory.
   ///
-  /// The environment, the working directory and the temporary directory are
-  /// read once, here, and every process the load and its scratches start
-  /// runs with that environment alone.
+  /// The environment, the system, the working directory and the temporary
+  /// directory are read once, here, and every process the load and its
+  /// scratches start runs with that environment alone.
   ///
-  /// Returns [Refused] where the manifests refuse the load, the working
-  /// directory cannot be read or no cache is named, before any process
+  /// Returns [Refused] where muster takes no claim on the system, the
+  /// manifests refuse the load, the working directory cannot be read or no
+  /// cache is named, before any process
   /// starts or any file is written, and [Loaded] otherwise, every failure a
   /// codebase meets carried as its outcome. Nothing throws but a bug.
   static Future<Load> load({List<String> manifests = const [], String? root}) =>

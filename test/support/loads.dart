@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import 'git.dart';
+import 'locker.dart';
 import 'manifests.dart';
 import 'packages.dart';
 
@@ -74,7 +75,7 @@ Loader loaderIn(
   ),
   .new(root ?? consumerIn(temp).path, .posix),
   runner,
-  claims ?? .new(.posix),
+  claims ?? .new(testLocker),
   scratchesIn(temp),
 );
 

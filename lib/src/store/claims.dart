@@ -2,20 +2,20 @@ import 'dart:io';
 
 import '../model/claim_path.dart';
 import '../model/fetch_outcome.dart';
-import '../model/os.dart';
 import 'file_act.dart';
 import 'hold.dart';
+import 'locker.dart';
 import 'store_fault.dart';
 
 /// The claims a load takes on the clones and checkouts it acts on, each held
 /// while it acts and let go after, so no two loads act on one at once,
 /// whether they are isolates of one process or separate processes.
 class Claims {
-  /// The claims on a system of [_os], [_waited] run each time a claim is
-  /// found held, before it is tried again.
-  Claims(this._os, [this._waited = _pause]);
+  /// The claims taken by [_locker], [_waited] run each time a claim is found
+  /// held, before it is tried again.
+  Claims(this._locker, [this._waited = _pause]);
 
-  final Os _os;
+  final Locker _locker;
 
   final Future<void> Function() _waited;
 
@@ -47,7 +47,7 @@ class Claims {
     Future<void> Function() act,
   ) async {
     await _made(claim);
-    final Hold? hold = await Hold.take(claim, _os);
+    final Hold? hold = await Hold.take(claim, _locker);
     if (hold == null) {
       return false;
     }
@@ -64,7 +64,7 @@ class Claims {
 
   Future<Hold> _take(ClaimPath claim) async {
     while (true) {
-      if (await Hold.take(claim, _os) case final Hold hold) {
+      if (await Hold.take(claim, _locker) case final Hold hold) {
         return hold;
       }
       await _waited();
