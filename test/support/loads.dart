@@ -9,6 +9,7 @@ import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/environment.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/locks_directory.dart';
+import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -49,12 +50,15 @@ ClonePath cloneOf(Directory temp, GitCodebase codebase) =>
 
 /// A loader in [temp], reading [loadEnvironment] with [variables], and with
 /// none of the variables a cache is taken from where [cached] does not hold,
-/// its working directory the consumer's root, its processes run by [runner].
+/// its working directory the consumer's root, or [root] where one is given,
+/// its processes run by [runner] and its claims held under [claims].
 Loader loaderIn(
   Directory temp,
   Runner runner, {
   Map<String, String> variables = const {},
   bool cached = true,
+  String? root,
+  Claims? claims,
 }) => .new(
   (
     variables: {
@@ -66,8 +70,9 @@ Loader loaderIn(
     },
     os: .posix,
   ),
-  .new(consumerIn(temp).path, .posix),
+  .new(root ?? consumerIn(temp).path, .posix),
   runner,
+  claims ?? .new(.posix),
 );
 
 /// A runner in [temp] that can start no process, since its `PATH` holds no

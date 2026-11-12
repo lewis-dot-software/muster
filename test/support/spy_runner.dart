@@ -2,8 +2,9 @@ import 'package:muster/src/model/command.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 
-/// A runner that keeps every command it is given, in order, then runs it,
-/// or answers it in place of running it where [answer] gives what it left.
+/// A runner that keeps every command it is given, in order, awaits [before]
+/// on it, then runs it, or answers it in place of running it where [answer]
+/// gives what it left.
 class SpyRunner extends Runner {
   /// The spy that starts each process with [environment].
   SpyRunner(super.environment);
@@ -20,6 +21,10 @@ class SpyRunner extends Runner {
   /// What a command left in place of its run, or null where it runs.
   Ran? Function(Command command) answer = (Command command) => null;
 
+  /// What runs on each command once it is kept, before it runs or is
+  /// answered, which may hold it or throw in place of its run.
+  Future<void> Function(Command command) before = (Command command) async {};
+
   /// Whether any command given so far reached a URL, by a fetch or a clone.
   bool get fetched => commands.any(
     (Command command) =>
@@ -28,11 +33,12 @@ class SpyRunner extends Runner {
   );
 
   @override
-  Future<Ran> run(Command command, {Set<int> exits = const {0}}) {
+  Future<Ran> run(Command command, {Set<int> exits = const {0}}) async {
     commands.add(command);
+    await before(command);
     return switch (answer(command)) {
-      final Ran ran => .value(ran),
-      null => super.run(command, exits: exits),
+      final Ran ran => ran,
+      null => await super.run(command, exits: exits),
     };
   }
 }

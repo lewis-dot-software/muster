@@ -1,6 +1,6 @@
 ---
 type: knowledge
-aliases: structure, layers, boundaries, store, checkouts, manifest, locks, load, claims
+aliases: structure, layers, boundaries, store, checkouts, manifest, locks, load, claims, concurrency
 ---
 
 # Architecture
@@ -101,13 +101,17 @@ The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make 
 
 Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
 
-Deleting `.dart_tool/muster/` or the cache is always safe, and costs one fetch.
+Deleting `.dart_tool/muster/` or the cache is always safe while no load runs, and costs one fetch.
 
 ## Concurrency
 
 `dart test` runs a package's test files as isolates of one process, and `flutter test` as processes, so a load guards against both. A claim is a load's hold on one clone or one checkout. A load takes a claim on each before it touches it, and holds it until the codebase's stamp is written.
 
-A claim is a directory made by an atomic create, since a file lock is held by the whole process and shuts out no isolate of it. It names its holder, and a load takes it over where that holder is gone, so a claim left by a crash or an error never blocks a later load. A scratch takes its clone's claim while it adds its worktree, and `muster lock` takes its claims as a load does.
+A claim is the kernel's lock on a file beside what it claims, `<name>.claim` beside a checkout and `<hash>.claim` beside a clone, taken through an open of the file that belongs to the load alone. On a POSIX system it is `flock`'s, since `fcntl`'s, the lock `dart:io` takes there, is held by the whole process and shuts out no isolate of it, and on Windows it is `LockFileEx`'s, which `dart:io` takes and which belongs to its handle. A load that finds a claim held tries it again after a pause.
+
+The kernel lets a claim go when its open closes: when the load lets it go, when its isolate's group ends, or when its process ends, whether it exits, crashes or is killed. So no claim names its holder, none outlives it, and none is ever taken over, which a holder named by a process id could not hold, since the id can name a live process for a dead claim, after a reboot or where an isolate dies inside a running `dart test`. The file is opened close-on-exec, so no process a load starts carries a claim past it. The files stay, since a claim deleted while held would let a second load in beside the first.
+
+A load holds a checkout's claim from before its survey until it is handed out, and its clone's from before the clone is touched until the stamp is written, the checkout's always first, so no two loads wait on each other. A scratch takes its clone's claim while it adds its worktree, and `muster lock` takes its claims as a load does.
 
 A second load waits, then finds the checkout standing and hands it out untouched. A load never moves a standing checkout, so no load resets what another is reading.
 
@@ -156,7 +160,7 @@ flowchart LR
 The table is the rule's home, and the rules new code obeys are:
 
 - An import reaches only the layers its row names, so none runs up.
-- Only `store` and `cli` import `dart:io`, and only `store` starts a process.
+- Only `store` and `cli` import `dart:io`, and only `store` imports `dart:ffi` or starts a process.
 - Every choice a phase makes is a pure function in `model` of what `store` read, so a property test holds it with no checkout.
 - Each kind of path inside muster, a clone's, a checkout's, a manifest's and a lock's among them, is an extension type of its own, made at the seam, never a raw `String`.
 

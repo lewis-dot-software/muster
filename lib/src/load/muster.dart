@@ -43,6 +43,7 @@ abstract final class Muster {
       environment,
       directory,
       .new(environment.variables),
+      .new(environment.os),
     ).load(named: manifests, root: root);
   }
 }

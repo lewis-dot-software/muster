@@ -32,6 +32,7 @@ import '../model/surveyed_package.dart';
 import '../model/toolchain.dart';
 import '../model/worktree.dart';
 import 'cache.dart';
+import 'claims.dart';
 import 'file_act.dart';
 import 'git_on.dart';
 import 'bytes_if_there.dart';
@@ -40,11 +41,13 @@ import 'runner.dart';
 import 'store_fault.dart';
 
 /// A consumer's checkouts, one a git codebase under its root, each a worktree
-/// of the codebase's clone in a [Cache], its processes run by a [Runner].
+/// of the codebase's clone in a [Cache], its processes run by a [Runner] and
+/// its acts held under [Claims].
 class Checkouts {
   /// The checkouts under [root], cloned into [_cache], their git and
-  /// toolchains run by [_runner].
-  Checkouts(this.root, this._cache, this._runner);
+  /// toolchains run by [_runner], each acted on under its claim in
+  /// [_claims].
+  Checkouts(this.root, this._cache, this._runner, this._claims);
 
   /// The consumer's root, the checkouts under its `.dart_tool/muster/`.
   final ConsumerRoot root;
@@ -53,8 +56,15 @@ class Checkouts {
 
   final Runner _runner;
 
+  final Claims _claims;
+
   /// [codebase]'s checkout at its pin, resolved, its kept locks read from
   /// [locks].
+  ///
+  /// The checkout's claim is held from before the survey until the checkout
+  /// is handed out, and the clone's from before the clone is touched until
+  /// the stamp is written, so no other load acts on either meanwhile, and a
+  /// load that waited on one finds the checkout standing.
   ///
   /// A checkout that stands is handed out with nothing run but the survey:
   /// the toolchain's version and the checkout's git status. Any other is
@@ -67,17 +77,34 @@ class Checkouts {
   /// Throws a [StoreFault] of [Unlocked] where a package has no lock, with
   /// the checkout untouched, of [PinMissing] where the clone cannot reach the
   /// pin, of [CommandFailed] or [Unstartable] where git or the toolchain
-  /// fails, and of [StoreFailed] where a file act does.
-  Future<Checkout> checkout(GitCodebase codebase, LocksDirectory locks) async {
+  /// fails, and of [StoreFailed] where a file act does, a claim's among them.
+  Future<Checkout> checkout(GitCodebase codebase, LocksDirectory locks) {
     final CheckoutPath at = .of(root, codebase.name);
-    final Survey survey = await _survey(codebase, locks, at);
-    final Checkout checkout = (
-      package: .of(at, codebase.root, .root),
-      sdk: survey.sdk,
-    );
-    if (stands(codebase, survey)) {
+    return _claims.holding(at.claim, () async {
+      final Survey survey = await _survey(codebase, locks, at);
+      final Checkout checkout = (
+        package: .of(at, codebase.root, .root),
+        sdk: survey.sdk,
+      );
+      if (!stands(codebase, survey)) {
+        await _claims.holding(
+          ClonePath.of(_cache.directory, codebase.url).claim,
+          () => _make(codebase, locks, at, survey),
+        );
+      }
       return checkout;
-    }
+    });
+  }
+
+  /// [codebase]'s checkout at [at] made at its pin from its clone, its
+  /// packages resolved on their locks and its stamp written last, the
+  /// [survey] read of it before.
+  Future<void> _make(
+    GitCodebase codebase,
+    LocksDirectory locks,
+    CheckoutPath at,
+    Survey survey,
+  ) async {
     final ClonePath clone = await _cache.clone(codebase.url, codebase.commit);
     final Map<Package, LockSource> chosen = switch (chooseLocks(
       await _atCommit(clone, codebase),
@@ -136,7 +163,6 @@ class Checkouts {
       at.stamp.path,
       () => File(at.stamp.path).writeAsString(renderStamp(stamp)),
     );
-    return checkout;
   }
 
   /// The survey of [codebase]'s checkout at [at], its kept locks in [locks].

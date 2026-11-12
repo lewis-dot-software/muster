@@ -44,7 +44,7 @@ ConsumerRoot consumerIn(Directory temp) =>
 /// The checkouts of a consumer in [temp], cloned into a cache there, their
 /// processes run by [runner].
 Checkouts checkoutsIn(Directory temp, Runner runner) =>
-    .new(consumerIn(temp), cacheIn(temp, runner), runner);
+    .new(consumerIn(temp), cacheIn(temp, runner), runner, .new(.posix));
 
 /// The kept locks of the consumer's `muster.yaml` in [temp].
 LocksDirectory locksIn(Directory temp) =>

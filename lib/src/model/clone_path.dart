@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'cache_directory.dart';
+import 'claim_path.dart';
 import 'git_url.dart';
 
 /// The directory of one git URL's bare clone in the cache.
@@ -16,4 +17,7 @@ extension type const ClonePath._(String path) {
       sha256.convert(utf8.encode(url.url)).toString(),
     ),
   );
+
+  /// The claim on the clone, the file beside it named `<hash>.claim`.
+  ClaimPath get claim => .ofClone(this);
 }
