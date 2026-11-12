@@ -53,6 +53,7 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
           }
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }),
+        .new(Directory.systemTemp.path, .posix),
       ).load(named: [for (final Object? m in brief['manifests'] as List) '$m']);
       line.say('${Said.done.name} ${jsonEncode(_outcomes(load))}');
   }

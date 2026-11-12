@@ -6,6 +6,7 @@ import '../model/consumer_root.dart';
 import '../model/environment.dart';
 import '../model/codebase_name.dart';
 import '../model/fetch_outcome.dart';
+import '../model/git_codebase.dart';
 import '../model/load_refusal.dart';
 import '../model/manifest.dart';
 import '../model/manifest_merge.dart';
@@ -17,13 +18,16 @@ import '../model/merge_manifests.dart';
 import '../model/named_codebase.dart';
 import '../model/parse_manifest.dart';
 import '../model/seek_manifests.dart';
+import '../model/temp_directory.dart';
 import '../model/working_directory.dart';
 import '../store/bytes_if_there.dart';
+import '../store/cache.dart';
 import '../store/checkouts.dart';
 import '../store/claims.dart';
 import '../store/runner.dart';
 import '../store/store_fault.dart';
 import 'load.dart';
+import 'muster.dart';
 
 /// Loads the codebases a consumer's manifests name, in the environment and
 /// working directory it was made with, its processes run by a [Runner] and
@@ -31,8 +35,15 @@ import 'load.dart';
 class Loader {
   /// The loader that reads [_environment] and resolves relative paths
   /// against [_workingDirectory], its git and toolchains run by [_runner],
-  /// each clone and checkout acted on under its claim in [_claims].
-  Loader(this._environment, this._workingDirectory, this._runner, this._claims);
+  /// each clone and checkout acted on under its claim in [_claims], and the
+  /// scratches of what it loads made under [_temp].
+  Loader(
+    this._environment,
+    this._workingDirectory,
+    this._runner,
+    this._claims,
+    this._temp,
+  );
 
   final Environment _environment;
 
@@ -41,6 +52,8 @@ class Loader {
   final Runner _runner;
 
   final Claims _claims;
+
+  final TempDirectory _temp;
 
   /// Reads the manifests, the [named] ones where any is given and else the
   /// `muster.yaml` at [root] and every one `MUSTER_MANIFESTS` lists, then
@@ -55,7 +68,8 @@ class Loader {
   ///
   /// Every expected failure a codebase meets is its outcome, and the load
   /// goes on to the next. Another load acting on a codebase's clone or
-  /// checkout is waited on, never acted beside.
+  /// checkout is waited on, never acted beside. The [Loaded] carries the
+  /// [Muster] that makes a scratch of each codebase the manifests name.
   Future<Load> load({List<String> named = const [], String? root}) async {
     final ConsumerRoot consumer = .new(
       _workingDirectory.resolve(root ?? '.'),
@@ -122,12 +136,8 @@ class Loader {
     if (cache == null) {
       return const Refused(NoCache());
     }
-    final Checkouts checkouts = .new(
-      consumer,
-      .new(cache, _runner),
-      _runner,
-      _claims,
-    );
+    final Cache clones = .new(cache, _runner);
+    final Checkouts checkouts = .new(consumer, clones, _runner, _claims);
     final Map<CodebaseName, FetchOutcome> outcomes = {};
     for (final (:codebase, :manifest) in codebases) {
       try {
@@ -140,6 +150,13 @@ class Loader {
         outcomes[codebase.name] = fault.failure;
       }
     }
-    return Loaded(.unmodifiable(outcomes));
+    final Muster muster = .new(
+      .unmodifiable(<CodebaseName, GitCodebase>{
+        for (final (:codebase, manifest: _) in codebases)
+          codebase.name: codebase,
+      }),
+      .new(clones, _runner, _claims, _temp),
+    );
+    return Loaded(muster, .unmodifiable(outcomes));
   }
 }

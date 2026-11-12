@@ -111,11 +111,11 @@ A claim is the kernel's lock on a file beside what it claims, `<name>.claim` bes
 
 The kernel lets a claim go when its open closes: when the load lets it go, when its isolate's group ends, or when its process ends, whether it exits, crashes or is killed. So no claim names its holder, none outlives it, and none is ever taken over, which a holder named by a process id could not hold, since the id can name a live process for a dead claim, after a reboot or where an isolate dies inside a running `dart test`. The file is opened close-on-exec, so no process a load starts carries a claim past it. The files stay, since a claim deleted while held would let a second load in beside the first.
 
-A load holds a checkout's claim from before its survey until it is handed out, and its clone's from before the clone is touched until the stamp is written, the checkout's always first, so no two loads wait on each other. A scratch takes its clone's claim while it adds its worktree, and `muster lock` takes its claims as a load does.
+A load holds a checkout's claim from before its survey until it is handed out, and its clone's from before the clone is touched until the stamp is written, the checkout's always first, so no two loads wait on each other. A scratch takes its clone's claim while it adds its worktree, while a move fetches a commit its clone lacks, and while its disposal prunes the clone's record of it, and `muster lock` takes its claims as a load does.
 
 A second load waits, then finds the checkout standing and hands it out untouched. A load never moves a standing checkout, so no load resets what another is reading.
 
-A consumer never moves its checkout off the pin or edits a tracked file in it, since another test file may be reading it. One that needs to, such as a replay that resolves older commits one at a time, takes `Muster.scratch`: a worktree of the clone in a temporary directory, its own to move, removed when it is disposed of. Its failures are values too, as a load's are.
+A consumer never moves its checkout off the pin or edits a tracked file in it, since another test file may be reading it. One that needs to, such as a replay that resolves older commits one at a time, takes `Muster.scratch`: a worktree of the clone at the pin in a temporary directory, its own to move, removed when it is disposed of. A move takes it to any commit by `checkout --force --detach` and `clean -ffdx`, as a checkout is made again, so it holds that commit's tracked files alone, and resolving it is the consumer's own. A disposal deletes its directory and prunes the clone's worktrees, so the clone keeps no record of it. Its failures are values too, as a load's are.
 
 ## Outcomes
 
@@ -123,7 +123,7 @@ Every expected failure is a value, so a consumer cannot reach a checkout without
 
 | Case | Carries |
 |---|---|
-| `Loaded` | Each codebase's `FetchOutcome` in the manifests' order, keyed by name |
+| `Loaded` | The `Muster` that makes a scratch of each codebase the manifests name, and each codebase's `FetchOutcome` in the manifests' order, keyed by name |
 | `Refused` | Why the load refused, before any process or file write: a manifest whose file name does not end `.yaml`, one missing, unreadable or not YAML, a key's path in one, a name met twice, no manifest at all, a working directory the system cannot give, or no cache |
 
 `FetchOutcome` is a sealed type:
@@ -138,6 +138,14 @@ Every expected failure is a value, so a consumer cannot reach a checkout without
 | `PinMissing` | The URL, and the pin's commit, on none of its branches or tags after a fetch |
 
 A consumer handles each case by an exhaustive switch, and a test fails on every case but `Fetched`, so no codebase is skipped in silence.
+
+A scratch's acts return their own outcomes, each failure an `ActFailure`: `CommandFailed`, `Unstartable`, `StoreFailed` or `PinMissing`, as a load meets them.
+
+| Act | Gives | Or |
+|---|---|---|
+| `muster.scratch(name)` | `Scratched`, carrying the `Scratch` | `NotNamed` where no codebase of the load bears the name, or `ScratchFailed`, its directory removed |
+| `scratch.move(commit)` | `Moved` | `MoveFailed`, where a commit is on none of its URL's branches or tags after a fetch among them |
+| `scratch.dispose()` | `Disposed`, again where it is gone already | `DisposalFailed` |
 
 ## Layers
 
@@ -154,7 +162,7 @@ flowchart LR
 |---|---|---|
 | `cli` | The commands, their flags and the exit codes | `load`, `model` |
 | `load` | `Muster.load`, `Muster.scratch` and the kept lock's write: the phases in order, and the outcomes | `store`, `model` |
-| `store` | The cache, the checkouts, the stamps, the claims, git and the toolchains | `model` |
+| `store` | The cache, the checkouts, the scratches, the stamps, the claims, git and the toolchains | `model` |
 | `model` | The manifest and its parse, the codebase types, every choice a phase makes, the stamp's form, the outcomes | Nothing of muster's |
 
 The table is the rule's home, and the rules new code obeys are:
@@ -171,7 +179,7 @@ Each layer is a directory under `lib/src/`.
 The outside world reaches muster through three seams:
 
 - Processes, through one runner passed in by constructor, that git and both toolchains go through, each process started with the environment read at the entry and the caller's additions over it, and nothing else. Git starts with none of the variables `git rev-parse --local-env-vars` lists but the two that carry configuration, as git itself does on moving to another repo, so a `GIT_DIR` a hook exports never points it away from muster's repo, and no process asks anything: git's terminal prompt is off unless the environment sets `GIT_TERMINAL_PROMPT`, and every askpass is off whatever the environment or git's configuration names, `GIT_ASKPASS` empty and `SSH_ASKPASS` `false` under `SSH_ASKPASS_REQUIRE=force`, so where git, the ssh it runs or pub's git would ask for credentials, a passphrase or a host's trust it fails instead. OpenSSH heeds `SSH_ASKPASS_REQUIRE` from 8.4, and an older ssh still asks on the terminal where one stands. A user's `core.sshCommand`, agent, credential helper and known hosts still serve, since muster sets no `GIT_SSH_COMMAND`.
-- The environment and the working directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them.
+- The environment, the working directory and the temporary directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them.
 - Files, through `dart:io` in `store` alone and never faked, since git and pub act on real directories whatever muster fakes.
 
 `store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach pub.dev, one test a toolchain.

@@ -7,12 +7,18 @@
 /// once into a cache every consumer on the machine shares, checks each
 /// codebase out under the consumer's `.dart_tool/muster/`, resolves it on its
 /// lock, and gives each a [FetchOutcome], every failure among them a value.
+/// [Muster.scratch] gives a consumer that must move a codebase off its pin a
+/// worktree of its own to move, in a temporary directory.
 library;
 
 export 'src/load/load.dart' show Load, Loaded, Refused;
 export 'src/load/muster.dart' show Muster;
+export 'src/load/scratch.dart' show Scratch;
+export 'src/load/scratching.dart'
+    show Scratching, Scratched, NotNamed, ScratchFailed;
 export 'src/model/codebase_name.dart' show CodebaseName;
 export 'src/model/command.dart' show Command;
+export 'src/model/disposal.dart' show Disposal, Disposed, DisposalFailed;
 export 'src/model/commit.dart' show Commit;
 export 'src/model/executable.dart' show Executable;
 export 'src/model/fetch_outcome.dart'
@@ -20,6 +26,7 @@ export 'src/model/fetch_outcome.dart'
         FetchOutcome,
         Fetched,
         FetchFailure,
+        ActFailure,
         CommandFailed,
         Unstartable,
         StoreFailed,
@@ -41,6 +48,7 @@ export 'src/model/load_refusal.dart'
         NoCache;
 export 'src/model/lock_path.dart' show LockPath;
 export 'src/model/manifest_path.dart' show ManifestPath;
+export 'src/model/move.dart' show Move, Moved, MoveFailed;
 export 'src/model/os.dart' show Os;
 export 'src/model/package_config_path.dart' show PackageConfigPath;
 export 'src/model/manifest_refusal.dart'

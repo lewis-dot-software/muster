@@ -9,6 +9,7 @@ import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/environment.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/locks_directory.dart';
+import 'package:muster/src/model/temp_directory.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
@@ -51,7 +52,8 @@ ClonePath cloneOf(Directory temp, GitCodebase codebase) =>
 /// A loader in [temp], reading [loadEnvironment] with [variables], and with
 /// none of the variables a cache is taken from where [cached] does not hold,
 /// its working directory the consumer's root, or [root] where one is given,
-/// its processes run by [runner] and its claims held under [claims].
+/// its processes run by [runner], its claims held under [claims], and its
+/// scratches made in [scratchesIn].
 Loader loaderIn(
   Directory temp,
   Runner runner, {
@@ -73,7 +75,12 @@ Loader loaderIn(
   .new(root ?? consumerIn(temp).path, .posix),
   runner,
   claims ?? .new(.posix),
+  scratchesIn(temp),
 );
+
+/// The temporary directory a test's load in [temp] makes its scratches in.
+TempDirectory scratchesIn(Directory temp) =>
+    .new(p.join(temp.path, 'scratches'), .posix);
 
 /// A runner in [temp] that can start no process, since its `PATH` holds no
 /// executable.

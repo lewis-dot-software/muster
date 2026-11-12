@@ -31,10 +31,13 @@ import '../model/survey.dart';
 import '../model/surveyed_package.dart';
 import '../model/toolchain.dart';
 import '../model/worktree.dart';
+import 'add_worktree.dart';
 import 'cache.dart';
 import 'claims.dart';
 import 'file_act.dart';
+import 'git_in.dart';
 import 'git_on.dart';
+import 'move_worktree.dart';
 import 'bytes_if_there.dart';
 import 'ran.dart';
 import 'runner.dart';
@@ -214,7 +217,7 @@ class Checkouts {
   /// worktree there.
   Future<Worktree?> _status(CheckoutPath at) async {
     final Ran ran = await _runner.run(
-      _inCheckout(at, [
+      gitIn(at, [
         '--no-optional-locks',
         'status',
         '--porcelain=v2',
@@ -255,13 +258,9 @@ class Checkouts {
     ClonePath clone,
     GitCodebase codebase,
   ) async {
-    final String pin = codebase.commit.hash;
     if (await _there(at)) {
       if (await _worktreeOf(at, clone)) {
-        await _runner.run(
-          _inCheckout(at, ['checkout', '--quiet', '--force', '--detach', pin]),
-        );
-        await _runner.run(_inCheckout(at, ['clean', '-ffdxq']));
+        await moveWorktree(_runner, at, codebase.commit);
         return;
       }
       await fileAct(at.path, () => Directory(at.path).delete(recursive: true));
@@ -270,20 +269,13 @@ class Checkouts {
       at.path,
       () => Directory(at.os.paths.dirname(at.path)).create(recursive: true),
     );
-    await _runner.run(gitOn(clone, ['worktree', 'prune']));
-    await _runner.run(
-      gitOn(clone, ['worktree', 'add', '--quiet', '--detach', at.path, pin]),
-    );
+    await addWorktree(_runner, clone, at, codebase.commit);
   }
 
   /// Whether the directory at [at] is a worktree of [clone].
   Future<bool> _worktreeOf(CheckoutPath at, ClonePath clone) async {
     final Ran ran = await _runner.run(
-      _inCheckout(at, [
-        'rev-parse',
-        '--path-format=absolute',
-        '--git-common-dir',
-      ]),
+      gitIn(at, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
       exits: const {0, _notARepo},
     );
     if (ran.exitCode != 0) {
@@ -334,10 +326,3 @@ class Checkouts {
 
 /// The code git exits with where it finds no repo it can read.
 const int _notARepo = 128;
-
-/// Git's [arguments] in the checkout at [at], its repo and worktree named
-/// there, so git never climbs to a repo around it.
-Command _inCheckout(CheckoutPath at, List<String> arguments) => (
-  executable: .git,
-  arguments: ['-C', at.path, '--git-dir=.git', '--work-tree=.', ...arguments],
-);

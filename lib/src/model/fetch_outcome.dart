@@ -30,9 +30,14 @@ sealed class FetchFailure extends FetchOutcome {
   const FetchFailure();
 }
 
+/// A failure of an act on the world outside muster: a command, an
+/// executable's start, a file act, or a fetch that did not bring its commit.
+/// A load meets each as a [FetchFailure], and a scratch meets them alone.
+sealed class ActFailure {}
+
 /// A command that ran and exited with a code it should not have, or wrote
 /// what muster could not read.
-final class CommandFailed extends FetchFailure {
+final class CommandFailed extends FetchFailure implements ActFailure {
   /// The failure of [command], which exited [exitCode], writing [stdout] and
   /// [stderr].
   const CommandFailed(this.command, this.exitCode, this.stdout, this.stderr);
@@ -51,7 +56,7 @@ final class CommandFailed extends FetchFailure {
 }
 
 /// An executable that could not start.
-final class Unstartable extends FetchFailure {
+final class Unstartable extends FetchFailure implements ActFailure {
   /// The failure of [executable] to start.
   const Unstartable(this.executable);
 
@@ -60,7 +65,7 @@ final class Unstartable extends FetchFailure {
 }
 
 /// A file act that failed.
-final class StoreFailed extends FetchFailure {
+final class StoreFailed extends FetchFailure implements ActFailure {
   /// The failure of an act on [path], for the [reason] the system gave.
   const StoreFailed(this.path, this.reason);
 
@@ -72,7 +77,7 @@ final class StoreFailed extends FetchFailure {
 }
 
 /// A pin's commit that its URL's fetch did not bring.
-final class PinMissing extends FetchFailure {
+final class PinMissing extends FetchFailure implements ActFailure {
   /// The failure of [url]'s fetch to bring [commit].
   const PinMissing(this.url, this.commit);
 
