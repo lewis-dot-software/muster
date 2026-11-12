@@ -1,17 +1,10 @@
 import '../model/codebase_name.dart';
-import '../model/environment.dart';
-import '../model/fetch_outcome.dart';
 import '../model/git_codebase.dart';
-import '../model/load_refusal.dart';
 import '../model/scratch_path.dart';
-import '../model/working_directory.dart';
-import '../store/current_directory.dart';
-import '../store/process_environment.dart';
 import '../store/scratches.dart';
 import '../store/store_fault.dart';
-import '../store/system_temp.dart';
 import 'load.dart';
-import 'loader.dart';
+import 'process_loads.dart';
 import 'scratching.dart';
 
 /// muster's entry: the load of a consumer's codebases, and the scratches a
@@ -41,28 +34,8 @@ final class Muster {
   /// directory cannot be read or no cache is named, before any process
   /// starts or any file is written, and [Loaded] otherwise, every failure a
   /// codebase meets carried as its outcome. Nothing throws but a bug.
-  static Future<Load> load({
-    List<String> manifests = const [],
-    String? root,
-  }) async {
-    final Environment environment = processEnvironment();
-    final WorkingDirectory directory;
-    try {
-      directory = await currentDirectory(environment.os);
-    } on StoreFault catch (fault) {
-      if (fault.failure case StoreFailed(:final String reason)) {
-        return Refused(NoWorkingDirectory(reason));
-      }
-      rethrow;
-    }
-    return Loader(
-      environment,
-      directory,
-      .new(environment.variables),
-      .new(environment.os),
-      systemTemp(environment.os),
-    ).load(named: manifests, root: root);
-  }
+  static Future<Load> load({List<String> manifests = const [], String? root}) =>
+      const ProcessLoads().load(named: manifests, root: root);
 
   /// A new scratch of the codebase [name]: a worktree of its clone at its
   /// pin, in a temporary directory of its own, the consumer's to move to

@@ -38,4 +38,12 @@ enum Toolchain {
       '--directory=${package.path}',
     ],
   );
+
+  /// The command that resolves [package] alone afresh, writing the
+  /// `pubspec.lock` it resolved to, and leaving any `example/` in it
+  /// unresolved.
+  Command lock(PackagePath package) => (
+    executable: executable,
+    arguments: ['pub', 'get', '--no-example', '--directory=${package.path}'],
+  );
 }

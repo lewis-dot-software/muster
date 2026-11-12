@@ -86,7 +86,7 @@ Every codebase resolves to a lock, so its dependencies hold still as pub.dev pub
 
 A kept lock is a lock muster keeps beside a manifest. Its file is `<name>-<key>.lock`, and an example's adds `.example` before `.lock`. The key is a hash of every manifest value the resolve turns on: the source, the pin, `root` for a git codebase, `resolution` for a hosted one, and the toolchain. So any edit to those values finds no lock and the load returns `Unlocked`, never a resolution on a lock made for other values.
 
-`muster lock` resolves afresh each package that needs a kept lock and has none, and writes its lock. It leaves every lock that stands, and removes every lock in the directory that no codebase of its manifest names.
+`muster lock` resolves afresh each package that needs a kept lock and has none, in its codebase's checkout made again at the pin, its stamp deleted first, and writes its lock to `<file>.partial` beside it before moving it into place, so a write cut short never leaves part of a lock. It leaves every lock that stands, and removes every lock in the directory that no codebase of its manifest names, and every partial none names. A file there whose name ends neither `.lock` nor `.lock.partial` is left.
 
 ## Store
 
@@ -160,7 +160,7 @@ flowchart LR
 
 | Layer | Holds | Imports |
 |---|---|---|
-| `cli` | The commands, their flags and the exit codes | `load`, `model` |
+| `cli` | The commands, their flags, their rows and the exit codes, run by `bin/muster.dart` | `load`, `model` |
 | `load` | `Muster.load`, `Muster.scratch` and the kept lock's write: the phases in order, and the outcomes | `store`, `model` |
 | `store` | The cache, the checkouts, the scratches, the stamps, the claims, git and the toolchains | `model` |
 | `model` | The manifest and its parse, the codebase types, every choice a phase makes, the stamp's form, the outcomes | Nothing of muster's |
@@ -186,7 +186,7 @@ The outside world reaches muster through three seams:
 
 ## Output
 
-`muster fetch [manifest...]` loads and prints a row a codebase, tab-separated under a header: its name, its outcome and that outcome's own detail, the path for `Fetched`, the lock for `Unlocked`, the command for `CommandFailed`, the executable for `Unstartable`, the path for `StoreFailed` and the commit for `PinMissing`. A refused load prints why and no rows. `muster lock [manifest...]` writes and removes locks and prints a row each. With no manifest named, each reads `muster.yaml` in the current directory and `MUSTER_MANIFESTS`.
+`muster fetch [manifest...]` loads and prints a row a codebase, tab-separated under a header: its name, its outcome and that outcome's own detail, the path for `Fetched`, the lock for `Unlocked`, the command for `CommandFailed`, the executable for `Unstartable`, the path for `StoreFailed` and the commit for `PinMissing`. A refused load prints why and no rows. `muster lock [manifest...]` writes and removes locks and prints a row each in the same columns: `Wrote` or `Removed` and the lock, or a failure as `muster fetch` prints it, a removed lock's name empty, since no codebase names it. With no manifest named, each reads `muster.yaml` in the current directory and `MUSTER_MANIFESTS`. The rows go to standard output, and a refusal, a usage error and what a failure's row leaves out, a command's exit code and output or the system's reason for a file act, to standard error.
 
 The exit codes are one enum in `cli`, and its doc comment is their home.
 

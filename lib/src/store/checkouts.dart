@@ -16,9 +16,11 @@ import '../model/kept_lock_path.dart';
 import '../model/lock_choice.dart';
 import '../model/lock_source.dart';
 import '../model/locks_directory.dart';
+import '../model/locks_lacking.dart';
 import '../model/package.dart';
 import '../model/package_path.dart';
 import '../model/parse_stamp.dart';
+import '../model/partial_lock_path.dart';
 import '../model/read_at_commit.dart';
 import '../model/repo_path.dart';
 import '../model/read_status.dart';
@@ -99,6 +101,87 @@ class Checkouts {
     });
   }
 
+  /// The kept locks, in [locks], that [codebase]'s packages lack, each
+  /// written from a resolve afresh of its package in the checkout, at the
+  /// pin, and moved into place whole, so a write cut short leaves no lock.
+  /// A package whose commit holds its lock, or whose kept lock is there, is
+  /// left as it is, its lock untouched.
+  ///
+  /// The claims are a load's: the checkout's held throughout, and the
+  /// clone's from before the clone is touched until the last lock is
+  /// written. Where a lock is written the checkout is made again at the pin
+  /// and its stamp deleted first, so the next load makes it again on its
+  /// locks.
+  ///
+  /// Returns the kept locks written, in [Package]'s order.
+  ///
+  /// Throws a [StoreFault] of [PinMissing] where the clone cannot reach the
+  /// pin, of [CommandFailed] or [Unstartable] where git or the toolchain
+  /// fails, and of [StoreFailed] where a file act does, a claim's among them.
+  Future<List<KeptLockPath>> lock(GitCodebase codebase, LocksDirectory locks) {
+    final CheckoutPath at = .of(root, codebase.name);
+    return _claims.holding(
+      at.claim,
+      () => _claims.holding(
+        ClonePath.of(_cache.directory, codebase.url).claim,
+        () async {
+          final ClonePath clone = await _cache.clone(
+            codebase.url,
+            codebase.commit,
+          );
+          final List<Package> lacking = locksLacking(
+            await _atCommit(clone, codebase),
+            {
+              for (final Package package in Package.values)
+                if (await _hash(
+                      KeptLockPath.of(locks, codebase, package).path,
+                    ) !=
+                    null)
+                  package,
+            },
+          );
+          if (lacking.isEmpty) {
+            return const [];
+          }
+          await _unstamp(at);
+          await _place(at, clone, codebase);
+          final List<KeptLockPath> written = [];
+          for (final Package package in lacking) {
+            final PackagePath path = .of(at, codebase.root, package);
+            await _runner.run(codebase.toolchain.lock(path));
+            final KeptLockPath kept = .of(locks, codebase, package);
+            await _keep(path, kept);
+            written.add(kept);
+          }
+          return .unmodifiable(written);
+        },
+      ),
+    );
+  }
+
+  /// The lock [package] resolved to, kept at [kept]: copied to its partial
+  /// beside it, then moved into place.
+  Future<void> _keep(PackagePath package, KeptLockPath kept) async {
+    final PartialLockPath partial = .of(kept);
+    await fileAct(
+      partial.path,
+      () => File(partial.path).create(recursive: true),
+    );
+    await fileAct(
+      package.lock.path,
+      () => File(package.lock.path).copy(partial.path),
+    );
+    await fileAct(partial.path, () => File(partial.path).rename(kept.path));
+  }
+
+  /// Deletes the stamp of the checkout at [at], where it is there, so a make
+  /// cut short leaves none.
+  Future<void> _unstamp(CheckoutPath at) => fileAct(at.stamp.path, () async {
+    if (await File(at.stamp.path).exists()) {
+      await File(at.stamp.path).delete();
+    }
+  });
+
   /// [codebase]'s checkout at [at] made at its pin from its clone, its
   /// packages resolved on their locks and its stamp written last, the
   /// [survey] read of it before.
@@ -122,11 +205,7 @@ class Checkouts {
         Unlocked(.of(locks, codebase, package)),
       ),
     };
-    await fileAct(at.stamp.path, () async {
-      if (await File(at.stamp.path).exists()) {
-        await File(at.stamp.path).delete();
-      }
-    });
+    await _unstamp(at);
     await _place(at, clone, codebase);
     // Every lock is in place before any package resolves, so no resolve
     // meets a package still lacking its lock.
