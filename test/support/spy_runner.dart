@@ -4,7 +4,7 @@ import 'package:muster/src/store/runner.dart';
 
 /// A runner that keeps every command it is given, in order, awaits [before]
 /// on it, then runs it, or answers it in place of running it where [answer]
-/// gives what it left.
+/// gives what it left, then awaits [after] on it.
 class SpyRunner extends Runner {
   /// The spy that starts each process with [environment].
   SpyRunner(super.environment);
@@ -25,6 +25,10 @@ class SpyRunner extends Runner {
   /// answered, which may hold it or throw in place of its run.
   Future<void> Function(Command command) before = (Command command) async {};
 
+  /// What runs on each command once it has run, or been answered, with an
+  /// exit it allows, which may hold it or throw in place of its result.
+  Future<void> Function(Command command) after = (Command command) async {};
+
   /// Whether any command given so far reached a URL, by a fetch or a clone.
   bool get fetched => commands.any(
     (Command command) =>
@@ -36,9 +40,11 @@ class SpyRunner extends Runner {
   Future<Ran> run(Command command, {Set<int> exits = const {0}}) async {
     commands.add(command);
     await before(command);
-    return switch (answer(command)) {
+    final Ran ran = switch (answer(command)) {
       final Ran ran => ran,
       null => await super.run(command, exits: exits),
     };
+    await after(command);
+    return ran;
   }
 }

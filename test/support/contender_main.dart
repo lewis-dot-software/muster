@@ -120,16 +120,14 @@ Map<String, Object?> _outcomes(Load load) => switch (load) {
 };
 
 /// A runner that tells the test each command before it runs it, and holds
-/// the first command [pause] names until the test says to go on, or to fail
-/// it as a command that exited 1.
+/// the first command [pause] names, before it runs or once it has run as the
+/// pause says, until the test says to go on, or to fail it as a command that
+/// exited 1.
 SpyRunner _gated(Map<String, String> variables, _Line line, Pause? pause) {
   final SpyRunner runner = .new(variables);
-  runner.before = (Command command) async {
-    line.say(
-      '${Said.ran.name} '
-      '${jsonEncode([command.executable.name, ...command.arguments])}',
-    );
-    if (pause case final Pause held when held.holds(command)) {
+  Future<void> hold(Command command, {required bool run}) async {
+    if (pause case final Pause held
+        when held.holds(command) && held.holdsOnceRun(command) == run) {
       pause = null;
       line.say(Said.paused.name);
       switch (await line.heard(.go, .fail)) {
@@ -141,7 +139,16 @@ SpyRunner _gated(Map<String, String> variables, _Line line, Pause? pause) {
           throw StateError('a paused command hears only go or fail');
       }
     }
+  }
+
+  runner.before = (Command command) async {
+    line.say(
+      '${Said.ran.name} '
+      '${jsonEncode([command.executable.name, ...command.arguments])}',
+    );
+    await hold(command, run: false);
   };
+  runner.after = (Command command) => hold(command, run: true);
   return runner;
 }
 

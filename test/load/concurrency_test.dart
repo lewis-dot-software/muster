@@ -93,7 +93,8 @@ void main() {
 
   for (final Apart apart in Apart.values) {
     test('a load killed as its ${apart.name} makes the clone leaves a '
-        'temporary clone the next load to make a clone removes', () async {
+        'temporary clone holding what git wrote, which the next load to make '
+        'a clone removes', () async {
       final Contender killed = await .loading(
         apart,
         root: consumerIn(temp).path,
@@ -104,7 +105,7 @@ void main() {
       await killed.told(.paused);
       await killed.kill();
       final Directory left = .new(cloneOf(temp, app).temporary.path);
-      expect(await left.exists(), isTrue);
+      expect(await left.list().isEmpty, isFalse);
       expect(
         await loaderIn(temp, .new(hermetic(temp))).load(),
         loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),

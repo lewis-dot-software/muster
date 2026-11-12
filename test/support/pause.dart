@@ -2,8 +2,9 @@ import 'package:muster/src/model/command.dart';
 
 /// The command a contender's load holds until its test's word.
 enum Pause {
-  /// The first command on the clone: its clone, or any git command named on
-  /// it by `--git-dir`.
+  /// The first command on the clone: its clone, held once git has written
+  /// the temporary clone and before it moves into place, or any git command
+  /// named on it by `--git-dir`.
   clone,
 
   /// The checkout's own make: the worktree's add, or its checkout at the
@@ -32,5 +33,12 @@ enum Pause {
       .git => false,
       .dart || .flutter => command.arguments.contains('get'),
     },
+  };
+
+  /// Whether [command], one this pause names, is held once it has run, in
+  /// place of before it runs.
+  bool holdsOnceRun(Command command) => switch (this) {
+    .clone => command.arguments.first == 'clone',
+    .place || .resolve => false,
   };
 }
