@@ -511,22 +511,36 @@ void main() {
     expect(await File(inCheckout('pubspec.lock')).readAsString(), lockText);
   });
 
-  test('a git repo around the consumer is never touched by a make', () async {
-    await runner.run((
-      executable: .git,
-      arguments: ['init', '--quiet', temp.path],
-    ));
-    final String tracked = p.join(temp.path, 'tracked');
-    await File(tracked).writeAsString('mine');
+  test('a git repo around the consumer is never touched by a make, nor taken '
+      'for a stamped checkout whose .git is gone, even where it stands at '
+      'the pin', () async {
     final GitCodebase codebase = codebaseOf(
       origin,
       await onMain(packageFiles('app')),
     );
-    await Directory(checkoutOf().path).create(recursive: true);
-    await File(checkoutOf().stamp.path).writeAsString('not a stamp');
+    await warm(codebase);
+    Future<String> outer(List<String> arguments) async => (await runner.run((
+      executable: .git,
+      arguments: ['-C', temp.path, ...arguments],
+    ))).stdout.trim();
+    await outer(['init', '--quiet']);
+    await outer([
+      'fetch',
+      '--quiet',
+      origin.directory.path,
+      codebase.commit.hash,
+    ]);
+    await outer(['checkout', '--quiet', '--detach', codebase.commit.hash]);
+    final String mine = p.join(temp.path, 'mine');
+    await File(mine).writeAsString('mine');
+    await File(inCheckout('.git')).delete();
+    runner.commands.clear();
     await checkouts.checkout(codebase, locks);
-    expect(await File(tracked).readAsString(), 'mine');
+    expect(madeAgain(), isTrue);
+    expect(await commonDir(), await cloneOf(codebase));
     expect(await head(), codebase.commit.hash);
+    expect(await outer(['rev-parse', 'HEAD']), codebase.commit.hash);
+    expect(await File(mine).readAsString(), 'mine');
   });
 
   test('a resolve that fails fails as CommandFailed, carrying the toolchain\'s '
