@@ -19,7 +19,9 @@ List<String> _named(LoadRefusal refusal) => switch (refusal) {
     manifest.path,
     ...switch (refusal) {
       NotYaml(:final String reason) => [reason],
-      UnknownKey(:final path) || MissingKey(:final path) => [path.dotted],
+      UnknownKey(:final path) ||
+      MissingKey(:final path) ||
+      MissingKind(:final path) => [path.dotted],
       BadValue(:final path, :final Written written) => [
         path.dotted,
         _writtenNamed(written),
@@ -31,6 +33,7 @@ List<String> _named(LoadRefusal refusal) => switch (refusal) {
     first.path,
     second.path,
   ],
+  HostedNotLoaded(:final manifest, :final name) => [manifest.path, name.name],
   NoWorkingDirectory(:final String reason) => [reason],
   NoCache(:final Os os) => [
     'MUSTER_CACHE',
@@ -115,6 +118,20 @@ void main() {
             '\n',
         r'"a\u0007b\u009fc": a key muster does not know',
       ),
+      'a codebase of neither kind': (
+        'codebases:\n  app:\n    toolchain: dart\n',
+        'codebases.app: neither git nor hosted',
+      ),
+      'a version pub cannot read': (
+        'codebases:\n  app:\n    hosted: args\n    version: ^2.7.0\n'
+            '    toolchain: dart\n',
+        'codebases.app.version: ^2.7.0 is not a version pub reads',
+      ),
+      'a resolution of neither word': (
+        'codebases:\n  app:\n    hosted: args\n    version: 2.7.0\n'
+            '    resolution: dependency\n    toolchain: dart\n',
+        'codebases.app.resolution: dependency is not alone or as-dependency',
+      ),
       'a key holding a tab, as it stands': (
         r'"a\tb": c'
             '\n',
@@ -161,6 +178,19 @@ void main() {
         r'no claim: muster knows no C library to lock a claim with on '
             r'"free\nbsd"',
       ],
+    );
+  });
+
+  test('a hosted codebase names its manifest and itself', () {
+    expect(
+      refusalText(
+        HostedNotLoaded(
+          .parse('/consumer/muster.yaml', .posix)!,
+          .parse('args')!,
+        ),
+      ),
+      '/consumer/muster.yaml: args: a hosted codebase, which no load takes '
+      'yet',
     );
   });
 

@@ -24,6 +24,9 @@ String refusalText(LoadRefusal refusal) => switch (refusal) {
   CodebaseNamedTwice(:final name, :final first, :final second) =>
     '${name.name}: named in ${_line(first.path)} and again in '
         '${_line(second.path)}',
+  HostedNotLoaded(:final manifest, :final name) =>
+    '${_line(manifest.path)}: ${name.name}: a hosted codebase, which no load '
+        'takes yet',
   NoWorkingDirectory(:final String reason) =>
     'no working directory: ${_line(reason)}',
   NoCache(:final Os os) => 'no cache: ${_cacheText(os)}',
@@ -44,6 +47,7 @@ String _manifestText(ManifestRefusal refusal) => switch (refusal) {
   NotYaml(:final String reason) => 'not YAML: ${_line(reason)}',
   UnknownKey(:final path) => _at(path, 'a key muster does not know'),
   MissingKey(:final path) => _at(path, 'missing'),
+  MissingKind(:final path) => _at(path, 'neither git nor hosted'),
   BadValue(:final path, :final Wanted wanted, :final Written written) => _at(
     path,
     '${_writtenText(written)} is not ${_wantedText(wanted)}',
@@ -69,6 +73,8 @@ String _wantedText(Wanted wanted) => switch (wanted) {
   .fullHash => "a commit's full hash",
   .toolchain => 'dart or flutter',
   .rootInsideRepo => 'a relative path inside its repo',
+  .version => 'a version pub reads',
+  .resolution => 'alone or as-dependency',
 };
 
 /// [text] as it stands, or quoted as a JSON string where it holds a control

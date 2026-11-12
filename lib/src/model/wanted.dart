@@ -3,7 +3,8 @@ enum Wanted {
   /// A mapping of keys to values.
   mapping,
 
-  /// A codebase's name, a pub package name: `[a-z][a-z0-9_]*`.
+  /// A pub package name, `[a-z][a-z0-9_]*`, as a codebase's name and a
+  /// hosted package's are.
   packageName,
 
   /// A git URL, neither empty nor opening on `-`.
@@ -17,4 +18,10 @@ enum Wanted {
 
   /// A relative path that stays inside its repo.
   rootInsideRepo,
+
+  /// A version pub reads, as `1.2.3` or `2.0.0-dev.1` is.
+  version,
+
+  /// A hosted package's resolution, `alone` or `as-dependency`.
+  resolution,
 }

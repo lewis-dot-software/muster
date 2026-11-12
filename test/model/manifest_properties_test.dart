@@ -1,5 +1,7 @@
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/lock_key.dart';
 import 'package:muster/src/model/manifest.dart';
 import 'package:muster/src/model/manifest_merge.dart';
@@ -7,6 +9,7 @@ import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/merge_manifests.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:muster/src/model/repo_root.dart';
+import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/wanted.dart';
@@ -17,14 +20,26 @@ import '../support/refusals.dart';
 /// The keys muster knows at a manifest's top.
 const Set<String> _topKeys = {'codebases'};
 
-/// The keys muster knows in a git codebase.
-const Set<String> _gitKeys = {'git', 'commit', 'root', 'toolchain'};
+/// The keys muster knows in a git codebase alone.
+const Set<String> _gitKeys = {'git', 'commit', 'root'};
+
+/// The keys muster knows in a hosted codebase alone.
+const Set<String> _hostedKeys = {'hosted', 'version', 'resolution'};
+
+/// The keys muster knows in a codebase of either kind.
+const Set<String> _codebaseKeys = {..._gitKeys, ..._hostedKeys, 'toolchain'};
 
 /// A key, a known one at either depth among them.
 final Generator<String> _anyKey = any.either(
-  any.choose([..._topKeys, ..._gitKeys]),
+  any.choose([..._topKeys, ..._codebaseKeys]),
   any.nonEmptyLowercaseLetters,
 );
+
+/// The keys of the kind [codebase] is not.
+Set<String> _otherKeys(Codebase codebase) => switch (codebase) {
+  Git() => _hostedKeys,
+  Hosted() => _gitKeys,
+};
 
 /// [key], or a key it is not where it is one of [known].
 String _unknownAmong(String key, Set<String> known) =>
@@ -45,8 +60,28 @@ enum _NameFault { lead, inner, empty }
 /// A spelling of a root other than its normal one, or its normal one.
 enum _Spelling { normal, dotSlash, doubleSlash, detour }
 
-/// A key a codebase lacks, or the `hosted` key it holds.
-enum _Gap { git, commit, toolchain, hosted }
+/// A key a git codebase lacks, or a hosted one does.
+enum _Gap { git, commit, gitToolchain, hosted, version, hostedToolchain }
+
+/// A hosted codebase's value its key cannot take.
+enum _HostedBad { package, version }
+
+/// How a version is made into one pub cannot read.
+enum _VersionFault {
+  short,
+  long,
+  prefix,
+  caret,
+  atLeast,
+  emptyPre,
+  badPre,
+  pad,
+  huge,
+  word,
+}
+
+/// How a codebase is made into one of both kinds or of neither.
+enum _KindFault { both, neither }
 
 /// A commit that is no full hash: a full one cut short, given a capital, given
 /// a character no hash holds, or run one digit long.
@@ -124,6 +159,64 @@ final Generator<(_Bad, String)> _bad = any
       }.map((String text) => (bad, text)),
     );
 
+/// A version pub cannot read: a canonical one cut to two parts, run to four,
+/// given a `v` or a constraint's operator before it, given an empty or a
+/// broken pre-release, padded, given a part past any integer, or a word.
+final Generator<String> _badVersion = any.combine3(
+  any.canonicalVersion,
+  any.choose(_VersionFault.values),
+  any.intInRange(0, 1 << 16),
+  (String version, _VersionFault fault, int at) {
+    final String core = version.split(RegExp('[-+]')).first;
+    return switch (fault) {
+      .short => core.substring(0, core.lastIndexOf('.')),
+      .long => '$core.${at % 10}',
+      .prefix => 'v$version',
+      .caret => '^$version',
+      .atLeast => '>=$version',
+      .emptyPre => '$core-',
+      .badPre => '$core-${'_! '[at % 3]}a',
+      .pad => at.isEven ? ' $version' : '$version ',
+      .huge => '${'9' * 20}.${core.substring(core.indexOf('.') + 1)}',
+      .word => ['any', '', 'latest', 'one.two.three'][at % 4],
+    };
+  },
+);
+
+/// A resolution that is neither `alone` nor `as-dependency`: one of each in
+/// capitals, capitalised, padded or in another case's spelling, the empty
+/// word, or any other word.
+final Generator<String> _badResolution = any.either(
+  any.choose(
+    {
+      for (final Resolution(:String word) in Resolution.values) ...[
+        word.toUpperCase(),
+        '${word[0].toUpperCase()}${word.substring(1)}',
+        '$word ',
+        ' $word',
+        word.replaceAll('-', '_'),
+        word.replaceAll('-', ''),
+      ],
+      'asDependency',
+      'dependency',
+      '',
+    }.where((String word) => Resolution.parse(word) == null).toList(),
+  ),
+  any.nonEmptyLetters.map(
+    (String word) => Resolution.parse(word) == null ? word : '${word}x',
+  ),
+);
+
+/// [version] with [noughts] more leading noughts on each of its first three
+/// parts, a spelling pub reads as the same version.
+String _respeltVersion(String version, int noughts) =>
+    version.replaceFirstMapped(
+      RegExp(r'^(\d+)\.(\d+)\.(\d+)'),
+      (Match m) => [
+        for (final int i in [1, 2, 3]) '${'0' * noughts}${m[i]}',
+      ].join('.'),
+    );
+
 /// [root] in [spelling], null where it is left out.
 String? _respelt(RepoRoot root, _Spelling spelling) => switch (spelling) {
   .normal => root == .top ? null : root.path,
@@ -133,28 +226,42 @@ String? _respelt(RepoRoot root, _Spelling spelling) => switch (spelling) {
 };
 
 /// The codebases [text] parses to, which must stand.
-List<GitCodebase> _parsed(String text) => switch (parseManifest(text)) {
+List<Codebase> _parsed(String text) => switch (parseManifest(text)) {
   ManifestParsed(:final Manifest manifest) => manifest.codebases,
   ManifestRefused(:final ManifestRefusal refusal) => throw TestFailure(
     'refused $refusal:\n$text',
   ),
 };
 
+/// [codebases] with [codebase] in at [where], in place of any other of its
+/// name, and the index it stands at.
+(List<Codebase>, int) _with(
+  List<Codebase> codebases,
+  Codebase codebase,
+  int where,
+) {
+  final List<Codebase> others = [
+    for (final Codebase other in codebases)
+      if (other.name != codebase.name) other,
+  ];
+  final int at = where % (others.length + 1);
+  return ([...others]..insert(at, codebase), at);
+}
+
 void main() {
   Glados(
     any.combine4(
-      any.gitCodebases(),
+      any.codebases(),
       any.intInRange(0, 1 << 16),
       any.intInRange(0, 1 << 16),
       _anyKey,
-      (List<GitCodebase> codebases, int where, int at, String key) =>
+      (List<Codebase> codebases, int where, int at, String key) =>
           (codebases, where, at, key),
     ),
   ).test("A key muster does not know, at any depth, refuses the load, naming "
       "that key's path from the top.", (input) {
-    final (List<GitCodebase> codebases, int where, int at, String drawn) =
-        input;
-    final List<Entry> entries = codebases.map(entryOf).toList();
+    final (List<Codebase> codebases, int where, int at, String drawn) = input;
+    final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final int target = where % (entries.length + 1);
     if (target == entries.length) {
       final String key = _unknownAmong(drawn, _topKeys);
@@ -164,7 +271,7 @@ void main() {
       );
       return;
     }
-    final String key = _unknownAmong(drawn, _gitKeys);
+    final String key = _unknownAmong(drawn, _codebaseKeys);
     final (String name, List<Field> fields) = entries[target];
     entries[target] = (
       name,
@@ -225,56 +332,275 @@ void main() {
   });
 
   Glados(
-    any.combine3(
-      any.someGitCodebases(),
+    any.combine5(
+      any.codebases(),
+      any.hostedCodebase(),
       any.intInRange(0, 1 << 16),
-      any.choose(_Gap.values),
-      (List<GitCodebase> codebases, int where, _Gap gap) =>
-          (codebases, where, gap),
+      any.intInRange(0, 3),
+      any.either(
+        any
+            .choose(_HostedBad.values)
+            .bind(
+              (_HostedBad bad) => switch (bad) {
+                .package => _badName,
+                .version => _badVersion,
+              }.map((String text) => (bad, text)),
+            ),
+        any.always<(_HostedBad, String)?>(null),
+      ),
+      (
+        List<Codebase> codebases,
+        HostedCodebase codebase,
+        int where,
+        int noughts,
+        (_HostedBad, String)? bad,
+      ) => (codebases, codebase, where, noughts, bad),
     ),
-  ).test("A codebase missing `git`, `commit` or `toolchain` refuses the load, "
-      "and so does a `hosted` key until `v0.2.0`.", (input) {
-    final (List<GitCodebase> codebases, int where, _Gap gap) = input;
-    final List<Entry> entries = codebases.map(entryOf).toList();
-    final int target = where % entries.length;
+  ).test("A hosted codebase's `hosted` is a pub package name and its "
+      "`version` a version pub reads, and any other value refuses the load, "
+      "naming its key's path.", (input) {
+    final (
+      List<Codebase> others,
+      HostedCodebase codebase,
+      int where,
+      int noughts,
+      (_HostedBad, String)? bad,
+    ) = input;
+    final (List<Codebase> codebases, int target) = _with(
+      others,
+      Hosted(codebase),
+      where,
+    );
+    final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final (String name, List<Field> fields) = entries[target];
-    final String key = gap.name;
-    switch (gap) {
-      case .hosted:
-        entries[target] = (name, [...fields, (key, 'args')]);
-        expect(
-          parseManifest(renderManifest(entries)),
-          unknownKey(['codebases', name, key]),
-        );
-      case .git || .commit || .toolchain:
+    switch (bad) {
+      case null:
         entries[target] = (
           name,
           [
             for (final Field field in fields)
-              if (field.$1 != key) field,
+              field.$1 == 'version'
+                  ? ('version', _respeltVersion(field.$2, noughts))
+                  : field,
+          ],
+        );
+        expect(_parsed(renderManifest(entries)), codebases);
+      case (final _HostedBad which, final String text):
+        final (String key, Wanted wanted) = switch (which) {
+          .package => ('hosted', .packageName),
+          .version => ('version', .version),
+        };
+        entries[target] = (
+          name,
+          [
+            for (final Field field in fields)
+              field.$1 == key ? (key, text) : field,
           ],
         );
         expect(
           parseManifest(renderManifest(entries)),
-          missingKey(['codebases', name, key]),
+          badValue(['codebases', name, key], wanted),
         );
     }
   });
 
   Glados(
-    any.list(
-      any.gitCodebases(names: any.choose(['a', 'b', 'c', 'd', 'e', 'f'])),
+    any.combine4(
+      any.codebases(),
+      any.hostedCodebase(),
+      any.intInRange(0, 1 << 16),
+      any.either(_badResolution, any.always<String?>(null)),
+      (
+        List<Codebase> codebases,
+        HostedCodebase codebase,
+        int where,
+        String? bad,
+      ) => (codebases, codebase, where, bad),
     ),
+  ).test("A `resolution` left out reads as `alone`, and any value but "
+      "`alone` or `as-dependency` refuses.", (input) {
+    final (
+      List<Codebase> others,
+      HostedCodebase codebase,
+      int where,
+      String? bad,
+    ) = input;
+    final (List<Codebase> codebases, int target) = _with(
+      others,
+      Hosted(codebase),
+      where,
+    );
+    final List<Entry> entries = codebases.map(anyEntryOf).toList();
+    final (String name, List<Field> fields) = entries[target];
+    final List<Field> rest = [
+      for (final Field field in fields)
+        if (field.$1 != 'resolution') field,
+    ];
+    switch (bad) {
+      case null:
+        entries[target] = (name, rest);
+        expect(
+          _parsed(renderManifest(entries))[target],
+          Hosted((
+            name: codebase.name,
+            package: codebase.package,
+            version: codebase.version,
+            resolution: .alone,
+            toolchain: codebase.toolchain,
+          )),
+        );
+      case final String text:
+        entries[target] = (name, [...rest, ('resolution', text)]);
+        expect(
+          parseManifest(renderManifest(entries)),
+          badValue(['codebases', name, 'resolution'], .resolution),
+        );
+    }
+  });
+
+  Glados(
+    any.combine5(
+      any.someCodebases(),
+      any.intInRange(0, 1 << 16),
+      any.choose(_KindFault.values),
+      any.nonEmptyList(any.intInRange(0, 1 << 16)),
+      any.bool,
+      (
+        List<Codebase> codebases,
+        int where,
+        _KindFault fault,
+        List<int> others,
+        bool toolchain,
+      ) => (codebases, where, fault, others, toolchain),
+    ),
+  ).test("A codebase holding a key of both kinds, or of neither, refuses the "
+      "load.", (input) {
+    final (
+      List<Codebase> codebases,
+      int where,
+      _KindFault fault,
+      List<int> draws,
+      bool toolchain,
+    ) = input;
+    final List<Entry> entries = codebases.map(anyEntryOf).toList();
+    final int target = where % entries.length;
+    final Codebase codebase = codebases[target];
+    final (String name, List<Field> fields) = entries[target];
+    switch (fault) {
+      case .neither:
+        entries[target] = (
+          name,
+          [
+            for (final Field field in fields)
+              if (toolchain && field.$1 == 'toolchain') field,
+          ],
+        );
+        expect(
+          parseManifest(renderManifest(entries)),
+          refused(
+            isA<MissingKind>().having(
+              (MissingKind r) => r.path,
+              'path',
+              pathOf(['codebases', name]),
+            ),
+          ),
+        );
+      case .both:
+        final List<String> other = _otherKeys(codebase).toList();
+        final List<Field> mixed = [...fields];
+        final Set<String> inserted = {};
+        for (final int draw in draws) {
+          if (inserted.add(other[draw % other.length])) {
+            mixed.insert(draw % (mixed.length + 1), (
+              other[draw % other.length],
+              'x',
+            ));
+          }
+        }
+        // The first key of a kind's own sets the codebase's kind, and the
+        // first of the other kind's is the one refused.
+        final String first = mixed
+            .firstWhere((Field field) => field.$1 != 'toolchain')
+            .$1;
+        final Set<String> own = _gitKeys.contains(first)
+            ? _gitKeys
+            : _hostedKeys;
+        final String refusedKey = mixed
+            .firstWhere(
+              (Field field) =>
+                  field.$1 != 'toolchain' && !own.contains(field.$1),
+            )
+            .$1;
+        entries[target] = (name, mixed);
+        expect(
+          parseManifest(renderManifest(entries)),
+          unknownKey(['codebases', name, refusedKey]),
+        );
+    }
+  });
+
+  Glados(
+    any.combine3(
+      any.someCodebases(),
+      any.intInRange(0, 1 << 16),
+      any.choose(_Gap.values),
+      (List<Codebase> codebases, int where, _Gap gap) =>
+          (codebases, where, gap),
+    ),
+  ).test("A git codebase missing `git`, `commit` or `toolchain`, or a hosted "
+      "one missing `hosted`, `version` or `toolchain`, refuses the load, "
+      "naming that key's path.", (input) {
+    final (List<Codebase> drawn, int where, _Gap gap) = input;
+    final int at = where % drawn.length;
+    final Codebase target = switch ((gap, drawn[at])) {
+      (.git || .commit || .gitToolchain, Git() && final Codebase git) => git,
+      (
+        .hosted || .version || .hostedToolchain,
+        Hosted() && final Codebase hosted,
+      ) =>
+        hosted,
+      (.git || .commit || .gitToolchain, final Codebase other) => Git(
+        codebase(other.name.name, '/srv/a.git', 'ab' * 20, '.', .dart),
+      ),
+      (.hosted || .version || .hostedToolchain, final Codebase other) => Hosted(
+        hosted(other.name.name, 'args', '2.7.0', .alone, .dart),
+      ),
+    };
+    final List<Codebase> codebases = [...drawn]..[at] = target;
+    final List<Entry> entries = codebases.map(anyEntryOf).toList();
+    final (String name, List<Field> fields) = entries[at];
+    final String key = switch (gap) {
+      .git => 'git',
+      .commit => 'commit',
+      .hosted => 'hosted',
+      .version => 'version',
+      .gitToolchain || .hostedToolchain => 'toolchain',
+    };
+    entries[at] = (
+      name,
+      [
+        for (final Field field in fields)
+          if (field.$1 != key) field,
+      ],
+    );
+    expect(
+      parseManifest(renderManifest(entries)),
+      missingKey(['codebases', name, key]),
+    );
+  });
+
+  Glados(
+    any.list(any.codebases(names: any.choose(['a', 'b', 'c', 'd', 'e', 'f']))),
   ).test("A parse gives the codebases back in the manifests' order, each "
       "under its own name, and a name met twice across the manifests of one "
-      "load refuses it.", (List<List<GitCodebase>> manifests) {
+      "load refuses it.", (List<List<Codebase>> manifests) {
     final ManifestMerge merge = mergeManifests([
-      for (final List<GitCodebase> codebases in manifests)
-        .new(_parsed(renderManifest(codebases.map(entryOf).toList()))),
+      for (final List<Codebase> codebases in manifests)
+        .new(_parsed(renderManifest(codebases.map(anyEntryOf).toList()))),
     ]);
     final Map<String, int> seen = {};
-    for (final (int index, List<GitCodebase> codebases) in manifests.indexed) {
-      for (final GitCodebase codebase in codebases) {
+    for (final (int index, List<Codebase> codebases) in manifests.indexed) {
+      for (final Codebase codebase in codebases) {
         if (seen[codebase.name.name] case final int first) {
           expect(
             merge,
@@ -291,9 +617,8 @@ void main() {
     expect(
       merge,
       isA<Merged>().having((m) => m.codebases, 'codebases', [
-        for (final (int index, List<GitCodebase> codebases)
-            in manifests.indexed)
-          for (final GitCodebase codebase in codebases)
+        for (final (int index, List<Codebase> codebases) in manifests.indexed)
+          for (final Codebase codebase in codebases)
             (codebase: codebase, manifest: index),
       ]),
     );
@@ -330,7 +655,7 @@ void main() {
       bool reversed,
     ) = input;
     expect(
-      LockKey.of(a) == LockKey.of(b),
+      LockKey.of(Git(a)) == LockKey.of(Git(b)),
       a.url == b.url &&
           a.commit == b.commit &&
           a.root == b.root &&
@@ -345,13 +670,69 @@ void main() {
       if (root != null) ('root', root),
       ('toolchain', a.toolchain.name),
     ];
-    final List<GitCodebase> parsed = _parsed(
+    final List<Codebase> parsed = _parsed(
       renderManifest([
         for (final GitCodebase other in others)
           if (other.name.name != renamed) entryOf(other),
         (renamed, reversed ? fields.reversed.toList() : fields),
       ]),
     );
-    expect(LockKey.of(parsed.last), LockKey.of(a));
+    expect(LockKey.of(parsed.last), LockKey.of(Git(a)));
+  });
+
+  final Generator<HostedCodebase> nearbyHosted = any.hostedCodebase(
+    packages: any.choose(['args', 'path']),
+    versions: any.choose(['1.0.0', '1.0.1', '1.0.0-dev.1']),
+  );
+  Glados(
+    any.combine5(
+      nearbyHosted,
+      nearbyHosted,
+      any.gitCodebase(),
+      any.intInRange(0, 3),
+      any.bool,
+      (
+        HostedCodebase a,
+        HostedCodebase b,
+        GitCodebase git,
+        int noughts,
+        bool reversed,
+      ) => (a, b, git, noughts, reversed),
+    ),
+  ).test("Two hosted codebases' kept locks share a key exactly when their "
+      "package, version, resolution and toolchain are the same, and never "
+      "share one with a git codebase.", (input) {
+    final (
+      HostedCodebase a,
+      HostedCodebase b,
+      GitCodebase git,
+      int noughts,
+      bool reversed,
+    ) = input;
+    expect(
+      LockKey.of(Hosted(a)) == LockKey.of(Hosted(b)),
+      a.package == b.package &&
+          a.version == b.version &&
+          a.resolution == b.resolution &&
+          a.toolchain == b.toolchain,
+    );
+    expect(LockKey.of(Hosted(a)), isNot(LockKey.of(Git(git))));
+
+    final (String _, List<Field> fields) = hostedEntryOf(
+      a,
+      resolutionOut: true,
+    );
+    final List<Field> respelt = [
+      for (final Field field in fields)
+        field.$1 == 'version'
+            ? ('version', _respeltVersion(field.$2, noughts))
+            : field,
+    ];
+    final List<Codebase> parsed = _parsed(
+      renderManifest([
+        ('renamed', reversed ? respelt.reversed.toList() : respelt),
+      ]),
+    );
+    expect(LockKey.of(parsed.single), LockKey.of(Hosted(a)));
   });
 }

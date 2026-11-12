@@ -22,7 +22,8 @@ void main() {
           BadValue(:final written) => written,
           NotYaml() ||
           UnknownKey() ||
-          MissingKey() => fail('a bad value sample that is $refusal'),
+          MissingKey() ||
+          MissingKind() => fail('a bad value sample that is $refusal'),
         }),
     }, WrittenCase.values.toSet());
   });

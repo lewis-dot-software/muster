@@ -44,6 +44,7 @@ export 'src/model/load_refusal.dart'
         ManifestUnreadable,
         ManifestInvalid,
         CodebaseNamedTwice,
+        HostedNotLoaded,
         NoWorkingDirectory,
         NoCache,
         NoClaim;
@@ -53,7 +54,13 @@ export 'src/model/move.dart' show Move, Moved, MoveFailed;
 export 'src/model/os.dart' show Os;
 export 'src/model/package_config_path.dart' show PackageConfigPath;
 export 'src/model/manifest_refusal.dart'
-    show ManifestRefusal, NotYaml, UnknownKey, MissingKey, BadValue;
+    show
+        ManifestRefusal,
+        NotYaml,
+        UnknownKey,
+        MissingKey,
+        MissingKind,
+        BadValue;
 export 'src/model/package_path.dart' show PackagePath;
 export 'src/model/sdk_version.dart' show SdkVersion;
 export 'src/model/wanted.dart' show Wanted;

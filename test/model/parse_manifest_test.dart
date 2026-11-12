@@ -1,3 +1,5 @@
+import 'package:muster/src/model/codebase.dart';
+import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/parse_manifest.dart';
@@ -29,6 +31,19 @@ Map<String, String> _fields({
   ...change,
 }..removeWhere((String key, String _) => drop.contains(key));
 
+/// The fields of a hosted codebase that stands, with [change] laid over them
+/// and each key in [drop] left out.
+Map<String, String> _hostedFields({
+  Map<String, String> change = const {},
+  Set<String> drop = const {},
+}) => {
+  'hosted': 'args',
+  'version': '2.7.0',
+  'resolution': 'alone',
+  'toolchain': 'dart',
+  ...change,
+}..removeWhere((String key, String _) => drop.contains(key));
+
 void main() {
   test('a manifest that stands comes back as its codebases, in its order', () {
     final ManifestParse parse = parseManifest('''
@@ -42,18 +57,28 @@ codebases:
     commit: $_sha1
     root: ./pkgs//app/
     toolchain: flutter
+  analyzer:
+    hosted: analyzer
+    version: 007.1.0-dev.01+02
+    resolution: as-dependency
+    toolchain: dart
 ''');
 
     expect(
       parse,
       isA<ManifestParsed>().having((p) => p.manifest.codebases, 'codebases', [
-        codebase('zed', '/srv/zed.git', _sha256, '.', .dart),
-        codebase(
-          'app',
-          'https://example.com/app.git',
-          _sha1,
-          'pkgs/app',
-          .flutter,
+        Git(codebase('zed', '/srv/zed.git', _sha256, '.', .dart)),
+        Git(
+          codebase(
+            'app',
+            'https://example.com/app.git',
+            _sha1,
+            'pkgs/app',
+            .flutter,
+          ),
+        ),
+        Hosted(
+          hosted('analyzer', 'analyzer', '7.1.0-dev.1+2', .asDependency, .dart),
         ),
       ]),
     );
@@ -69,7 +94,7 @@ codebases:
       isA<ManifestParsed>().having(
         (p) => p.manifest.codebases.single,
         'codebase',
-        codebase('app', '/srv/a.git', digits, '1', .dart),
+        Git(codebase('app', '/srv/a.git', digits, '1', .dart)),
       ),
     );
   });
@@ -118,13 +143,38 @@ codebases:
     });
 
     for (final String key in ['hosted', 'version', 'resolution']) {
-      test('a hosted codebase\'s `$key`', () {
+      test('a hosted codebase\'s `$key` in a git codebase', () {
         expect(
           parseManifest(_one(_fields(change: {key: 'x'}))),
           unknownKey(['codebases', 'app', key]),
         );
       });
     }
+
+    for (final String key in ['git', 'commit', 'root']) {
+      test('a git codebase\'s `$key` in a hosted codebase', () {
+        expect(
+          parseManifest(_one(_hostedFields(change: {key: 'x'}))),
+          unknownKey(['codebases', 'app', key]),
+        );
+      });
+    }
+
+    test(
+      'a key of the other kind\'s, after the first key of a kind\'s own',
+      () {
+        expect(
+          parseManifest(
+            _one({
+              'toolchain': 'dart',
+              'version': '1.0.0',
+              'git': '/srv/a.git',
+            }),
+          ),
+          unknownKey(['codebases', 'app', 'git']),
+        );
+      },
+    );
 
     test('a key that is no string', () {
       expect(parseManifest('codebases: {}\n1: x'), unknownKey(['1']));
@@ -144,13 +194,56 @@ codebases:
         );
       });
     }
+
+    for (final String key in ['hosted', 'version', 'toolchain']) {
+      test('a hosted codebase\'s `$key`', () {
+        expect(
+          parseManifest(_one(_hostedFields(drop: {key}))),
+          missingKey(['codebases', 'app', key]),
+        );
+      });
+    }
+  });
+
+  group('a codebase of neither kind refuses, named by its path:', () {
+    for (final (String what, String text) in [
+      ('one of no keys', 'codebases:\n  app: {}'),
+      ('one of a toolchain alone', 'codebases:\n  app:\n    toolchain: dart'),
+    ]) {
+      test(what, () {
+        expect(
+          parseManifest(text),
+          refused(
+            isA<MissingKind>().having(
+              (MissingKind r) => r.path,
+              'path',
+              pathOf(['codebases', 'app']),
+            ),
+          ),
+        );
+      });
+    }
+  });
+
+  test('a resolution left out is alone', () {
+    expect(
+      parseManifest(_one(_hostedFields(drop: {'resolution'}))),
+      isA<ManifestParsed>().having(
+        (p) => p.manifest.codebases.single,
+        'codebase',
+        Hosted(hosted('app', 'args', '2.7.0', .alone, .dart)),
+      ),
+    );
   });
 
   test('a root left out is the repo\'s top', () {
     expect(
       parseManifest(_one(_fields(drop: {'root'}))),
       isA<ManifestParsed>().having(
-        (p) => p.manifest.codebases.single.root.path,
+        (p) => switch (p.manifest.codebases.single) {
+          Git(:final GitCodebase codebase) => codebase.root.path,
+          Hosted() => null,
+        },
         'root',
         '.',
       ),
@@ -190,6 +283,28 @@ codebases:
       test('`$key` of ${value.isEmpty ? 'nothing' : '"$value"'}', () {
         expect(
           parseManifest(_one(_fields(change: {key: value}))),
+          badValue(['codebases', 'app', key], wanted),
+        );
+      });
+    }
+
+    for (final (String key, String value, Wanted wanted) in [
+      ('hosted', 'Args', .packageName),
+      ('hosted', 'my-args', .packageName),
+      ('version', '2.7', .version),
+      ('version', '^2.7.0', .version),
+      ('version', 'v2.7.0', .version),
+      ('version', '2.7.0-', .version),
+      ('version', 'any', .version),
+      ('version', '${'9' * 20}.0.0', .version),
+      ('resolution', 'dependency', .resolution),
+      ('resolution', 'as_dependency', .resolution),
+      ('resolution', 'Alone', .resolution),
+      ('toolchain', 'go', .toolchain),
+    ]) {
+      test('a hosted codebase\'s `$key` of "$value"', () {
+        expect(
+          parseManifest(_one(_hostedFields(change: {key: value}))),
           badValue(['codebases', 'app', key], wanted),
         );
       });

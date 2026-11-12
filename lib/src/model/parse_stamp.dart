@@ -36,7 +36,7 @@ Stamp? parseStamp(String text) {
           GitUrl.parse(git),
           Commit.parse(commit),
           RepoRoot.parse(root),
-          _toolchains[toolchain],
+          Toolchain.parse(toolchain),
           SdkVersion.parse(sdk),
         )
         case (
@@ -66,7 +66,6 @@ const int _stampKeys = 6;
 /// How many keys a stamped package's object holds.
 const int _packageKeys = 3;
 
-final Map<String, Toolchain> _toolchains = Toolchain.values.asNameMap();
 final Map<String, Package> _packageNames = Package.values.asNameMap();
 final Map<String, LockSource> _sources = LockSource.values.asNameMap();
 

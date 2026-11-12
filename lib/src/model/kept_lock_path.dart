@@ -1,3 +1,4 @@
+import 'codebase.dart';
 import 'git_codebase.dart';
 import 'lock_key.dart';
 import 'locks_directory.dart';
@@ -21,7 +22,7 @@ extension type const KeptLockPath._(String path) {
     return ._(
       locks.os.paths.join(
         locks.path,
-        '${codebase.name.name}-${LockKey.of(codebase).hex}$suffix$_extension',
+        '${codebase.name.name}-${LockKey.of(Git(codebase)).hex}$suffix$_extension',
       ),
     );
   }

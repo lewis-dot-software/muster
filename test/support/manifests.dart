@@ -1,9 +1,12 @@
 import 'dart:convert';
 
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/codebase_name.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/key_path.dart';
+import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/toolchain.dart';
 
 /// One key and its value, as a manifest's text writes them.
@@ -51,18 +54,28 @@ Entry entryOf(GitCodebase codebase) => (
   ],
 );
 
+/// [codebase] as a manifest writes it, its resolution left out where it is
+/// `alone` and [resolutionOut] is set.
+Entry hostedEntryOf(HostedCodebase codebase, {bool resolutionOut = false}) => (
+  codebase.name.name,
+  [
+    ('hosted', codebase.package.name),
+    ('version', codebase.version.version),
+    if (!resolutionOut || codebase.resolution != .alone)
+      ('resolution', codebase.resolution.word),
+    ('toolchain', codebase.toolchain.name),
+  ],
+);
+
+/// [codebase] as a manifest writes it, of either kind.
+Entry anyEntryOf(Codebase codebase) => switch (codebase) {
+  Git(codebase: final GitCodebase git) => entryOf(git),
+  Hosted(codebase: final HostedCodebase hosted) => hostedEntryOf(hosted),
+};
+
 /// The path of [keys], each a key below the last, from the top.
 KeyPath pathOf(List<String> keys) =>
     keys.fold(.top, (KeyPath path, String key) => path.child(key));
-
-/// [codebases] with every codebase after the first of its name dropped.
-List<GitCodebase> uniqueByName(List<GitCodebase> codebases) {
-  final Set<CodebaseName> seen = {};
-  return [
-    for (final GitCodebase codebase in codebases)
-      if (seen.add(codebase.name)) codebase,
-  ];
-}
 
 /// A codebase of the parts given, each of which must parse.
 GitCodebase codebase(
@@ -76,6 +89,21 @@ GitCodebase codebase(
   url: .parse(url)!,
   commit: .parse(commit)!,
   root: .parse(root)!,
+  toolchain: toolchain,
+);
+
+/// A hosted codebase of the parts given, each of which must parse.
+HostedCodebase hosted(
+  String name,
+  String package,
+  String version,
+  Resolution resolution,
+  Toolchain toolchain,
+) => (
+  name: .parse(name)!,
+  package: .parse(package)!,
+  version: .parse(version)!,
+  resolution: resolution,
   toolchain: toolchain,
 );
 
@@ -127,11 +155,87 @@ extension ManifestAnys on Any {
 
   /// A manifest's codebases, each name once.
   Generator<List<GitCodebase>> gitCodebases({Generator<String>? names}) =>
-      list(gitCodebase(names: names)).map(uniqueByName);
+      list(gitCodebase(names: names)).map(_uniqueGit);
 
   /// A manifest's codebases, each name once, at least one of them.
   Generator<List<GitCodebase>> someGitCodebases() =>
-      nonEmptyList(gitCodebase()).map(uniqueByName);
+      nonEmptyList(gitCodebase()).map(_uniqueGit);
+
+  /// A version pub reads, in its canonical spelling: a `major.minor.patch`,
+  /// with a pre-release and a build where they are drawn.
+  Generator<String> get canonicalVersion => combine5(
+    intInRange(0, 1000),
+    intInRange(0, 1000),
+    intInRange(0, 1000),
+    _identifiers,
+    _identifiers,
+    (int major, int minor, int patch, String pre, String build) => [
+      '$major.$minor.$patch',
+      if (pre.isNotEmpty) '-$pre',
+      if (build.isNotEmpty) '+$build',
+    ].join(),
+  );
+
+  /// Up to three dot-joined identifiers, each digits with no leading nought
+  /// or letters and `-`, or none.
+  Generator<String> get _identifiers => listWithLengthInRange(
+    0,
+    4,
+    either(
+      intInRange(0, 1000).map((int n) => '$n'),
+      combine2(
+        choose(_lowercase.split('')),
+        stringOf('$_lowercase-'),
+        (String head, String tail) => '$head$tail',
+      ),
+    ),
+  ).map((List<String> parts) => parts.join('.'));
+
+  /// A hosted codebase, its parts drawn from [names], [packages] and
+  /// [versions].
+  Generator<HostedCodebase> hostedCodebase({
+    Generator<String>? names,
+    Generator<String>? packages,
+    Generator<String>? versions,
+  }) => combine5(
+    names ?? packageName,
+    packages ?? packageName,
+    versions ?? canonicalVersion,
+    choose(Resolution.values),
+    choose(Toolchain.values),
+    hosted,
+  );
+
+  /// A codebase of either kind, its name drawn from [names].
+  Generator<Codebase> anyCodebase({Generator<String>? names}) => either(
+    gitCodebase(names: names).map(Git.new),
+    hostedCodebase(names: names).map(Hosted.new),
+  );
+
+  /// A manifest's codebases of either kind, each name once.
+  Generator<List<Codebase>> codebases({Generator<String>? names}) =>
+      list(anyCodebase(names: names)).map(_uniqueCodebases);
+
+  /// A manifest's codebases of either kind, each name once, at least one of
+  /// them.
+  Generator<List<Codebase>> someCodebases() =>
+      nonEmptyList(anyCodebase()).map(_uniqueCodebases);
 }
+
+/// [codebases] with every codebase after the first whose [name] is its
+/// dropped.
+List<T> _uniqueBy<T>(List<T> codebases, CodebaseName Function(T) name) {
+  final Set<CodebaseName> seen = {};
+  return [
+    for (final T codebase in codebases)
+      if (seen.add(name(codebase))) codebase,
+  ];
+}
+
+List<GitCodebase> _uniqueGit(List<GitCodebase> codebases) =>
+    _uniqueBy(codebases, (GitCodebase codebase) => codebase.name);
+
+List<Codebase> _uniqueCodebases(List<Codebase> codebases) =>
+    _uniqueBy(codebases, (Codebase codebase) => codebase.name);
 
 String _joined(List<String> parts) => parts.join();

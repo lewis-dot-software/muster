@@ -1,5 +1,5 @@
 import 'codebase_name.dart';
-import 'git_codebase.dart';
+import 'codebase.dart';
 import 'manifest.dart';
 import 'manifest_merge.dart';
 import 'named_codebase.dart';
@@ -11,7 +11,7 @@ ManifestMerge mergeManifests(List<Manifest> manifests) {
   final Map<CodebaseName, int> seen = {};
   final List<NamedCodebase> codebases = [];
   for (final (int index, Manifest manifest) in manifests.indexed) {
-    for (final GitCodebase codebase in manifest.codebases) {
+    for (final Codebase codebase in manifest.codebases) {
       if (seen[codebase.name] case final int first) {
         return NamedTwice(codebase.name, first: first, second: index);
       }

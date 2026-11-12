@@ -10,6 +10,11 @@ enum Toolchain {
   /// The Flutter SDK's `flutter`.
   flutter;
 
+  /// The toolchain [text] names, or null where it names none.
+  static Toolchain? parse(String text) => _byName[text];
+
+  static final Map<String, Toolchain> _byName = values.asNameMap();
+
   /// The executable the toolchain runs.
   Executable get executable => switch (this) {
     .dart => .dart,

@@ -37,6 +37,15 @@ final class MissingKey extends ManifestRefusal {
   final KeyPath path;
 }
 
+/// A codebase holding no key of either kind's, so neither git nor hosted.
+final class MissingKind extends ManifestRefusal {
+  /// The refusal of the codebase at [path].
+  const MissingKind(this.path);
+
+  /// The codebase's path from the top.
+  final KeyPath path;
+}
+
 /// A value its key cannot take, or a codebase's name that is no pub package
 /// name.
 final class BadValue extends ManifestRefusal {

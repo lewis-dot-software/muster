@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../model/cache_directory.dart';
+import '../model/codebase.dart';
 import '../model/checkout.dart';
 import '../model/consumer_root.dart';
 import '../model/environment.dart';
@@ -76,7 +77,8 @@ class Loader implements Loads {
   /// Refuses, with no process started and no file written, on the first
   /// fault the manifests meet: a manifest whose file name does not end
   /// `.yaml`, one named that is missing, unreadable or refuses to parse, a
-  /// load with no manifest at all, a name met twice, or no cache.
+  /// load with no manifest at all, a name met twice, a hosted codebase, or no
+  /// cache.
   ///
   /// Every expected failure a codebase meets is its outcome, and the load
   /// goes on to the next. Another load acting on a codebase's clone or
@@ -252,10 +254,21 @@ class Loader implements Loads {
     if (manifests.isEmpty) {
       throw const _Refusal(NoManifest());
     }
-    final List<NamedCodebase> codebases;
+    final List<_NamedGit> codebases;
     switch (mergeManifests(manifests)) {
       case Merged(codebases: final List<NamedCodebase> merged):
-        codebases = merged;
+        codebases = [
+          for (final (:Codebase codebase, :int manifest) in merged)
+            switch (codebase) {
+              Git(codebase: final GitCodebase git) => (
+                codebase: git,
+                manifest: manifest,
+              ),
+              Hosted(:final CodebaseName name) => throw _Refusal(
+                HostedNotLoaded(paths[manifest], name),
+              ),
+            },
+        ];
       case NamedTwice(
         :final CodebaseName name,
         :final int first,
@@ -290,10 +303,14 @@ class Loader implements Loads {
 /// [clones] in the cache, and the [checkouts] that bring them to their pins.
 typedef _Read = ({
   List<ManifestPath> manifests,
-  List<NamedCodebase> codebases,
+  List<_NamedGit> codebases,
   Cache clones,
   Checkouts checkouts,
 });
+
+/// A git codebase beside the index of the manifest that named it among the
+/// load's.
+typedef _NamedGit = ({GitCodebase codebase, int manifest});
 
 /// A run refused for [reason] before any process or file write.
 final class _Refusal implements Exception {

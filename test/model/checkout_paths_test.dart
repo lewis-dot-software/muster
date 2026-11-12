@@ -1,5 +1,6 @@
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase_name.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/lock_key.dart';
@@ -96,7 +97,7 @@ void main() {
       '.',
       .dart,
     );
-    final String key = LockKey.of(pinned).hex;
+    final String key = LockKey.of(Git(pinned)).hex;
     expect(
       KeptLockPath.of(locks, pinned, .root).path,
       '/c/muster_locks/app-$key.lock',
@@ -122,7 +123,7 @@ void main() {
     expect(
       KeptLockPath.of(locks, pinned, .example).path,
       r'C:\c\muster_locks\app-'
-      '${LockKey.of(pinned).hex}.example.lock',
+      '${LockKey.of(Git(pinned)).hex}.example.lock',
     );
   });
 }

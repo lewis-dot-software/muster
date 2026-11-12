@@ -1,29 +1,40 @@
 import 'package:yaml/yaml.dart';
 
+import 'codebase.dart';
 import 'codebase_name.dart';
 import 'commit.dart';
-import 'git_codebase.dart';
 import 'git_url.dart';
 import 'key_path.dart';
 import 'manifest.dart';
 import 'manifest_parse.dart';
 import 'manifest_refusal.dart';
+import 'package_name.dart';
+import 'package_version.dart';
 import 'repo_root.dart';
+import 'resolution.dart';
 import 'toolchain.dart';
 import 'wanted.dart';
 import 'written.dart';
 
 /// Reads a manifest's [text] into its codebases, or refuses it on the first
 /// fault met: the top's unknown keys, then `codebases`, then each codebase in
-/// the text's order, its name, its unknown keys, then `git`, `commit`, `root`
-/// and `toolchain` in turn, each found and weighed before the next.
+/// the text's order, its name, then its keys, then its kind's keys in turn,
+/// each found and weighed before the next: `git`, `commit`, `root` and
+/// `toolchain` for a git codebase, and `hosted`, `version`, `resolution` and
+/// `toolchain` for a hosted one.
+///
+/// A codebase's kind is the one its first key of a kind's own names, and a
+/// key of the other kind's is one muster does not know. A codebase holding no
+/// key of either kind's refuses.
 ///
 /// A plain value YAML reads as a number or a bool is taken as its text, so an
 /// unquoted hash of digits alone is still a hash.
 ///
 /// The text is one YAML mapping whose one key, `codebases`, maps each
-/// codebase's name to its `git` URL, its `commit`, its `root`, `.` where it is
-/// left out, and its `toolchain`.
+/// codebase's name to its fields: a git codebase's `git` URL, its `commit`,
+/// its `root`, `.` where it is left out, and its `toolchain`, or a hosted
+/// one's `hosted` package, its `version`, its `resolution`, `alone` where it
+/// is left out, and its `toolchain`.
 ManifestParse parseManifest(String text) {
   try {
     return ManifestParsed(_manifest(_document(text)));
@@ -35,12 +46,30 @@ ManifestParse parseManifest(String text) {
 /// The keys a manifest's top holds.
 enum _TopKey { codebases }
 
-/// The keys a git codebase holds.
-enum _GitKey { git, commit, root, toolchain }
+/// The kinds of codebase a manifest names.
+enum _Kind { git, hosted }
+
+/// The keys a codebase holds.
+enum _Key {
+  git,
+  commit,
+  root,
+  hosted,
+  version,
+  resolution,
+  toolchain;
+
+  /// The kind whose codebases alone hold the key, or null for a key both
+  /// kinds hold.
+  _Kind? get kind => switch (this) {
+    .git || .commit || .root => .git,
+    .hosted || .version || .resolution => .hosted,
+    .toolchain => null,
+  };
+}
 
 final Map<String, _TopKey> _topKeys = _TopKey.values.asNameMap();
-final Map<String, _GitKey> _gitKeys = _GitKey.values.asNameMap();
-final Map<String, Toolchain> _toolchains = Toolchain.values.asNameMap();
+final Map<String, _Key> _keys = _Key.values.asNameMap();
 
 YamlNode _document(String text) {
   try {
@@ -61,10 +90,14 @@ String _located(YamlException e) =>
 
 Manifest _manifest(YamlNode document) {
   final YamlMap top = _mapping(document, .top);
-  _knowOnly(top, .top, _topKeys);
+  for (final Object? key in top.keys) {
+    if (key is! String || !_topKeys.containsKey(key)) {
+      throw _Refusal(UnknownKey(.top.child(key)));
+    }
+  }
   final KeyPath at = .top.child(_TopKey.codebases.name);
   final YamlMap codebases = _mapping(
-    _required(top, .top, _TopKey.codebases),
+    top.nodes[_TopKey.codebases.name] ?? (throw _Refusal(MissingKey(at))),
     at,
   );
   return .new([
@@ -74,7 +107,7 @@ Manifest _manifest(YamlNode document) {
   ]);
 }
 
-GitCodebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
+Codebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
   final KeyPath at = codebases.child(key.value);
   final CodebaseName name =
       switch (_text(key)) {
@@ -82,53 +115,85 @@ GitCodebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
         null => null,
       } ??
       (throw _Refusal(BadValue(at, .packageName, _written(key))));
-  final YamlMap fields = _mapping(value, at);
-  _knowOnly(fields, at, _gitKeys);
-  final YamlNode? root = fields.nodes[_GitKey.root.name];
-  return (
-    name: name,
-    url: _field(fields, at, .git, .gitUrl, GitUrl.parse),
-    commit: _field(fields, at, .commit, .fullHash, Commit.parse),
-    root: root == null
-        ? .top
-        : _value(
-            root,
-            at.child(_GitKey.root.name),
-            .rootInsideRepo,
-            RepoRoot.parse,
-          ),
-    toolchain: _field(
-      fields,
-      at,
-      .toolchain,
-      .toolchain,
-      (String word) => _toolchains[word],
-    ),
-  );
+  final _Fields fields = (map: _mapping(value, at), at: at);
+  return switch (_kind(fields)) {
+    .git => Git((
+      name: name,
+      url: _field(fields, .git, .gitUrl, GitUrl.parse),
+      commit: _field(fields, .commit, .fullHash, Commit.parse),
+      root: _fieldOr(fields, .root, .rootInsideRepo, RepoRoot.parse, .top),
+      toolchain: _field(fields, .toolchain, .toolchain, Toolchain.parse),
+    )),
+    .hosted => Hosted((
+      name: name,
+      package: _field(fields, .hosted, .packageName, PackageName.parse),
+      version: _field(fields, .version, .version, PackageVersion.parse),
+      resolution: _fieldOr(
+        fields,
+        .resolution,
+        .resolution,
+        Resolution.parse,
+        .alone,
+      ),
+      toolchain: _field(fields, .toolchain, .toolchain, Toolchain.parse),
+    )),
+  };
 }
+
+/// A codebase's mapping, and its path from the top.
+typedef _Fields = ({YamlMap map, KeyPath at});
+
+/// The kind of the codebase [fields] holds: the one its first key of a
+/// kind's own names. Refuses on the first key, in the text's order, that
+/// muster does not know or that is of the other kind's, and where no key is
+/// of either kind's.
+_Kind _kind(_Fields fields) {
+  _Kind? kind;
+  for (final Object? key in fields.map.keys) {
+    final _Key? known = key is String ? _keys[key] : null;
+    if (known == null) {
+      throw _Refusal(UnknownKey(fields.at.child(key)));
+    }
+    final _Kind? own = known.kind;
+    if (own == null) {
+      continue;
+    }
+    kind ??= own;
+    if (own != kind) {
+      throw _Refusal(UnknownKey(fields.at.child(key)));
+    }
+  }
+  return kind ?? (throw _Refusal(MissingKind(fields.at)));
+}
+
+T _field<T>(
+  _Fields fields,
+  _Key key,
+  Wanted wanted,
+  T? Function(String text) parse,
+) => _value(
+  fields.map.nodes[key.name] ??
+      (throw _Refusal(MissingKey(fields.at.child(key.name)))),
+  fields.at.child(key.name),
+  wanted,
+  parse,
+);
+
+/// The value of [key] in [fields], or [absent] where it is left out.
+T _fieldOr<T>(
+  _Fields fields,
+  _Key key,
+  Wanted wanted,
+  T? Function(String text) parse,
+  T absent,
+) => switch (fields.map.nodes[key.name]) {
+  final YamlNode node => _value(node, fields.at.child(key.name), wanted, parse),
+  null => absent,
+};
 
 YamlMap _mapping(YamlNode node, KeyPath at) => node is YamlMap
     ? node
     : throw _Refusal(BadValue(at, .mapping, _written(node)));
-
-void _knowOnly<K extends Enum>(YamlMap map, KeyPath at, Map<String, K> known) {
-  for (final Object? key in map.keys) {
-    if (key is! String || !known.containsKey(key)) {
-      throw _Refusal(UnknownKey(at.child(key)));
-    }
-  }
-}
-
-YamlNode _required(YamlMap map, KeyPath at, Enum key) =>
-    map.nodes[key.name] ?? (throw _Refusal(MissingKey(at.child(key.name))));
-
-T _field<T>(
-  YamlMap fields,
-  KeyPath at,
-  _GitKey key,
-  Wanted wanted,
-  T? Function(String text) parse,
-) => _value(_required(fields, at, key), at.child(key.name), wanted, parse);
 
 T _value<T>(
   YamlNode node,

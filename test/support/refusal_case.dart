@@ -23,6 +23,9 @@ enum RefusalCase {
   /// [CodebaseNamedTwice].
   codebaseNamedTwice,
 
+  /// [HostedNotLoaded].
+  hostedNotLoaded,
+
   /// [NoWorkingDirectory].
   noWorkingDirectory,
 
@@ -40,6 +43,7 @@ enum RefusalCase {
     ManifestUnreadable() => .manifestUnreadable,
     ManifestInvalid() => .manifestInvalid,
     CodebaseNamedTwice() => .codebaseNamedTwice,
+    HostedNotLoaded() => .hostedNotLoaded,
     NoWorkingDirectory() => .noWorkingDirectory,
     NoCache() => .noCache,
     NoClaim() => .noClaim,
@@ -71,6 +75,7 @@ enum RefusalCase {
         second: _manifest('second'),
       ),
     ],
+    .hostedNotLoaded => [HostedNotLoaded(_manifest('hosted'), .parse('args')!)],
     .noWorkingDirectory => const [
       NoWorkingDirectory('No such file or directory'),
     ],

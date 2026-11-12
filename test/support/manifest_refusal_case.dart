@@ -16,6 +16,9 @@ enum ManifestRefusalCase {
   /// [MissingKey].
   missingKey,
 
+  /// [MissingKind].
+  missingKind,
+
   /// [BadValue].
   badValue;
 
@@ -24,6 +27,7 @@ enum ManifestRefusalCase {
     NotYaml() => .notYaml,
     UnknownKey() => .unknownKey,
     MissingKey() => .missingKey,
+    MissingKind() => .missingKind,
     BadValue() => .badValue,
   };
 
@@ -36,6 +40,9 @@ enum ManifestRefusalCase {
     ],
     .missingKey => [
       MissingKey(pathOf(['git'])),
+    ],
+    .missingKind => [
+      MissingKind(pathOf(['codebases', 'app'])),
     ],
     .badValue => [
       for (final WrittenCase written in WrittenCase.values)
