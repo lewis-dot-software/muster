@@ -1,5 +1,6 @@
 import 'key_path.dart';
 import 'wanted.dart';
+import 'written.dart';
 
 /// Why a manifest's text refused to parse.
 sealed class ManifestRefusal {
@@ -13,8 +14,8 @@ final class NotYaml extends ManifestRefusal {
   /// given.
   const NotYaml(this.reason);
 
-  /// What the reader said, with where it stopped: the line and column for
-  /// YAML, and the byte's offset for bytes that are not UTF-8.
+  /// What the reader said, in one line, with where it stopped: the line and
+  /// column for YAML, and the byte's offset for bytes that are not UTF-8.
   final String reason;
 }
 
@@ -39,8 +40,8 @@ final class MissingKey extends ManifestRefusal {
 /// A value its key cannot take, or a codebase's name that is no pub package
 /// name.
 final class BadValue extends ManifestRefusal {
-  /// The refusal of the value at [path], written [written], which must be
-  /// [wanted].
+  /// The refusal of the value at [path], which must be [wanted] and is
+  /// [written].
   const BadValue(this.path, this.wanted, this.written);
 
   /// The path of the key whose value, or whose own name, refused.
@@ -49,6 +50,6 @@ final class BadValue extends ManifestRefusal {
   /// What the value must be.
   final Wanted wanted;
 
-  /// The value's text, or the name's, as the manifest writes it.
-  final String written;
+  /// What the manifest writes for the value, or for the name.
+  final Written written;
 }

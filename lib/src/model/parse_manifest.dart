@@ -11,6 +11,7 @@ import 'manifest_refusal.dart';
 import 'repo_root.dart';
 import 'toolchain.dart';
 import 'wanted.dart';
+import 'written.dart';
 
 /// Reads a manifest's [text] into its codebases, or refuses it on the first
 /// fault met: the top's unknown keys, then `codebases`, then each codebase in
@@ -45,9 +46,18 @@ YamlNode _document(String text) {
   try {
     return loadYamlNode(text);
   } on YamlException catch (e) {
-    throw _Refusal(NotYaml(e.toString()));
+    throw _Refusal(NotYaml(_located(e)));
   }
 }
+
+/// [e]'s message after the line and column it stopped at, counted from 1,
+/// with none of the source it would highlight.
+String _located(YamlException e) =>
+    switch ((e.span?.start.line, e.span?.start.column)) {
+      (final int line, final int column) =>
+        'line ${line + 1}, column ${column + 1}: ${e.message}',
+      (null, _) || (_, null) => e.message,
+    };
 
 Manifest _manifest(YamlNode document) {
   final YamlMap top = _mapping(document, .top);
@@ -71,7 +81,7 @@ GitCodebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
         final String text => .parse(text),
         null => null,
       } ??
-      (throw _Refusal(BadValue(at, .packageName, key.span.text)));
+      (throw _Refusal(BadValue(at, .packageName, _written(key))));
   final YamlMap fields = _mapping(value, at);
   _knowOnly(fields, at, _gitKeys);
   final YamlNode? root = fields.nodes[_GitKey.root.name];
@@ -99,7 +109,7 @@ GitCodebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
 
 YamlMap _mapping(YamlNode node, KeyPath at) => node is YamlMap
     ? node
-    : throw _Refusal(BadValue(at, .mapping, node.span.text));
+    : throw _Refusal(BadValue(at, .mapping, _written(node)));
 
 void _knowOnly<K extends Enum>(YamlMap map, KeyPath at, Map<String, K> known) {
   for (final Object? key in map.keys) {
@@ -130,7 +140,7 @@ T _value<T>(
       final String text => parse(text),
       null => null,
     } ??
-    (throw _Refusal(BadValue(at, wanted, node.span.text)));
+    (throw _Refusal(BadValue(at, wanted, _written(node))));
 
 /// The text [node] holds: a string's own, or a number's or a bool's as
 /// written, since YAML types a plain scalar before muster reads it. Null for a
@@ -140,6 +150,21 @@ String? _text(YamlNode node) => switch (node) {
   YamlScalar(value: num() || bool()) => node.span.text,
   _ => null,
 };
+
+/// What the manifest writes at [node]: a plain value's text as written, less
+/// the line breaks a document's span ends on, or the kind of value a list, a
+/// mapping or an empty value is. An empty value is a scalar of no text, or of
+/// no style, since the span of an empty document holds its comments.
+Written _written(YamlNode node) {
+  final String text = node.span.text.trimRight();
+  return switch (node) {
+    YamlList() => const WrittenList(),
+    YamlMap() => const WrittenMapping(),
+    YamlScalar(style: .ANY) => const WrittenNothing(),
+    _ when text.isEmpty => const WrittenNothing(),
+    _ => WrittenText(text),
+  };
+}
 
 final class _Refusal implements Exception {
   const _Refusal(this.refusal);

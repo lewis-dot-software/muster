@@ -24,7 +24,7 @@ import '../model/parse_manifest.dart';
 import '../model/partial_lock_path.dart';
 import '../model/seek_manifests.dart';
 import '../model/temp_directory.dart';
-import '../model/unnamed_locks.dart';
+import '../model/unnamed_lock.dart';
 import '../model/choose_unnamed.dart';
 import '../model/working_directory.dart';
 import '../store/bytes_if_there.dart';
@@ -161,8 +161,9 @@ class Loader implements Loads {
     return Locked(.unmodifiable(outcomes), .unmodifiable(removals));
   }
 
-  /// Removes from [locks] what no codebase of [codebases] names, each kept
-  /// lock's removal given as its own, and a partial's only where it fails.
+  /// Removes from [locks] what no codebase of [codebases] names, in its file
+  /// names' order, each kept lock's removal given as its own, and a
+  /// partial's only where it fails.
   Future<List<LockRemoval>> _removeUnnamed(
     LocksDirectory locks,
     List<GitCodebase> codebases,
@@ -173,19 +174,16 @@ class Loader implements Loads {
     } on StoreFault catch (fault) {
       return [RemovalFailed(_storeFailed(fault))];
     }
-    final UnnamedLocks unnamed = chooseUnnamed(locks, names, codebases);
     final List<LockRemoval> removals = [];
-    for (final KeptLockPath lock in unnamed.locks) {
+    for (final UnnamedLock unnamed in chooseUnnamed(locks, names, codebases)) {
       try {
-        await removeFile(lock.path);
-        removals.add(LockRemoved(lock));
-      } on StoreFault catch (fault) {
-        removals.add(RemovalFailed(_storeFailed(fault)));
-      }
-    }
-    for (final PartialLockPath partial in unnamed.partials) {
-      try {
-        await removeFile(partial.path);
+        switch (unnamed) {
+          case UnnamedKept(:final KeptLockPath lock):
+            await removeFile(lock.path);
+            removals.add(LockRemoved(lock));
+          case UnnamedPartial(:final PartialLockPath partial):
+            await removeFile(partial.path);
+        }
       } on StoreFault catch (fault) {
         removals.add(RemovalFailed(_storeFailed(fault)));
       }
@@ -234,7 +232,15 @@ class Loader implements Loads {
       try {
         text = utf8.decode(bytes);
       } on FormatException catch (e) {
-        throw _Refusal(ManifestInvalid(manifest, NotYaml('$e')));
+        throw _Refusal(
+          ManifestInvalid(
+            manifest,
+            NotYaml(switch (e.offset) {
+              final int offset => 'byte $offset: ${e.message}',
+              null => e.message,
+            }),
+          ),
+        );
       }
       switch (parseManifest(text)) {
         case ManifestParsed(:final Manifest manifest):
@@ -262,7 +268,7 @@ class Loader implements Loads {
     }
     final CacheDirectory? cache = .of(_environment);
     if (cache == null) {
-      throw const _Refusal(NoCache());
+      throw _Refusal(NoCache(_environment.os));
     }
     final Cache clones = .new(cache, _runner, _claims);
     return (

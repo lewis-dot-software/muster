@@ -249,6 +249,34 @@ void main() {
       ]);
       expect(run.err, '/locks/gone.lock: Permission denied\n');
     });
+
+    test("writes each failure's note in its row's order, a codebase's before "
+        "a removal's", () async {
+      final _Run run = await _run(
+        FixedLoads(
+          locks: Locked(
+            {
+              app.name: LockFailed(
+                outcomeOf(.commandFailed, app, 1, 'out') as ActFailure,
+              ),
+            },
+            const [
+              RemovalFailed(
+                StoreFailed('/locks/gone.lock', 'Permission denied'),
+              ),
+            ],
+          ),
+        ),
+        ['lock'],
+      );
+      expect(_rows(run.out).map((List<String> row) => row.first), ['app', '']);
+      final List<String> notes = run.err.split('\n');
+      expect(notes.first, startsWith('app: '));
+      expect(notes.sublist(notes.length - 2), [
+        '/locks/gone.lock: Permission denied',
+        '',
+      ]);
+    });
   });
 
   group('the command line', () {

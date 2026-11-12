@@ -35,7 +35,7 @@ Environment loadEnvironment(
 );
 
 /// The variables a cache's directory can be taken from.
-const Set<String> _cacheVariables = {
+const Set<String> cacheVariables = {
   'MUSTER_CACHE',
   'XDG_CACHE_HOME',
   'HOME',
@@ -68,7 +68,7 @@ Loader loaderIn(
         temp,
         variables,
       ).variables.entries)
-        if (cached || !_cacheVariables.contains(key)) key: value,
+        if (cached || !cacheVariables.contains(key)) key: value,
     },
     os: .posix,
   ),

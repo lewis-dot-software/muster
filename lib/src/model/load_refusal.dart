@@ -1,6 +1,7 @@
 import 'codebase_name.dart';
 import 'manifest_path.dart';
 import 'manifest_refusal.dart';
+import 'os.dart';
 
 /// Why a load refused before any fetch.
 sealed class LoadRefusal {
@@ -88,8 +89,12 @@ final class NoWorkingDirectory extends LoadRefusal {
 }
 
 /// A load with no cache to clone into: none of the variables the cache's
-/// directory is taken from is set.
+/// directory is taken from on its system is set.
 final class NoCache extends LoadRefusal {
-  /// The refusal of a load with no cache.
-  const NoCache();
+  /// The refusal of a load with no cache on [os].
+  const NoCache(this.os);
+
+  /// The system the load runs on, which sets the variables it takes the
+  /// cache from.
+  final Os os;
 }

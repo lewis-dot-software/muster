@@ -56,3 +56,5 @@ export 'src/model/manifest_refusal.dart'
 export 'src/model/package_path.dart' show PackagePath;
 export 'src/model/sdk_version.dart' show SdkVersion;
 export 'src/model/wanted.dart' show Wanted;
+export 'src/model/written.dart'
+    show Written, WrittenText, WrittenList, WrittenMapping, WrittenNothing;

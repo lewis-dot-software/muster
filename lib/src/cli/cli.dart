@@ -120,7 +120,7 @@ final class Cli {
               failures.add((name, failed));
           }
         }
-        bool removed = true;
+        final List<StoreFailed> unremoved = [];
         for (final LockRemoval removal in removals) {
           switch (removal) {
             case LockRemoved(:final KeptLockPath lock):
@@ -128,19 +128,22 @@ final class Cli {
             case RemovalFailed(:final StoreFailed failure):
               final (String shown, String detail) = failureCells(failure);
               _row('', shown, detail);
-              _err.writeln(failureNote(failure));
-              removed = false;
+              unremoved.add(failure);
           }
         }
         _notes(failures);
-        return failures.isEmpty && removed ? .done : .failed;
+        for (final StoreFailed failure in unremoved) {
+          _err.writeln(failureNote(failure));
+        }
+        return failures.isEmpty && unremoved.isEmpty ? .done : .failed;
     }
   }
 
   void _row(String name, String outcome, String detail) =>
       _out.writeln('$name\t$outcome\t$detail');
 
-  /// Writes each of [failures]' notes, headed by its codebase's name.
+  /// Writes each of [failures]' notes, headed by its codebase's name, in
+  /// their rows' order.
   void _notes(List<(CodebaseName, FetchFailure)> failures) {
     for (final (CodebaseName name, FetchFailure failure) in failures) {
       if (failureNote(failure) case final String note) {

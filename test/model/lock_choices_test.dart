@@ -6,7 +6,7 @@ import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/model/locks_lacking.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/partial_lock_path.dart';
-import 'package:muster/src/model/unnamed_locks.dart';
+import 'package:muster/src/model/unnamed_lock.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/manifests.dart';
@@ -26,7 +26,8 @@ void main() {
     any.gitCodebases(),
     any.list(any.choose(['a.lock', 'b.example.lock', 'README.md', '.lock'])),
   ).test('Of the files a locks directory lists, every kept lock and partial no '
-      'codebase names is chosen for removal, and nothing else is.', (
+      'codebase names is chosen for removal, in their file names\' order, and '
+      'nothing else is.', (
     List<GitCodebase> named,
     List<GitCodebase> others,
     List<String> strays,
@@ -38,22 +39,26 @@ void main() {
         ...strays,
       ]) ...[name, '$name.partial'],
     ];
-    final UnnamedLocks unnamed = chooseUnnamed(_locks, listed, named);
+    final List<UnnamedLock> unnamed = chooseUnnamed(_locks, listed, named);
     final Set<String> keep = {
       for (final String name in _namedFiles(named)) ...[name, '$name.partial'],
     };
-    final Set<String> lockShaped = {
-      for (final String name in listed)
-        if (KeptLockPath.listed(_locks, name) != null ||
-            PartialLockPath.listed(_locks, name) != null)
-          name,
-    };
-    expect({
-      for (final KeptLockPath lock in unnamed.locks)
-        p.posix.basename(lock.path),
-      for (final PartialLockPath partial in unnamed.partials)
-        p.posix.basename(partial.path),
-    }, lockShaped.difference(keep));
+    expect(
+      [
+        for (final UnnamedLock chosen in unnamed)
+          p.posix.basename(switch (chosen) {
+            UnnamedKept(:final KeptLockPath lock) => lock.path,
+            UnnamedPartial(:final PartialLockPath partial) => partial.path,
+          }),
+      ],
+      [
+        for (final String name in [...listed]..sort())
+          if ((KeptLockPath.listed(_locks, name) != null ||
+                  PartialLockPath.listed(_locks, name) != null) &&
+              !keep.contains(name))
+            name,
+      ],
+    );
   });
 
   test('a file named .lock alone, or with no .lock before .partial, is '

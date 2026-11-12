@@ -2,6 +2,7 @@ import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:muster/src/model/wanted.dart';
+import 'package:muster/src/model/written.dart';
 import 'package:test/test.dart';
 
 import '../support/manifests.dart';
@@ -200,7 +201,13 @@ codebases:
           'codebases:\n  app:\n    git: /srv/a.git\n    commit: $_sha1\n'
           '    toolchain: go',
         ),
-        refused(isA<BadValue>().having((r) => r.written, 'written', 'go')),
+        refused(
+          isA<BadValue>().having(
+            (r) => r.written,
+            'written',
+            isA<WrittenText>().having((w) => w.text, 'text', 'go'),
+          ),
+        ),
       );
     });
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:muster/muster.dart';
+import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
@@ -355,7 +356,8 @@ void main() {
       );
     });
 
-    test('on a manifest whose bytes are not UTF-8, as not YAML', () async {
+    test('on a manifest whose bytes are not UTF-8, as not YAML at the byte '
+        'it stopped at', () async {
       await File(atRoot(temp)).create(recursive: true);
       await File(atRoot(temp))
           .writeAsBytes([...'codebases: {}\n# '.codeUnits, 0xff, 0xfe]);
@@ -363,7 +365,11 @@ void main() {
         isA<ManifestInvalid>().having(
           (ManifestInvalid i) => i.refusal,
           'refusal',
-          isA<NotYaml>(),
+          isA<NotYaml>().having(
+            (NotYaml n) => n.reason,
+            'reason',
+            'byte 16: Invalid UTF-8 byte',
+          ),
         ),
       );
     });
@@ -408,13 +414,25 @@ void main() {
       );
     });
 
-    test('with no cache to clone into', () async {
-      await writeManifest(atRoot(temp), [await codebaseNamed('app')]);
-      runner.commands.clear();
-      final Load refused = await loaderIn(temp, runner, cached: false).load();
-      expect(refused, refusedFor(isA<NoCache>()));
-      expect(runner.given, isEmpty);
-    });
+    for (final Os os in Os.values) {
+      test('with no cache to clone into, naming the system its environment '
+          'is of, $os', () async {
+        await writeManifest(atRoot(temp), [await codebaseNamed('app')]);
+        runner.commands.clear();
+        final Load refused = await Loader(
+          (variables: const {}, os: os),
+          .new(consumerIn(temp).path, .posix),
+          runner,
+          .new(.posix),
+          scratchesIn(temp),
+        ).load(named: [atRoot(temp)]);
+        expect(
+          refused,
+          refusedFor(isA<NoCache>().having((NoCache n) => n.os, 'os', os)),
+        );
+        expect(runner.given, isEmpty);
+      });
+    }
   });
 
   group('Muster.load, reading the process itself,', () {

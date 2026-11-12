@@ -3,12 +3,13 @@ import 'kept_lock_path.dart';
 import 'locks_directory.dart';
 import 'package.dart';
 import 'partial_lock_path.dart';
-import 'unnamed_locks.dart';
+import 'unnamed_lock.dart';
 
 /// What of the files [listed] in [locks], each by its name, no codebase of
-/// [codebases] names: every kept lock but those of each codebase's packages,
-/// and every partial but theirs. A file that is neither is left out.
-UnnamedLocks chooseUnnamed(
+/// [codebases] names, in their file names' order: every kept lock but those
+/// of each codebase's packages, and every partial but theirs. A file that is
+/// neither is left out.
+List<UnnamedLock> chooseUnnamed(
   LocksDirectory locks,
   Iterable<String> listed,
   Iterable<GitCodebase> codebases,
@@ -21,19 +22,14 @@ UnnamedLocks chooseUnnamed(
   final Set<PartialLockPath> partials = {
     for (final KeptLockPath lock in named) .of(lock),
   };
-  final List<String> names = [...listed]..sort();
-  return (
-    locks: [
-      for (final String name in names)
-        if (KeptLockPath.listed(locks, name) case final KeptLockPath lock
-            when !named.contains(lock))
-          lock,
+  return [
+    for (final String name in [...listed]..sort()) ...[
+      if (KeptLockPath.listed(locks, name) case final KeptLockPath lock
+          when !named.contains(lock))
+        UnnamedKept(lock),
+      if (PartialLockPath.listed(locks, name) case final PartialLockPath partial
+          when !partials.contains(partial))
+        UnnamedPartial(partial),
     ],
-    partials: [
-      for (final String name in names)
-        if (PartialLockPath.listed(locks, name)
-            case final PartialLockPath partial when !partials.contains(partial))
-          partial,
-    ],
-  );
+  ];
 }

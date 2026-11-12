@@ -59,18 +59,32 @@ FetchOutcome outcomeOf(
   .pinMissing => PinMissing(codebase.url, codebase.commit),
 };
 
-/// One refusal of each case of [LoadRefusal].
+/// A refusal of each case of [LoadRefusal], of each [ManifestRefusal] and
+/// [Written] a manifest's carries, and of no cache on each [Os].
 final List<LoadRefusal> everyRefusal = [
   const NoManifest(),
   const NotManifestName('/consumer/muster.yml'),
   ManifestMissing(_manifest('missing')),
   ManifestUnreadable(_manifest('unreadable'), 'Permission denied'),
-  ManifestInvalid(_manifest('not_yaml'), const NotYaml('line 1, column 2')),
+  ManifestInvalid(
+    _manifest('not_yaml'),
+    const NotYaml('line 1, column 2: Expected node content.'),
+  ),
   ManifestInvalid(_manifest('unknown'), UnknownKey(pathOf(['depth']))),
   ManifestInvalid(_manifest('missing_key'), MissingKey(pathOf(['git']))),
+  for (final Written written in const [
+    WrittenText('go'),
+    WrittenList(),
+    WrittenMapping(),
+    WrittenNothing(),
+  ])
+    ManifestInvalid(
+      _manifest('bad_value'),
+      BadValue(pathOf(['codebases', 'app', 'toolchain']), .toolchain, written),
+    ),
   ManifestInvalid(
-    _manifest('bad_value'),
-    BadValue(pathOf(['codebases', 'app', 'toolchain']), .toolchain, 'go'),
+    _manifest('bad_top'),
+    const BadValue(.top, .mapping, WrittenNothing()),
   ),
   CodebaseNamedTwice(
     .parse('app')!,
@@ -78,7 +92,7 @@ final List<LoadRefusal> everyRefusal = [
     second: _manifest('second'),
   ),
   const NoWorkingDirectory('No such file or directory'),
-  const NoCache(),
+  for (final Os os in Os.values) NoCache(os),
 ];
 
 ManifestPath _manifest(String stem) => .parse('/consumer/$stem.yaml', .posix)!;

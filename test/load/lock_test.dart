@@ -253,6 +253,45 @@ void main() {
     );
   });
 
+  test("a lock's removals come in its locks' file names' order, a partial's "
+      'failure among them', () async {
+    final GitCodebase app = await codebaseNamed(
+      'app',
+      files: packageFiles('app'),
+    );
+    await writeManifest(atRoot(temp), [app]);
+    final Directory locks = .new(locksBeside(atRoot(temp)).path);
+    final List<String> unnamed = [
+      for (final String name in [
+        'a-0123.lock.partial',
+        'b-0123.lock',
+        'c-0123.lock.partial',
+      ])
+        p.join(locks.path, name),
+    ];
+    for (final String stray in unnamed) {
+      await writeFile(stray, 'left\n');
+    }
+    await chmod('555', locks);
+    addTearDown(() => chmod('755', locks));
+    expect(
+      await lock(),
+      lockedWith(
+        {'app': wrote(const [])},
+        removals: [
+          for (final String stray in unnamed)
+            removalFailed(
+              isA<StoreFailed>().having(
+                (StoreFailed f) => f.path,
+                'path',
+                stray,
+              ),
+            ),
+        ],
+      ),
+    );
+  });
+
   group('a codebase whose write fails gets its failure as its outcome, and '
       'the lock goes on to the next,', () {
     Future<void> failsAs(GitCodebase failing, Matcher failure) async {
