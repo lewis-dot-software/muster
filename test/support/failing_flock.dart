@@ -34,8 +34,5 @@ final class FailingFlock implements Libc {
   int Function(int) get close => _libc.close;
 
   @override
-  NativeFinalizer get closer => _libc.closer;
-
-  @override
   String message(int errno) => _libc.message(errno);
 }

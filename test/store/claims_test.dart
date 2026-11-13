@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 
 import '../support/act.dart';
 import '../support/apart.dart';
+import '../support/collected.dart';
 import '../support/contender.dart';
 import '../support/failing_flock.dart';
 import '../support/faults.dart';
@@ -268,5 +269,54 @@ void main() {
       await child.exitCode;
     });
     expect(await letGoApart('app', .once, .returns), isTrue);
+  });
+
+  /// The claims on [names], each taken by [claims] for an act that waits on a
+  /// word no one will give, and nothing of each hold kept.
+  Future<void> abandoned(
+    Iterable<String> names,
+    Claims Function() claims,
+  ) async {
+    for (final String name in names) {
+      final Completer<void> begun = .new();
+      unawaited(
+        claims().holding(claimOf(name), () async {
+          begun.complete();
+          await Completer<void>().future;
+        }),
+      );
+      await begun.future;
+    }
+  }
+
+  /// Whether the claim on each of [names] is free, tried once.
+  Future<List<bool>> freeOf(Iterable<String> names) async => [
+    for (final String name in names)
+      await Claims(testLocker).holdingIfFree(claimOf(name), () async {}),
+  ];
+
+  final List<String> abandonedNames = [for (int i = 0; i < 10; i++) 'app$i'];
+
+  test('a hold never released lets its claim go once it is collected, its '
+      'claims and their locker collected with it', () async {
+    await abandoned(
+      abandonedNames,
+      () => .new(Locker.of(.posix, Platform.operatingSystem)!),
+    );
+    await collected();
+    expect(await freeOf(abandonedNames), everyElement(isTrue));
+  });
+
+  test('a hold never released lets its claim go once it is collected, its '
+      'claims still reachable', () async {
+    final List<Claims> kept = [];
+    await abandoned(abandonedNames, () {
+      final Claims claims = .new(Locker.of(.posix, Platform.operatingSystem)!);
+      kept.add(claims);
+      return claims;
+    });
+    await collected();
+    expect(await freeOf(abandonedNames), everyElement(isTrue));
+    expect(kept, hasLength(abandonedNames.length));
   });
 }

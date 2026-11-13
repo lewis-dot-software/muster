@@ -41,13 +41,27 @@ sealed class Hold {
 /// shuts out no isolate of it.
 ///
 /// The file is opened close-on-exec, so a process any isolate starts while it
-/// is open carries the lock from its fork to its exec alone, and a native
-/// finalizer closes it where the hold is never released, which runs at the
+/// is open carries the lock from its fork to its exec alone, and [_closer]
+/// closes it once the hold is collected where it is never released, at the
 /// end of the isolate group at the latest.
 final class _Flock extends Hold implements Finalizable {
   _Flock._(this._libc, this._descriptor) {
-    _libc.closer.attach(this, .fromAddress(_descriptor), detach: this);
+    _closer.attach(this, .fromAddress(_descriptor), detach: this);
   }
+
+  /// The finalizer that closes a descriptor no hold released, static since a
+  /// native finalizer runs only while it is itself reachable, and a hold
+  /// collected unreleased may take every object of its load with it.
+  // `close` takes the descriptor where a finalizer passes its token, a word
+  // in the first argument's register.
+  static final NativeFinalizer _closer = .new(
+    Native.addressOf<NativeFunction<Int32 Function(Int32)>>(_closeNative)
+        .cast(),
+  );
+
+  /// `close`, as the process binds it.
+  @Native<Int32 Function(Int32)>(symbol: 'close', isLeaf: true)
+  external static int _closeNative(int descriptor);
 
   final Libc _libc;
 
@@ -77,7 +91,7 @@ final class _Flock extends Hold implements Finalizable {
   Future<void> release() async => _close();
 
   void _close() {
-    _libc.closer.detach(this);
+    _closer.detach(this);
     _libc.close(_descriptor);
   }
 }

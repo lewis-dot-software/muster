@@ -38,10 +38,7 @@ interface class Libc {
           .lookupFunction<
             Pointer<Utf8> Function(Int32),
             Pointer<Utf8> Function(int)
-          >('strerror'),
-      // `close` takes the descriptor where a finalizer passes its token, a
-      // word in the first argument's register.
-      closer = .new(libc.lookup<NativeFinalizerFunction>('close'));
+          >('strerror');
 
   /// `EWOULDBLOCK`.
   final int wouldBlock;
@@ -58,9 +55,6 @@ interface class Libc {
 
   /// `close`.
   final int Function(int) close;
-
-  /// The finalizer that closes a descriptor no hold released.
-  final NativeFinalizer closer;
 
   final Pointer<Int32> Function() _errnoAt;
 
