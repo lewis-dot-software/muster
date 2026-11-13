@@ -33,7 +33,6 @@ List<String> _named(LoadRefusal refusal) => switch (refusal) {
     first.path,
     second.path,
   ],
-  HostedNotLoaded(:final manifest, :final name) => [manifest.path, name.name],
   NoWorkingDirectory(:final String reason) => [reason],
   NoCache(:final Os os) => [
     'MUSTER_CACHE',
@@ -178,19 +177,6 @@ void main() {
         r'no claim: muster knows no C library to lock a claim with on '
             r'"free\nbsd"',
       ],
-    );
-  });
-
-  test('a hosted codebase names its manifest and itself', () {
-    expect(
-      refusalText(
-        HostedNotLoaded(
-          .parse('/consumer/muster.yaml', .posix)!,
-          .parse('args')!,
-        ),
-      ),
-      '/consumer/muster.yaml: args: a hosted codebase, which no load takes '
-      'yet',
     );
   });
 

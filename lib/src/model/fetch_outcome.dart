@@ -88,8 +88,8 @@ final class PinMissing extends FetchFailure implements ActFailure {
   final Commit commit;
 }
 
-/// A package that has no lock to resolve on: its commit holds none, and its
-/// kept lock is not there.
+/// A package that has no lock to resolve on: its pin holds none, as no
+/// hosted codebase's does, and its kept lock is not there.
 final class Unlocked extends FetchFailure {
   /// The failure of a package whose kept lock, at [lock], is not there.
   const Unlocked(this.lock);

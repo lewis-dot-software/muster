@@ -1,3 +1,4 @@
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -56,4 +57,4 @@ KeptLockPath keptOf(
   String manifest,
   GitCodebase codebase, [
   Package package = .root,
-]) => .of(locksBeside(manifest), codebase, package);
+]) => .of(locksBeside(manifest), Git(codebase), package);

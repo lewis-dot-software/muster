@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../model/around_pubspec.dart';
 import '../model/at_commit.dart';
 import '../model/checkout.dart';
 import '../model/checkout_found.dart';
@@ -9,10 +10,12 @@ import '../model/choose_checkout_step.dart';
 import '../model/choose_locks.dart';
 import '../model/at_commit_files.dart';
 import '../model/clone_path.dart';
+import '../model/codebase.dart';
 import '../model/consumer_root.dart';
 import '../model/content_hash.dart';
 import '../model/fetch_outcome.dart';
 import '../model/git_codebase.dart';
+import '../model/hosted_codebase.dart';
 import '../model/kept_lock_path.dart';
 import '../model/lock_choice.dart';
 import '../model/lock_source.dart';
@@ -22,6 +25,10 @@ import '../model/package.dart';
 import '../model/package_path.dart';
 import '../model/parse_stamp.dart';
 import '../model/partial_lock_path.dart';
+import '../model/hosted_resolves.dart';
+import '../model/pubspec_overrides.dart';
+import '../model/pubspec_overrides_path.dart';
+import '../model/pubspec_path.dart';
 import '../model/read_at_commit.dart';
 import '../model/repo_path.dart';
 import '../model/read_status.dart';
@@ -32,6 +39,8 @@ import '../model/stamped_package.dart';
 import '../model/stands.dart';
 import '../model/survey.dart';
 import '../model/surveyed_package.dart';
+import '../model/unpack_command.dart';
+import '../model/workspace_member.dart';
 import '../model/worktree.dart';
 import 'add_worktree.dart';
 import 'cache.dart';
@@ -48,9 +57,10 @@ import 'runner.dart';
 import 'sdk_versions.dart';
 import 'store_fault.dart';
 
-/// A consumer's checkouts, one a git codebase under its root, each a worktree
-/// of the codebase's clone in a [Cache], its processes run by a [Runner] and
-/// its acts held under [Claims].
+/// A consumer's checkouts, one a codebase under its root: a git codebase's a
+/// worktree of its clone in a [Cache], and a hosted one's its package
+/// unpacked, their processes run by a [Runner] and their acts held under
+/// [Claims].
 class Checkouts {
   /// The checkouts under [root], cloned into [_cache], their git and
   /// toolchains run by [_runner], each acted on under its claim in
@@ -72,38 +82,76 @@ class Checkouts {
   /// [locks].
   ///
   /// The checkout's claim is held from before the survey until the checkout
-  /// is handed out, and the clone's from before the clone is touched until
-  /// the stamp is written, so no other load acts on either meanwhile, and a
-  /// load that waited on one finds the checkout standing.
+  /// is handed out, and a git codebase's clone's from before the clone is
+  /// touched until the stamp is written, so no other load acts on either
+  /// meanwhile, and a load that waited on one finds the checkout standing. A
+  /// hosted codebase's takes no claim but its checkout's, and starts no git.
   ///
   /// A checkout that stands is handed out with nothing run but the survey:
-  /// the checkout's git status, and the toolchain's version where [_sdks]
-  /// has not read it yet. Any other is
-  /// made again at the pin, every tracked file's edit reverted and every file
-  /// the pin lacks removed, by a checkout and a clean of the worktree where it
-  /// is one of the clone's, or added afresh where it is not. Its packages are
+  /// a git checkout's status, and the toolchain's version where [_sdks] has
+  /// not read it yet. Any other is made again at the pin. A git checkout has
+  /// every tracked file's edit reverted and every file the pin lacks
+  /// removed, by a checkout and a clean of the worktree where it is one of
+  /// the clone's, or is added afresh where it is not. A hosted one is
+  /// removed and its package unpacked afresh, with the package around it
+  /// written beside it where it resolves as a dependency. Its packages are
   /// then resolved, each on the lock chosen for it, and its stamp written
   /// last, so a make that fails leaves no stamp.
   ///
-  /// Throws a [StoreFault] of [Unlocked] where a package has no lock, with
-  /// the checkout untouched, of [PinMissing] where the clone cannot reach the
-  /// pin, of [CommandFailed] or [Unstartable] where git or the toolchain
-  /// fails, and of [StoreFailed] where a file act does, a claim's among them.
-  Future<Checkout> checkout(GitCodebase codebase, LocksDirectory locks) {
+  /// Throws a [StoreFault] of [Unlocked] where a package has no lock, a git
+  /// checkout untouched and a hosted one unpacked, of [PinMissing] where a
+  /// clone cannot reach the pin, of [CommandFailed] or [Unstartable] where
+  /// git or a toolchain fails, and of [StoreFailed] where a file act does, a
+  /// claim's among them.
+  Future<Checkout> checkout(Codebase codebase, LocksDirectory locks) =>
+      switch (codebase) {
+        Git(codebase: final GitCodebase git) => _checkoutGit(git, locks),
+        Hosted(codebase: final HostedCodebase hosted) => _checkoutHosted(
+          hosted,
+          locks,
+        ),
+      };
+
+  Future<Checkout> _checkoutGit(GitCodebase codebase, LocksDirectory locks) {
     final CheckoutPath at = .of(root, codebase.name);
     return _claims.holding(at.claim, () async {
-      final Survey survey = await _survey(codebase, locks, at);
+      final Survey survey = await _survey(Git(codebase), locks, at);
       final Checkout checkout = (
         package: .of(at, codebase.root, .root),
         sdk: survey.sdk,
       );
-      if (!stands(codebase, survey)) {
+      if (!stands(Git(codebase), survey)) {
         await _claims.holding(
           ClonePath.of(_cache.directory, codebase.url).claim,
-          () => _make(codebase, locks, at, survey),
+          () => _makeGit(codebase, locks, at, survey),
         );
       }
       return checkout;
+    });
+  }
+
+  Future<Checkout> _checkoutHosted(
+    HostedCodebase codebase,
+    LocksDirectory locks,
+  ) {
+    final CheckoutPath at = .of(root, codebase.name);
+    return _claims.holding(at.claim, () async {
+      final Survey survey = await _survey(Hosted(codebase), locks, at);
+      if (!stands(Hosted(codebase), survey)) {
+        await _unstamp(at);
+        await _resolveAndStamp(
+          Hosted(codebase),
+          locks,
+          at,
+          _chosen(
+            Hosted(codebase),
+            locks,
+            chooseLocks(await _unpack(at, codebase), _kept(survey)),
+          ),
+          survey.sdk,
+        );
+      }
+      return (package: PackagePath.unpacked(at, codebase), sdk: survey.sdk);
     });
   }
 
@@ -113,18 +161,32 @@ class Checkouts {
   /// A package whose commit holds its lock, or whose kept lock is there, is
   /// left as it is, its lock untouched.
   ///
-  /// The claims are a load's: the checkout's held throughout, and the
-  /// clone's from before the clone is touched until the last lock is
-  /// written. Where a lock is written the checkout is made again at the pin
-  /// and its stamp deleted first, so the next load makes it again on its
-  /// locks.
+  /// The claims are a load's: the checkout's held throughout, and a git
+  /// codebase's clone's from before the clone is touched until the last lock
+  /// is written. Where a lock is written the checkout is made again at the
+  /// pin and its stamp deleted first, so the next load makes it again on its
+  /// locks. A hosted codebase's packages are read from its checkout where it
+  /// stands, and else from its package unpacked afresh, its stamp deleted
+  /// first.
   ///
   /// Returns the kept locks written, in [Package]'s order.
   ///
-  /// Throws a [StoreFault] of [PinMissing] where the clone cannot reach the
-  /// pin, of [CommandFailed] or [Unstartable] where git or the toolchain
+  /// Throws a [StoreFault] of [PinMissing] where a clone cannot reach the
+  /// pin, of [CommandFailed] or [Unstartable] where git or a toolchain
   /// fails, and of [StoreFailed] where a file act does, a claim's among them.
-  Future<List<KeptLockPath>> lock(GitCodebase codebase, LocksDirectory locks) {
+  Future<List<KeptLockPath>> lock(Codebase codebase, LocksDirectory locks) =>
+      switch (codebase) {
+        Git(codebase: final GitCodebase git) => _lockGit(git, locks),
+        Hosted(codebase: final HostedCodebase hosted) => _lockHosted(
+          hosted,
+          locks,
+        ),
+      };
+
+  Future<List<KeptLockPath>> _lockGit(
+    GitCodebase codebase,
+    LocksDirectory locks,
+  ) {
     final CheckoutPath at = .of(root, codebase.name);
     return _claims.holding(
       at.claim,
@@ -140,7 +202,7 @@ class Checkouts {
             {
               for (final Package package in Package.values)
                 if (await _hash(
-                      KeptLockPath.of(locks, codebase, package).path,
+                      KeptLockPath.of(locks, Git(codebase), package).path,
                     ) !=
                     null)
                   package,
@@ -151,18 +213,52 @@ class Checkouts {
           }
           await _unstamp(at);
           await _place(at, clone, codebase);
-          final List<KeptLockPath> written = [];
-          for (final Package package in lacking) {
-            final PackagePath path = .of(at, codebase.root, package);
-            await _runner.run(codebase.toolchain.lock(path));
-            final KeptLockPath kept = .of(locks, codebase, package);
-            await _keep(path, kept);
-            written.add(kept);
-          }
-          return .unmodifiable(written);
+          return _keepLacking(Git(codebase), locks, at, lacking);
         },
       ),
     );
+  }
+
+  Future<List<KeptLockPath>> _lockHosted(
+    HostedCodebase codebase,
+    LocksDirectory locks,
+  ) {
+    final CheckoutPath at = .of(root, codebase.name);
+    return _claims.holding(at.claim, () async {
+      final Survey survey = await _survey(Hosted(codebase), locks, at);
+      // A checkout that stands resolved every package on its kept lock, so
+      // none lacks one.
+      if (stands(Hosted(codebase), survey)) {
+        return const [];
+      }
+      await _unstamp(at);
+      final List<Package> lacking = locksLacking(
+        await _unpack(at, codebase),
+        _kept(survey),
+      );
+      return _keepLacking(Hosted(codebase), locks, at, lacking);
+    });
+  }
+
+  /// Each of [lacking], [codebase]'s packages in the checkout at [at],
+  /// resolved afresh and its lock kept in [locks], in order.
+  Future<List<KeptLockPath>> _keepLacking(
+    Codebase codebase,
+    LocksDirectory locks,
+    CheckoutPath at,
+    List<Package> lacking,
+  ) async {
+    final List<KeptLockPath> written = [];
+    for (final Package package in lacking) {
+      final PackagePath path = .inCheckout(at, codebase, package);
+      // A lock it was served would seed the resolve, which starts from none.
+      await removeFile(path.lock.path);
+      await _runner.run(codebase.toolchain.lock(path));
+      final KeptLockPath kept = .of(locks, codebase, package);
+      await _keep(path, kept);
+      written.add(kept);
+    }
+    return .unmodifiable(written);
   }
 
   /// The lock [package] resolved to, kept at [kept]: copied to its partial
@@ -187,28 +283,54 @@ class Checkouts {
   /// [codebase]'s checkout at [at] made at its pin from its clone, its
   /// packages resolved on their locks and its stamp written last, the
   /// [survey] read of it before.
-  Future<void> _make(
+  Future<void> _makeGit(
     GitCodebase codebase,
     LocksDirectory locks,
     CheckoutPath at,
     Survey survey,
   ) async {
     final ClonePath clone = await _cache.clone(codebase.url, codebase.commit);
-    final Map<Package, LockSource> chosen = switch (chooseLocks(
-      await _atCommit(clone, codebase),
-      {
-        for (final MapEntry<Package, SurveyedPackage>(:key, :value)
-            in survey.packages.entries)
-          if (value.keptLock != null) key,
-      },
-    )) {
-      LocksChosen(:final Map<Package, LockSource> locks) => locks,
-      LockLacking(:final Package package) => throw StoreFault(
-        Unlocked(.of(locks, codebase, package)),
-      ),
-    };
+    final Map<Package, LockSource> chosen = _chosen(
+      Git(codebase),
+      locks,
+      chooseLocks(await _atCommit(clone, codebase), _kept(survey)),
+    );
     await _unstamp(at);
     await _place(at, clone, codebase);
+    await _resolveAndStamp(Git(codebase), locks, at, chosen, survey.sdk);
+  }
+
+  /// The lock each package resolves on in [choice], or a [StoreFault] of
+  /// [Unlocked] thrown, naming the kept lock in [locks] of [codebase]'s
+  /// package that has none.
+  Map<Package, LockSource> _chosen(
+    Codebase codebase,
+    LocksDirectory locks,
+    LockChoice choice,
+  ) => switch (choice) {
+    LocksChosen(:final Map<Package, LockSource> locks) => locks,
+    LockLacking(:final Package package) => throw StoreFault(
+      Unlocked(.of(locks, codebase, package)),
+    ),
+  };
+
+  /// The packages [survey] found a kept lock for.
+  Set<Package> _kept(Survey survey) => {
+    for (final MapEntry<Package, SurveyedPackage>(:key, :value)
+        in survey.packages.entries)
+      if (value.keptLock != null) key,
+  };
+
+  /// [codebase]'s packages in the checkout at [at], each with the lock
+  /// [chosen] for it in place, resolved by [sdk]'s toolchain, and the stamp
+  /// written last.
+  Future<void> _resolveAndStamp(
+    Codebase codebase,
+    LocksDirectory locks,
+    CheckoutPath at,
+    Map<Package, LockSource> chosen,
+    SdkVersion sdk,
+  ) async {
     // Every lock is in place before any package resolves, so no resolve
     // meets a package still lacking its lock.
     for (final MapEntry<Package, LockSource>(key: package, value: source)
@@ -220,9 +342,8 @@ class Checkouts {
           final KeptLockPath kept = .of(locks, codebase, package);
           await fileAct(
             kept.path,
-            () =>
-                File(kept.path)
-                    .copy(PackagePath.of(at, codebase.root, package).lock.path),
+            () => File(kept.path)
+                .copy(PackagePath.inCheckout(at, codebase, package).lock.path),
           );
       }
     }
@@ -231,17 +352,14 @@ class Checkouts {
         in chosen.entries) {
       packages[package] = await _resolve(
         codebase,
-        .of(at, codebase.root, package),
+        .inCheckout(at, codebase, package),
         source,
       );
     }
     final Stamp stamp = (
-      url: codebase.url,
-      commit: codebase.commit,
-      root: codebase.root,
-      toolchain: codebase.toolchain,
+      codebase: codebase,
       packages: .unmodifiable(packages),
-      sdk: survey.sdk,
+      sdk: sdk,
     );
     await fileAct(
       at.stamp.path,
@@ -249,10 +367,75 @@ class Checkouts {
     );
   }
 
+  /// [codebase]'s package unpacked afresh into the checkout at [at],
+  /// whatever stood there removed first, and the package around it written
+  /// in the checkout's top where it resolves as a dependency, each package's
+  /// overrides written where it needs them to resolve alone and holds none,
+  /// and what it
+  /// holds of its packages: the root always, and the example where it holds
+  /// a pubspec of its own.
+  Future<AtCommit> _unpack(CheckoutPath at, HostedCodebase codebase) async {
+    await removeDirectory(at.path);
+    await fileAct(at.path, () => Directory(at.path).create(recursive: true));
+    await _runner.run(unpackCommand(codebase, at));
+    switch (codebase.resolution) {
+      case .alone:
+        break;
+      case .asDependency:
+        final PubspecPath around = PackagePath.ofHosted(
+          at,
+          codebase,
+          .root,
+        ).pubspec;
+        await fileAct(
+          around.path,
+          () => File(around.path).writeAsString(aroundPubspec(codebase)),
+        );
+    }
+    final Set<Package> packages = {};
+    for (final Package package in Package.values) {
+      // The root's own pubspec, under either resolution, since the package
+      // around it is muster's.
+      final PubspecPath pubspec = switch (package) {
+        .root => PackagePath.unpacked(at, codebase).pubspec,
+        .example => PackagePath.ofHosted(at, codebase, package).pubspec,
+      };
+      final List<int>? bytes = await bytesIfThere(pubspec.path);
+      if (!hostedResolves(package, held: bytes != null)) {
+        continue;
+      }
+      packages.add(package);
+      final PubspecOverridesPath path = PackagePath.ofHosted(
+        at,
+        codebase,
+        package,
+      ).overrides;
+      if (pubspecOverrides(
+            codebase,
+            package,
+            member: switch (bytes) {
+              final List<int> bytes => workspaceMember(
+                utf8.decode(bytes, allowMalformed: true),
+              ),
+              null => false,
+            },
+            holding: await bytesIfThere(path.path) != null,
+          )
+          case final String overrides) {
+        await fileAct(
+          path.path,
+          () => File(path.path).writeAsString(overrides),
+        );
+      }
+    }
+    return (packages: packages, locked: const <Package>{});
+  }
+
   /// The survey of [codebase]'s checkout at [at], its kept locks in [locks].
-  /// Git reads the worktree only where a stamp is there to weigh it against.
+  /// Git reads a git checkout only where a stamp is there to weigh it
+  /// against, and never a hosted one.
   Future<Survey> _survey(
-    GitCodebase codebase,
+    Codebase codebase,
     LocksDirectory locks,
     CheckoutPath at,
   ) async {
@@ -263,22 +446,35 @@ class Checkouts {
       ),
       null => null,
     };
-    final Worktree? worktree = stamp != null && await _there(at)
-        ? await _status(at)
-        : null;
+    final Worktree? worktree = switch (codebase) {
+      Git() when stamp != null && await _there(at) => await _status(at),
+      Git() || Hosted() => null,
+    };
     final Map<Package, SurveyedPackage> packages = {};
     for (final Package package in Package.values) {
-      final PackagePath path = .of(at, codebase.root, package);
+      final PackagePath path = .inCheckout(at, codebase, package);
       packages[package] = (
         lock: await _hash(path.lock.path),
         keptLock: await _hash(KeptLockPath.of(locks, codebase, package).path),
         packageConfig: await _hash(path.packageConfig.path),
       );
     }
+    final PubspecPath handedOut = switch (codebase) {
+      Git(codebase: final GitCodebase git) => PackagePath.of(
+        at,
+        git.root,
+        .root,
+      ).pubspec,
+      Hosted(codebase: final HostedCodebase hosted) => PackagePath.unpacked(
+        at,
+        hosted,
+      ).pubspec,
+    };
     final Survey survey = (
       sdk: sdk,
       stamp: stamp,
       worktree: worktree,
+      there: await fileAct(handedOut.path, File(handedOut.path).exists),
       packages: .unmodifiable(packages),
     );
     return survey;
@@ -374,7 +570,7 @@ class Checkouts {
   /// [package] resolved by [codebase]'s toolchain on the lock placed in it,
   /// which came from [source], and what its stamp records of it.
   Future<StampedPackage> _resolve(
-    GitCodebase codebase,
+    Codebase codebase,
     PackagePath package,
     LockSource source,
   ) async {

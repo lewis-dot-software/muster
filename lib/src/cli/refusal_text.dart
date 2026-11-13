@@ -24,9 +24,6 @@ String refusalText(LoadRefusal refusal) => switch (refusal) {
   CodebaseNamedTwice(:final name, :final first, :final second) =>
     '${name.name}: named in ${_line(first.path)} and again in '
         '${_line(second.path)}',
-  HostedNotLoaded(:final manifest, :final name) =>
-    '${_line(manifest.path)}: ${name.name}: a hosted codebase, which no load '
-        'takes yet',
   NoWorkingDirectory(:final String reason) =>
     'no working directory: ${_line(reason)}',
   NoCache(:final Os os) => 'no cache: ${_cacheText(os)}',

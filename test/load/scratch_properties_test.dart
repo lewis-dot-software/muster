@@ -90,7 +90,7 @@ enum _Fault {
 }
 
 void main() {
-  Glados(_draw, ExploreConfig(numRuns: 10)).test(
+  Glados(_draw, .new(numRuns: 10)).test(
     'A scratch worktree moves to any commit in its clone without touching '
     "any consumer's checkout, and is gone once it is disposed of.",
     (_Draw draw) async {
@@ -129,7 +129,7 @@ void main() {
         final Scratching made = await muster!.scratch(app.name);
         final Scratch scratch = switch (made) {
           Scratched(:final Scratch scratch) => scratch,
-          NotNamed() || ScratchFailed() => fail('$made'),
+          NotNamed() || NoClone() || ScratchFailed() => fail('$made'),
         };
         final String at = scratch.package.path;
         for (final (int index, _Dirt dirt) in draw.moves) {
@@ -176,7 +176,7 @@ void main() {
   Glados2(
     any.choose(_Fault.values).shrinkingAtMost(gitTries),
     any.lowercaseLetters.shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 18),
+    .new(numRuns: 18),
   ).test('A scratch that cannot be made comes back as an outcome, never a '
       'throw.', (_Fault fault, String letters) async {
     await inTemp((Directory temp) async {

@@ -32,7 +32,7 @@ final Generator<_Draw> _draw = any.combine4(
 );
 
 void main() {
-  Glados(_draw, ExploreConfig(numRuns: 300)).test(
+  Glados(_draw, .new(numRuns: 300)).test(
     'Each package a git codebase resolves, its `root` and an `example/` with '
     'a pubspec of its own, takes the `pubspec.lock` its commit holds there, '
     'else its kept lock, and with neither the codebase returns `Unlocked`.',

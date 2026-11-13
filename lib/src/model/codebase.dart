@@ -1,6 +1,7 @@
 import 'codebase_name.dart';
 import 'git_codebase.dart';
 import 'hosted_codebase.dart';
+import 'toolchain.dart';
 
 /// A codebase a manifest names, by git or by a package on pub.dev.
 sealed class Codebase {
@@ -10,6 +11,12 @@ sealed class Codebase {
   CodebaseName get name => switch (this) {
     Git(:final GitCodebase codebase) => codebase.name,
     Hosted(:final HostedCodebase codebase) => codebase.name,
+  };
+
+  /// The toolchain that resolves the codebase.
+  Toolchain get toolchain => switch (this) {
+    Git(:final GitCodebase codebase) => codebase.toolchain,
+    Hosted(:final HostedCodebase codebase) => codebase.toolchain,
   };
 }
 

@@ -1,6 +1,6 @@
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/content_hash.dart';
-import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/lock_source.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/sdk_version.dart';
@@ -11,25 +11,15 @@ import 'manifests.dart';
 
 /// The stamp of [codebase], its [packages] resolved by [sdk].
 Stamp stampOf(
-  GitCodebase codebase,
+  Codebase codebase,
   Map<Package, StampedPackage> packages,
   SdkVersion sdk,
-) => (
-  url: codebase.url,
-  commit: codebase.commit,
-  root: codebase.root,
-  toolchain: codebase.toolchain,
-  packages: packages,
-  sdk: sdk,
-);
+) => (codebase: codebase, packages: packages, sdk: sdk);
 
 /// Matches a stamp whose every value is [stamp]'s, its packages compared
 /// entry by entry.
 Matcher sameStamp(Stamp stamp) => isA<Stamp>()
-    .having((Stamp s) => s.url, 'url', stamp.url)
-    .having((Stamp s) => s.commit, 'commit', stamp.commit)
-    .having((Stamp s) => s.root, 'root', stamp.root)
-    .having((Stamp s) => s.toolchain, 'toolchain', stamp.toolchain)
+    .having((Stamp s) => s.codebase, 'codebase', stamp.codebase)
     .having((Stamp s) => s.packages, 'packages', equals(stamp.packages))
     .having((Stamp s) => s.sdk, 'sdk', stamp.sdk);
 
@@ -68,7 +58,7 @@ extension StampAnys on Any {
     },
   );
 
-  /// A stamp of any codebase.
+  /// A stamp of any codebase, of either kind.
   Generator<Stamp> get stamp =>
-      combine3(gitCodebase(), stampedPackages, sdkVersion, stampOf);
+      combine3(anyCodebase(), stampedPackages, sdkVersion, stampOf);
 }

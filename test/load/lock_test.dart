@@ -16,7 +16,6 @@ import '../support/loads.dart';
 import '../support/locker.dart';
 import '../support/locks.dart';
 import '../support/origin.dart';
-import '../support/manifests.dart';
 import '../support/packages.dart';
 import '../support/probe_gone.dart';
 import '../support/spy_runner.dart';
@@ -354,27 +353,6 @@ void main() {
         ),
       );
       expect(runner.given, isEmpty);
-    });
-
-    test('on a hosted codebase', () async {
-      await writeFile(
-        atRoot(temp),
-        renderManifest([
-          entryOf(await codebaseNamed('app')),
-          hostedEntryOf(hosted('analyzer', 'analyzer', '7.1.0', .alone, .dart)),
-        ]),
-      );
-      runner.commands.clear();
-      expect(
-        await lock(),
-        isA<LockRefused>().having(
-          (LockRefused r) => r.reason,
-          'reason',
-          isA<HostedNotLoaded>(),
-        ),
-      );
-      expect(runner.given, isEmpty);
-      expect(await Directory(locksBeside(atRoot(temp)).path).exists(), isFalse);
     });
 
     test('with no cache to clone into', () async {

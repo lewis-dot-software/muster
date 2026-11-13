@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -158,7 +159,7 @@ class _Bench {
   final Checkouts checkouts;
   final LocksDirectory locks;
 
-  CheckoutPath get checkout => .of(checkouts.root, .parse('app')!);
+  CheckoutPath get checkout => appCheckout(checkouts);
 
   String inCheckout(String file) => fileIn(checkout, file);
 
@@ -167,7 +168,7 @@ class _Bench {
 }
 
 void main() {
-  Glados(_draw, ExploreConfig(numRuns: 15)).test(
+  Glados(_draw, .new(numRuns: 15)).test(
     'A checkout made again holds exactly the pin\'s tracked files: every edit '
     'is reverted and every file the pin lacks is removed.',
     (_Draw draw) => inTemp((Directory temp) async {
@@ -183,11 +184,11 @@ void main() {
       final GitCodebase codebase = codebaseOf(bench.origin, pin);
       if (draw.elsewhere) {
         await bench.checkouts.checkout(
-          codebaseOf(bench.origin, other),
+          Git(codebaseOf(bench.origin, other)),
           bench.locks,
         );
       }
-      await bench.checkouts.checkout(codebase, bench.locks);
+      await bench.checkouts.checkout(Git(codebase), bench.locks);
       final List<String> tracked = files.keys.toList();
       for (final (_Act act, int at) in [(draw.forcing, 0), ...draw.acts]) {
         final String file = tracked[at % tracked.length];
@@ -222,7 +223,7 @@ void main() {
             }
         }
       }
-      await bench.checkouts.checkout(codebase, bench.locks);
+      await bench.checkouts.checkout(Git(codebase), bench.locks);
       expect(
         await filesUnder(bench.checkout.path, less: ['.git', '.dart_tool']),
         files,
@@ -236,7 +237,7 @@ void main() {
     }),
   );
 
-  Glados(_writes, ExploreConfig(numRuns: 15)).test(
+  Glados(_writes, .new(numRuns: 15)).test(
     'A standing checkout keeps everything a tool wrote beside its tracked '
     'files, ignored or untracked.',
     (_Writes writes) => inTemp((Directory temp) async {
@@ -244,7 +245,7 @@ void main() {
       final Commit pin = await bench.origin.commit(null, _pinFiles({0}, 0));
       await bench.origin.ref('refs/heads/main', pin);
       final GitCodebase codebase = codebaseOf(bench.origin, pin);
-      await bench.checkouts.checkout(codebase, bench.locks);
+      await bench.checkouts.checkout(Git(codebase), bench.locks);
       final Map<String, String> wrote = {
         for (final (_Kind kind, int at, String contents) in writes)
           _written(kind, at): contents,
@@ -254,7 +255,10 @@ void main() {
       }
       bench.runner.commands.clear();
       // A new load's, since a load reads each SDK version once.
-      await checkoutsIn(temp, bench.runner).checkout(codebase, bench.locks);
+      await checkoutsIn(
+        temp,
+        bench.runner,
+      ).checkout(Git(codebase), bench.locks);
       expect(bench.runner.given, hasLength(2));
       expect(bench.runner.given.last, contains(' status '));
       for (final MapEntry<String, String>(:key, :value) in wrote.entries) {

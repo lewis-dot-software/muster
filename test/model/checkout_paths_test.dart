@@ -99,11 +99,11 @@ void main() {
     );
     final String key = LockKey.of(Git(pinned)).hex;
     expect(
-      KeptLockPath.of(locks, pinned, .root).path,
+      KeptLockPath.of(locks, Git(pinned), .root).path,
       '/c/muster_locks/app-$key.lock',
     );
     expect(
-      KeptLockPath.of(locks, pinned, .example).path,
+      KeptLockPath.of(locks, Git(pinned), .example).path,
       '/c/muster_locks/app-$key.example.lock',
     );
   });
@@ -121,7 +121,7 @@ void main() {
       .dart,
     );
     expect(
-      KeptLockPath.of(locks, pinned, .example).path,
+      KeptLockPath.of(locks, Git(pinned), .example).path,
       r'C:\c\muster_locks\app-'
       '${LockKey.of(Git(pinned)).hex}.example.lock',
     );

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
@@ -72,7 +73,11 @@ void main() {
       final String second = p.join(temp.path, 'elsewhere', 'bench.yaml');
       await writeManifest(atRoot(temp), [codebaseOf(origin, app)]);
       await writeManifest(second, [benchCodebase]);
-      final KeptLockPath kept = .of(locksBeside(second), benchCodebase, .root);
+      final KeptLockPath kept = .of(
+        locksBeside(second),
+        Git(benchCodebase),
+        .root,
+      );
       await writeFile(kept.path, lockText);
       final String muster = await musterRoot();
       final String consumer = consumerIn(temp).path;

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -66,7 +67,7 @@ void main() {
     final String second = p.join(temp.path, 'elsewhere', 'bench.yaml');
     await writeManifest(atRoot(temp), [app]);
     await writeManifest(second, [bench]);
-    final KeptLockPath kept = .of(locksBeside(second), bench, .root);
+    final KeptLockPath kept = .of(locksBeside(second), Git(bench), .root);
     await writeFile(kept.path, lockText);
     expect(
       await load(variables: {'MUSTER_MANIFESTS': second}),
@@ -139,7 +140,7 @@ void main() {
           'lock',
           KeptLockPath.of(
             locksBeside(atRoot(temp, 'sub/bench.yaml')),
-            app,
+            Git(app),
             .root,
           ),
         ),
@@ -378,33 +379,6 @@ void main() {
         ),
       );
     });
-
-    test(
-      'on a hosted codebase, naming it and the manifest that names it',
-      () async {
-        final String listed = p.join(temp.path, 'listed.yaml');
-        await writeManifest(atRoot(temp), [await codebaseNamed('app')]);
-        await writeFile(
-          listed,
-          renderManifest([
-            entryOf(await codebaseNamed('b')),
-            hostedEntryOf(
-              hosted('analyzer', 'analyzer', '7.1.0', .alone, .dart),
-            ),
-          ]),
-        );
-        await refuses(
-          isA<HostedNotLoaded>()
-              .having(
-                (HostedNotLoaded h) => h.manifest.path,
-                'manifest',
-                listed,
-              )
-              .having((HostedNotLoaded h) => h.name.name, 'name', 'analyzer'),
-          variables: {'MUSTER_MANIFESTS': listed},
-        );
-      },
-    );
 
     test('on a name met in two manifests, naming it and both', () async {
       final GitCodebase app = await codebaseNamed('app');

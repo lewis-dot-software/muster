@@ -1,4 +1,4 @@
-import 'git_codebase.dart';
+import 'codebase.dart';
 import 'kept_lock_path.dart';
 import 'locks_directory.dart';
 import 'package.dart';
@@ -12,10 +12,10 @@ import 'unnamed_lock.dart';
 List<UnnamedLock> chooseUnnamed(
   LocksDirectory locks,
   Iterable<String> listed,
-  Iterable<GitCodebase> codebases,
+  Iterable<Codebase> codebases,
 ) {
   final Set<KeptLockPath> named = {
-    for (final GitCodebase codebase in codebases)
+    for (final Codebase codebase in codebases)
       for (final Package package in Package.values)
         .of(locks, codebase, package),
   };

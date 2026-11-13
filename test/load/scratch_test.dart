@@ -62,7 +62,7 @@ void main() {
     final Scratching made = await muster.scratch(.parse(name)!);
     return switch (made) {
       Scratched(:final Scratch scratch) => scratch,
-      NotNamed() || ScratchFailed() => fail('$made'),
+      NotNamed() || NoClone() || ScratchFailed() => fail('$made'),
     };
   }
 

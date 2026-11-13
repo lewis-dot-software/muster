@@ -42,7 +42,7 @@ List<CloneStep> _steps(_Clone clone) {
 }
 
 void main() {
-  Glados(_clone, ExploreConfig(numRuns: 100)).test(
+  Glados(_clone, .new(numRuns: 100)).test(
     'A clone that is missing is cloned, one that lacks the pin\'s commit is '
     'fetched, and one that holds it is left untouched.',
     (_Clone clone) {

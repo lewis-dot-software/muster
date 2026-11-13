@@ -129,7 +129,7 @@ void main() {
           ),
         )
         .shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 12),
+    .new(numRuns: 12),
   ).test(
     'Two loads at once, as isolates of one process or as separate processes, '
     'never act on one clone or checkout together, and the second hands out '
@@ -212,7 +212,7 @@ void main() {
               (apart: apart, pause: pause, ending: ending, before: before),
         )
         .shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 12),
+    .new(numRuns: 12),
   ).test(
     'A claim left by a load that ended without releasing it, whether by a '
     'crash or by an error, never blocks a later load.',

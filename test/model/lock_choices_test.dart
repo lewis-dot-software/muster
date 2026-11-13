@@ -1,4 +1,5 @@
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/choose_unnamed.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
@@ -17,7 +18,7 @@ final LocksDirectory _locks = .beside(.parse('/m/muster.yaml', .posix)!);
 List<String> _namedFiles(List<GitCodebase> codebases) => [
   for (final GitCodebase codebase in codebases)
     for (final Package package in Package.values)
-      p.posix.basename(KeptLockPath.of(_locks, codebase, package).path),
+      p.posix.basename(KeptLockPath.of(_locks, Git(codebase), package).path),
 ];
 
 void main() {
@@ -39,7 +40,11 @@ void main() {
         ...strays,
       ]) ...[name, '$name.partial'],
     ];
-    final List<UnnamedLock> unnamed = chooseUnnamed(_locks, listed, named);
+    final List<UnnamedLock> unnamed = chooseUnnamed(
+      _locks,
+      listed,
+      named.map(Git.new),
+    );
     final Set<String> keep = {
       for (final String name in _namedFiles(named)) ...[name, '$name.partial'],
     };

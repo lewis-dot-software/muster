@@ -1,3 +1,4 @@
+import '../model/codebase.dart';
 import '../model/codebase_name.dart';
 import '../model/git_codebase.dart';
 import '../model/scratch_path.dart';
@@ -10,11 +11,11 @@ import 'scratching.dart';
 /// muster's entry: the load of a consumer's codebases, and the scratches a
 /// consumer moves off their pins.
 final class Muster {
-  /// The muster that makes a scratch of each of [_codebases], by its name,
-  /// through [_scratches].
+  /// The muster that makes a scratch of each git codebase of [_codebases],
+  /// by its name, through [_scratches].
   Muster(this._codebases, this._scratches);
 
-  final Map<CodebaseName, GitCodebase> _codebases;
+  final Map<CodebaseName, Codebase> _codebases;
 
   final Scratches _scratches;
 
@@ -48,12 +49,18 @@ final class Muster {
   /// beside.
   ///
   /// Returns [Scratched], [NotNamed] where no codebase of the load bears
-  /// [name], and [ScratchFailed] where the scratch cannot be made, its
-  /// directory removed. Nothing throws but a bug.
+  /// [name], [NoClone] where a hosted one does, and [ScratchFailed] where
+  /// the scratch cannot be made, its directory removed. Nothing throws but a
+  /// bug.
   Future<Scratching> scratch(CodebaseName name) async {
-    final GitCodebase? codebase = _codebases[name];
-    if (codebase == null) {
-      return NotNamed(name);
+    final GitCodebase codebase;
+    switch (_codebases[name]) {
+      case Git(codebase: final GitCodebase git):
+        codebase = git;
+      case Hosted():
+        return NoClone(name);
+      case null:
+        return NotNamed(name);
     }
     try {
       final ScratchPath at = await _scratches.make(codebase);

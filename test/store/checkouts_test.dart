@@ -1,7 +1,7 @@
 import 'dart:io';
 
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/checkout.dart';
-import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
@@ -52,12 +52,9 @@ void main() {
     return commit;
   }
 
-  /// The checkout of the codebase `app`.
-  CheckoutPath checkoutOf() => .of(checkouts.root, .parse('app')!);
-
   /// The path of [file] in the checkout, given relative to its top in `/`
   /// separators.
-  String inCheckout(String file) => fileIn(checkoutOf(), file);
+  String inCheckout(String file) => fileIn(appCheckout(checkouts), file);
 
   /// The repo the checkout's worktree belongs to, its links resolved.
   Future<String> commonDir() async => Directory(
@@ -65,7 +62,7 @@ void main() {
       executable: .git,
       arguments: [
         '-C',
-        checkoutOf().path,
+        appCheckout(checkouts).path,
         'rev-parse',
         '--path-format=absolute',
         '--git-common-dir',
@@ -78,7 +75,7 @@ void main() {
       Directory(cloneOf(temp, codebase).path).resolveSymbolicLinks();
 
   /// The commit the checkout's `HEAD` stands at.
-  Future<String> head() => headOf(checkoutOf().path, runner);
+  Future<String> head() => headOf(appCheckout(checkouts).path, runner);
 
   /// The version of the Dart SDK on `PATH`.
   Future<SdkVersion> dartVersion() async =>
@@ -93,28 +90,28 @@ void main() {
   /// The checkout of [codebase], then each command cleared, so the next call
   /// is the one watched.
   Future<Checkout> warm(GitCodebase codebase) async {
-    final Checkout checkout = await checkouts.checkout(codebase, locks);
+    final Checkout checkout = await checkouts.checkout(Git(codebase), locks);
     runner.commands.clear();
     return checkout;
   }
 
   /// The stamp beside the checkout.
   Future<Stamp?> stamp() async =>
-      parseStamp(await File(checkoutOf().stamp.path).readAsString());
+      parseStamp(await File(appCheckout(checkouts).stamp.path).readAsString());
 
   test('a checkout comes back at its pin, resolved, handed out at its root, '
       'with the SDK that resolved it', () async {
     final Commit pin = await onMain(packageFiles('app'));
     final Checkout checkout = await checkouts.checkout(
-      codebaseOf(origin, pin),
+      Git(codebaseOf(origin, pin)),
       locks,
     );
-    expect(checkout.package.path, checkoutOf().path);
+    expect(checkout.package.path, appCheckout(checkouts).path);
     expect(checkout.sdk, await dartVersion());
     expect(await head(), pin.hash);
     expect(await commonDir(), await resolvedClone(codebaseOf(origin, pin)));
     expect(await File(checkout.package.packageConfig.path).exists(), isTrue);
-    expect((await stamp())?.commit, pin);
+    expect((await stamp())?.codebase, Git(codebaseOf(origin, pin)));
   });
 
   test('a checkout that stands comes back with nothing run but the '
@@ -128,11 +125,11 @@ void main() {
     final Checkout second = await checkoutsIn(
       temp,
       runner,
-    ).checkout(codebase, locks);
+    ).checkout(Git(codebase), locks);
     expect(second, first);
     expect(runner.given, [
       'dart --version',
-      'git -C ${checkoutOf().path} --git-dir=.git --work-tree=. '
+      'git -C ${appCheckout(checkouts).path} --git-dir=.git --work-tree=. '
           '--no-optional-locks status --porcelain=v2 --branch -z '
           '--untracked-files=no',
     ]);
@@ -146,7 +143,7 @@ void main() {
           packageFiles('inner', at: 'pkgs/inner'),
         );
         final Checkout checkout = await checkouts.checkout(
-          codebaseOf(origin, pin, root: 'pkgs/inner'),
+          Git(codebaseOf(origin, pin, root: 'pkgs/inner')),
           locks,
         );
         expect(checkout.package.path, inCheckout('pkgs/inner'));
@@ -166,7 +163,7 @@ void main() {
           ...packageFiles('app_example', at: 'example'),
         }),
       );
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(
         await File(inCheckout('example/.dart_tool/package_config.json'))
             .exists(),
@@ -177,7 +174,7 @@ void main() {
         ...packageFiles('app'),
         'example/main.dart': 'void main() {}\n',
       });
-      await checkouts.checkout(codebaseOf(origin, bare), locks);
+      await checkouts.checkout(Git(codebaseOf(origin, bare)), locks);
       expect(
         await Directory(inCheckout('example/.dart_tool')).exists(),
         isFalse,
@@ -191,10 +188,10 @@ void main() {
         origin,
         await onMain(packageFiles('app', locked: false)),
       );
-      final KeptLockPath kept = .of(locks, codebase, .root);
+      final KeptLockPath kept = .of(locks, Git(codebase), .root);
       final String text = '# kept\n$lockText';
       await writeFile(kept.path, text);
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(await File(inCheckout('pubspec.lock')).readAsString(), text);
       expect(
         await File(inCheckout('.dart_tool/package_config.json')).exists(),
@@ -211,10 +208,10 @@ void main() {
           ...packageFiles('app_example', at: 'example', locked: false),
         }),
       );
-      final KeptLockPath kept = .of(locks, codebase, .example);
+      final KeptLockPath kept = .of(locks, Git(codebase), .example);
       final String text = '# kept\n$lockText';
       await writeFile(kept.path, text);
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(
         await File(inCheckout('example/pubspec.lock')).readAsString(),
         text,
@@ -239,9 +236,13 @@ void main() {
           ...packageFiles('app_example', at: 'example', locked: false),
         }),
       );
-      final KeptLockPath kept = .of(locks, codebase, .example);
+      final KeptLockPath kept = .of(locks, Git(codebase), .example);
       await writeFile(kept.path, lockText);
-      final PackagePath example = .of(checkoutOf(), codebase.root, .example);
+      final PackagePath example = .of(
+        appCheckout(checkouts),
+        codebase.root,
+        .example,
+      );
       // What each resolve found of the example as it began, by the
       // directory it resolves.
       final Map<String, ({bool locked, bool resolved})> found = {};
@@ -254,9 +255,12 @@ void main() {
         }
         return null;
       };
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(found, {
-        '--directory=${checkoutOf().path}': (locked: true, resolved: false),
+        '--directory=${appCheckout(checkouts).path}': (
+          locked: true,
+          resolved: false,
+        ),
         '--directory=${example.path}': (locked: true, resolved: false),
       });
     });
@@ -266,9 +270,9 @@ void main() {
         origin,
         await onMain(packageFiles('app')),
       );
-      final KeptLockPath kept = .of(locks, codebase, .root);
+      final KeptLockPath kept = .of(locks, Git(codebase), .root);
       await writeFile(kept.path, '# kept\n$lockText');
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(await File(inCheckout('pubspec.lock')).readAsString(), lockText);
     });
 
@@ -278,7 +282,7 @@ void main() {
         origin,
         await onMain(packageFiles('app')),
       );
-      await checkouts.checkout(locked, locks);
+      await checkouts.checkout(Git(locked), locks);
       final GitCodebase unlocked = codebaseOf(
         origin,
         await onMain({
@@ -288,20 +292,20 @@ void main() {
       );
       runner.commands.clear();
       await expectLater(
-        checkouts.checkout(unlocked, locks),
+        checkouts.checkout(Git(unlocked), locks),
         throwsA(
           storeFault(
             isA<Unlocked>().having(
               (Unlocked u) => u.lock,
               'lock',
-              KeptLockPath.of(locks, unlocked, .example),
+              KeptLockPath.of(locks, Git(unlocked), .example),
             ),
           ),
         ),
       );
       expect(madeAgain(), isFalse);
       expect(await head(), locked.commit.hash);
-      expect((await stamp())?.commit, locked.commit);
+      expect((await stamp())?.codebase, Git(locked));
     });
 
     test('a root with neither lock fails as Unlocked, naming the root\'s kept '
@@ -314,13 +318,13 @@ void main() {
         }),
       );
       await expectLater(
-        checkouts.checkout(unlocked, locks),
+        checkouts.checkout(Git(unlocked), locks),
         throwsA(
           storeFault(
             isA<Unlocked>().having(
               (Unlocked u) => u.lock,
               'lock',
-              KeptLockPath.of(locks, unlocked, .root),
+              KeptLockPath.of(locks, Git(unlocked), .root),
             ),
           ),
         ),
@@ -350,19 +354,19 @@ void main() {
       );
       expect(await stamp(), isNotNull);
       runner.commands.clear();
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       expect(madeAgain(), isFalse);
     }
 
     test('a tracked file is edited', () async {
       await File(inCheckout('lib/app.dart')).writeAsString('int a = 2;\n');
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
     test('a tracked file is deleted', () async {
       await File(inCheckout('lib/app.dart')).delete();
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
@@ -371,7 +375,7 @@ void main() {
         executable: .git,
         arguments: [
           '-C',
-          checkoutOf().path,
+          appCheckout(checkouts).path,
           'commit',
           '--quiet',
           '--allow-empty',
@@ -379,14 +383,14 @@ void main() {
         ],
       ));
       runner.commands.clear();
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
     test('a package_config.json is not the one stamped', () async {
       await File(inCheckout('.dart_tool/package_config.json'))
           .writeAsString('{}');
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
       expect(
         await File(inCheckout('.dart_tool/package_config.json')).readAsString(),
@@ -395,12 +399,13 @@ void main() {
     });
 
     test('the stamp is gone, or holds no stamp', () async {
-      await File(checkoutOf().stamp.path).delete();
-      await checkouts.checkout(codebase, locks);
+      await File(appCheckout(checkouts).stamp.path).delete();
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
-      await File(checkoutOf().stamp.path).writeAsString('not a stamp');
+      await File(appCheckout(checkouts).stamp.path)
+          .writeAsString('not a stamp');
       runner.commands.clear();
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
@@ -415,38 +420,39 @@ void main() {
           : null;
       // A new load's, since a load reads each SDK version once.
       checkouts = checkoutsIn(temp, runner);
-      final Checkout checkout = await checkouts.checkout(codebase, locks);
+      final Checkout checkout = await checkouts.checkout(Git(codebase), locks);
       expect(checkout.sdk, SdkVersion.parse('9.9.9'));
       expect((await stamp())?.sdk, SdkVersion.parse('9.9.9'));
       await remade();
     });
 
     test('the checkout\'s directory is deleted by hand', () async {
-      await Directory(checkoutOf().path).delete(recursive: true);
-      await checkouts.checkout(codebase, locks);
+      await Directory(appCheckout(checkouts).path).delete(recursive: true);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
     test('the cache is deleted, its clone with it', () async {
       await Directory(cacheDirectoryIn(temp).path).delete(recursive: true);
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
 
     test('a directory that is no worktree stands where the checkout '
         'goes', () async {
-      await Directory(checkoutOf().path).delete(recursive: true);
+      await Directory(appCheckout(checkouts).path).delete(recursive: true);
       await File(inCheckout('lib/app.dart')).create(recursive: true);
       await File(inCheckout('stray')).writeAsString('stray');
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
       expect(await File(inCheckout('stray')).exists(), isFalse);
     });
 
     test('a link to nothing stands where the checkout goes', () async {
-      await Directory(checkoutOf().path).delete(recursive: true);
-      await Link(checkoutOf().path).create(p.join(temp.path, 'nowhere'));
-      await checkouts.checkout(codebase, locks);
+      await Directory(appCheckout(checkouts).path).delete(recursive: true);
+      await Link(appCheckout(checkouts).path)
+          .create(p.join(temp.path, 'nowhere'));
+      await checkouts.checkout(Git(codebase), locks);
       await remade();
     });
   });
@@ -454,12 +460,12 @@ void main() {
   group('a codebase moved:', () {
     test('a codebase pinned afresh is moved to its new pin', () async {
       final Commit first = await onMain(packageFiles('app'));
-      await checkouts.checkout(codebaseOf(origin, first), locks);
+      await checkouts.checkout(Git(codebaseOf(origin, first)), locks);
       final Commit second = await onMain({
         ...packageFiles('app'),
         'lib/new.dart': '',
       }, first);
-      await checkouts.checkout(codebaseOf(origin, second), locks);
+      await checkouts.checkout(Git(codebaseOf(origin, second)), locks);
       expect(await head(), second.hash);
       expect(await File(inCheckout('lib/new.dart')).exists(), isTrue);
     });
@@ -469,7 +475,7 @@ void main() {
         origin,
         await onMain(packageFiles('app')),
       );
-      await checkouts.checkout(codebase, locks);
+      await checkouts.checkout(Git(codebase), locks);
       final GitCodebase respelled = (
         name: codebase.name,
         url: .parse('${origin.url.url}/')!,
@@ -477,7 +483,7 @@ void main() {
         root: codebase.root,
         toolchain: codebase.toolchain,
       );
-      await checkouts.checkout(respelled, locks);
+      await checkouts.checkout(Git(respelled), locks);
       expect(await commonDir(), await resolvedClone(respelled));
     });
   });
@@ -488,11 +494,11 @@ void main() {
       origin,
       await onMain(packageFiles('app', locked: false)),
     );
-    final KeptLockPath kept = .of(locks, codebase, .root);
+    final KeptLockPath kept = .of(locks, Git(codebase), .root);
     await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(kept.path).writeAsString('# again\n$lockText');
-    await checkouts.checkout(codebase, locks);
+    await checkouts.checkout(Git(codebase), locks);
     expect(madeAgain(), isTrue);
     expect(
       await File(inCheckout('pubspec.lock')).readAsString(),
@@ -506,11 +512,11 @@ void main() {
       origin,
       await onMain(packageFiles('app', locked: false)),
     );
-    final KeptLockPath kept = .of(locks, codebase, .root);
+    final KeptLockPath kept = .of(locks, Git(codebase), .root);
     await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(inCheckout('pubspec.lock')).writeAsString('# edited\n$lockText');
-    await checkouts.checkout(codebase, locks);
+    await checkouts.checkout(Git(codebase), locks);
     expect(madeAgain(), isTrue);
     expect(await File(inCheckout('pubspec.lock')).readAsString(), lockText);
   });
@@ -539,7 +545,7 @@ void main() {
     await File(mine).writeAsString('mine');
     await File(inCheckout('.git')).delete();
     runner.commands.clear();
-    await checkouts.checkout(codebase, locks);
+    await checkouts.checkout(Git(codebase), locks);
     expect(madeAgain(), isTrue);
     expect(await commonDir(), await resolvedClone(codebase));
     expect(await head(), codebase.commit.hash);
@@ -551,8 +557,8 @@ void main() {
       'command, and leaves no stamp, even one an earlier make wrote, so the '
       'next call makes it again', () async {
     final Commit stamped = await onMain(packageFiles('app'));
-    await checkouts.checkout(codebaseOf(origin, stamped), locks);
-    expect(await File(checkoutOf().stamp.path).exists(), isTrue);
+    await checkouts.checkout(Git(codebaseOf(origin, stamped)), locks);
+    expect(await File(appCheckout(checkouts).stamp.path).exists(), isTrue);
     final GitCodebase codebase = codebaseOf(
       origin,
       await onMain({
@@ -561,7 +567,7 @@ void main() {
       }, stamped),
     );
     await expectLater(
-      checkouts.checkout(codebase, locks),
+      checkouts.checkout(Git(codebase), locks),
       throwsA(
         storeFault(
           isA<CommandFailed>().having(
@@ -572,10 +578,10 @@ void main() {
         ),
       ),
     );
-    expect(await File(checkoutOf().stamp.path).exists(), isFalse);
+    expect(await File(appCheckout(checkouts).stamp.path).exists(), isFalse);
     runner.commands.clear();
     await expectLater(
-      checkouts.checkout(codebase, locks),
+      checkouts.checkout(Git(codebase), locks),
       throwsA(storeFault(isA<CommandFailed>())),
     );
     expect(madeAgain(), isTrue);
@@ -589,7 +595,7 @@ void main() {
         : null;
     await expectLater(
       checkouts.checkout(
-        codebaseOf(origin, await onMain(packageFiles('app'))),
+        Git(codebaseOf(origin, await onMain(packageFiles('app')))),
         locks,
       ),
       throwsA(
@@ -612,7 +618,7 @@ void main() {
       final Checkouts unstartable = checkoutsIn(temp, unstartableIn(temp));
       await expectLater(
         unstartable.checkout(
-          codebaseOf(origin, await onMain(packageFiles('app'))),
+          Git(codebaseOf(origin, await onMain(packageFiles('app')))),
           locks,
         ),
         throwsA(
@@ -636,7 +642,7 @@ void main() {
     );
     await File(checkouts.root.path).create(recursive: true);
     await expectLater(
-      checkouts.checkout(codebase, locks),
+      checkouts.checkout(Git(codebase), locks),
       throwsA(
         storeFault(
           isA<StoreFailed>().having(
@@ -652,7 +658,7 @@ void main() {
   test('a pin its URL does not hold fails as PinMissing', () async {
     await onMain(packageFiles('app'));
     await expectLater(
-      checkouts.checkout(codebaseOf(origin, .parse('a' * 40)!), locks),
+      checkouts.checkout(Git(codebaseOf(origin, .parse('a' * 40)!)), locks),
       throwsA(storeFault(isA<PinMissing>())),
     );
   });
@@ -661,7 +667,7 @@ void main() {
       'Flutter version on PATH', () async {
     final Commit pin = await onMain(packageFiles('app'));
     final Checkout checkout = await checkouts.checkout(
-      codebaseOf(origin, pin, toolchain: .flutter),
+      Git(codebaseOf(origin, pin, toolchain: .flutter)),
       locks,
     );
     expect(

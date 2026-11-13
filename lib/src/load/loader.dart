@@ -7,7 +7,6 @@ import '../model/consumer_root.dart';
 import '../model/environment.dart';
 import '../model/codebase_name.dart';
 import '../model/fetch_outcome.dart';
-import '../model/git_codebase.dart';
 import '../model/kept_lock_path.dart';
 import '../model/load_refusal.dart';
 import '../model/lock_outcome.dart';
@@ -77,13 +76,12 @@ class Loader implements Loads {
   /// Refuses, with no process started and no file written, on the first
   /// fault the manifests meet: a manifest whose file name does not end
   /// `.yaml`, one named that is missing, unreadable or refuses to parse, a
-  /// load with no manifest at all, a name met twice, a hosted codebase, or no
-  /// cache.
+  /// load with no manifest at all, a name met twice, or no cache.
   ///
   /// Every expected failure a codebase meets is its outcome, and the load
   /// goes on to the next. Another load acting on a codebase's clone or
   /// checkout is waited on, never acted beside. The [Loaded] carries the
-  /// [Muster] that makes a scratch of each codebase the manifests name.
+  /// [Muster] that makes a scratch of each git codebase the manifests name.
   @override
   Future<Load> load({List<String> named = const [], String? root}) async {
     final _Read read;
@@ -105,7 +103,7 @@ class Loader implements Loads {
       }
     }
     final Muster muster = .new(
-      .unmodifiable(<CodebaseName, GitCodebase>{
+      .unmodifiable(<CodebaseName, Codebase>{
         for (final (:codebase, manifest: _) in read.codebases)
           codebase.name: codebase,
       }),
@@ -169,7 +167,7 @@ class Loader implements Loads {
   /// partial's only where it fails.
   Future<List<LockRemoval>> _removeUnnamed(
     LocksDirectory locks,
-    List<GitCodebase> codebases,
+    List<Codebase> codebases,
   ) async {
     final List<String> names;
     try {
@@ -254,21 +252,10 @@ class Loader implements Loads {
     if (manifests.isEmpty) {
       throw const _Refusal(NoManifest());
     }
-    final List<_NamedGit> codebases;
+    final List<NamedCodebase> codebases;
     switch (mergeManifests(manifests)) {
       case Merged(codebases: final List<NamedCodebase> merged):
-        codebases = [
-          for (final (:Codebase codebase, :int manifest) in merged)
-            switch (codebase) {
-              Git(codebase: final GitCodebase git) => (
-                codebase: git,
-                manifest: manifest,
-              ),
-              Hosted(:final CodebaseName name) => throw _Refusal(
-                HostedNotLoaded(paths[manifest], name),
-              ),
-            },
-        ];
+        codebases = merged;
       case NamedTwice(
         :final CodebaseName name,
         :final int first,
@@ -303,14 +290,10 @@ class Loader implements Loads {
 /// [clones] in the cache, and the [checkouts] that bring them to their pins.
 typedef _Read = ({
   List<ManifestPath> manifests,
-  List<_NamedGit> codebases,
+  List<NamedCodebase> codebases,
   Cache clones,
   Checkouts checkouts,
 });
-
-/// A git codebase beside the index of the manifest that named it among the
-/// load's.
-typedef _NamedGit = ({GitCodebase codebase, int manifest});
 
 /// A run refused for [reason] before any process or file write.
 final class _Refusal implements Exception {

@@ -77,18 +77,6 @@ final class CodebaseNamedTwice extends LoadRefusal {
   final ManifestPath second;
 }
 
-/// A codebase hosted on pub.dev, which no load takes.
-final class HostedNotLoaded extends LoadRefusal {
-  /// The refusal of the hosted codebase [name], which [manifest] names.
-  const HostedNotLoaded(this.manifest, this.name);
-
-  /// The manifest that names the codebase.
-  final ManifestPath manifest;
-
-  /// The hosted codebase's name.
-  final CodebaseName name;
-}
-
 /// A load whose working directory the system cannot give, as where it has
 /// been deleted.
 final class NoWorkingDirectory extends LoadRefusal {

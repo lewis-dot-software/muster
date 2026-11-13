@@ -42,7 +42,7 @@ void main() {
   Glados2(
     any.nonEmptyList(_codebase).shrinkingAtMost(gitTries),
     any.list(any.packageName).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 10),
+    .new(numRuns: 10),
   ).test(
     '`muster lock` writes a kept lock for each codebase that needs one and '
     'has none, leaves every existing lock untouched, and removes every lock '

@@ -1,3 +1,4 @@
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/consumer_root.dart';
@@ -51,7 +52,7 @@ enum OutcomeCase {
       .of(CheckoutPath.of(_root, codebase.name), codebase.root, .root),
       .parse('3.13.0')!,
     ),
-    .unlocked => Unlocked(.of(_locks, codebase, package)),
+    .unlocked => Unlocked(.of(_locks, Git(codebase), package)),
     .commandFailed => CommandFailed(
       (executable: executable, arguments: ['clone', codebase.url.url]),
       exitCode,

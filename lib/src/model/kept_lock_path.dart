@@ -1,18 +1,18 @@
 import 'codebase.dart';
-import 'git_codebase.dart';
 import 'lock_key.dart';
 import 'locks_directory.dart';
 import 'package.dart';
 
 /// The file of a kept lock, a lock muster keeps beside a manifest for a
-/// package whose commit holds none.
+/// package that holds none of its own: a git codebase's whose commit holds
+/// none, and every hosted codebase's.
 extension type const KeptLockPath._(String path) {
   /// The kept lock of [codebase]'s [package] in [locks]:
   /// `<name>-<key>.lock`, with `.example` before `.lock` for the example, the
   /// key the codebase's [LockKey].
   static KeptLockPath of(
     LocksDirectory locks,
-    GitCodebase codebase,
+    Codebase codebase,
     Package package,
   ) {
     final String suffix = switch (package) {
@@ -22,7 +22,7 @@ extension type const KeptLockPath._(String path) {
     return ._(
       locks.os.paths.join(
         locks.path,
-        '${codebase.name.name}-${LockKey.of(Git(codebase)).hex}$suffix$_extension',
+        '${codebase.name.name}-${LockKey.of(codebase).hex}$suffix$_extension',
       ),
     );
   }

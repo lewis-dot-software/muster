@@ -26,6 +26,16 @@ final class NotNamed extends Scratching {
   final CodebaseName name;
 }
 
+/// A codebase the load's manifests name with no clone to make a scratch of:
+/// a hosted one.
+final class NoClone extends Scratching {
+  /// The make refused for [name].
+  const NoClone(this.name);
+
+  /// The name asked for.
+  final CodebaseName name;
+}
+
 /// A make that failed, leaving no scratch.
 final class ScratchFailed extends Scratching {
   /// The make that failed for [failure].

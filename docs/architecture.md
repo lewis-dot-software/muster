@@ -29,7 +29,7 @@ flowchart LR
 | Phase | Makes | I/O |
 |---|---|---|
 | Read | Every codebase from the manifests, each beside the manifest that named it | Yes |
-| Survey | Each checkout's stamp, whether its directory is there, the hash of each package's `pubspec.lock` and `package_config.json` it holds and of each kept lock it could take, `HEAD` and tracked changes from one `git status`, and the toolchain's SDK version, read once a load | Yes |
+| Survey | Each checkout's stamp, whether the package it hands out holds its `pubspec.yaml`, the hash of each package's `pubspec.lock` and `package_config.json` it holds and of each kept lock it could take, `HEAD` and tracked changes from one `git status`, and the toolchain's SDK version, read once a load | Yes |
 | Stand | Whether the checkout stands, from the survey alone | No |
 | Clone | The clone of the codebase's URL, holding the pin's commit, and which of its packages that commit holds a lock for | Yes |
 | Choose | The lock each package resolves to, or `Unlocked` | No |
@@ -37,7 +37,7 @@ flowchart LR
 | Resolve | The toolchain's `pub get --enforce-lockfile --no-example` on each package alone, once every lock chosen is in place | Yes |
 | Stamp | The stamp that lets the next load hand the checkout out untouched | Yes |
 
-A hosted package skips Clone. The codebases load one after another, and more at once come only with a measurement that earns them.
+A hosted package skips Clone, and its Choose follows Check out, since whether it holds an example is read from the package unpacked. The codebases load one after another, and more at once come only with a measurement that earns them.
 
 ## Manifest
 
@@ -72,7 +72,7 @@ The rules the manifest obeys:
 - A codebase's key is its name, a pub package name, `[a-z][a-z0-9_]*`, since it names a directory, a stamp and a kept lock. A name twice across the manifests of one load refuses it.
 - A key muster does not know refuses the load before any fetch, named by its path from the top, as `codebases.app.depth` is. A key of the other kind's is one it does not know. So does a value its key cannot take, a `root` that leaves its repo among them, a codebase that is neither git nor hosted, and one that is both.
 - A manifest's file name ends `.yaml`. A manifest named that is missing, unreadable or not YAML refuses the load, and so does a load with no manifest at all.
-- `parseManifest` is the one place YAML is read. Everything past it takes a `Manifest`.
+- `parseManifest` is the one place a manifest's YAML is read, and everything past it takes a `Manifest`. `workspaceMember` reads an unpacked package's pubspec for `resolution: workspace` alone.
 
 ## Locks
 
@@ -86,7 +86,7 @@ Every codebase resolves to a lock, so its dependencies hold still as pub.dev pub
 
 A kept lock is a lock muster keeps beside a manifest. Its file is `<name>-<key>.lock`, and an example's adds `.example` before `.lock`. The key is a hash of every manifest value the resolve turns on: the source, the pin, `root` for a git codebase, `resolution` for a hosted one, and the toolchain. So any edit to those values finds no lock and the load returns `Unlocked`, never a resolution on a lock made for other values.
 
-`muster lock` resolves afresh each package that needs a kept lock and has none, in its codebase's checkout made again at the pin, its stamp deleted first, and writes its lock to `<file>.partial` beside it before moving it into place, so a write cut short never leaves part of a lock. It leaves every lock that stands, and removes every lock in the directory that no codebase of its manifest names, and every partial none names. A file there whose name ends neither `.lock` nor `.lock.partial` is left.
+`muster lock` resolves afresh each package that needs a kept lock and has none, any lock it was served removed first, in its codebase's checkout made again at the pin, its stamp deleted first, and writes its lock to `<file>.partial` beside it before moving it into place, so a write cut short never leaves part of a lock. It leaves every lock that stands, and removes every lock in the directory that no codebase of its manifest names, and every partial none names. A file there whose name ends neither `.lock` nor `.lock.partial` is left.
 
 ## Store
 
@@ -95,9 +95,9 @@ The cache is `MUSTER_CACHE` where it is set, else `$XDG_CACHE_HOME/muster` where
 A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory a codebase by its name:
 
 - A git codebase's checkout is a worktree of its clone, so it shares the clone's objects and carries the whole history, and git keeps its commit from collection. The load prunes the clone's worktrees before it adds one, so a checkout deleted by hand never blocks its own return.
-- A hosted package is unpacked by `dart pub unpack`, and pub's own cache holds its archive.
+- A hosted package is unpacked by `dart pub unpack` into `<package>-<version>/` in its checkout, and handed out there, and pub's own cache holds its archive. `dart` unpacks it whichever toolchain resolves it, since Flutter's `pub` has no `unpack`. One resolved `as-dependency` sits in a package muster writes around it in the checkout's top, `muster_around`, which depends on it by its path and overrides it to that path, so a dependency of its that depends back on it from its host resolves to it too. A tool reading the package finds the package config of the package around it above it. Its files are the ones pub serves, never pruned, but for a `pubspec.lock` its resolve replaces. muster writes a `pubspec_overrides.yaml` in each package that needs one to resolve alone and holds none: a package resolved `alone` from a pub workspace, `resolution: workspace`, sets no resolution, as `dart pub unpack` writes for it, and an example overrides the package to its own path, as the package around one resolved `as-dependency` does. pub never serves one at a package's top but may in its example, and one served there stands as served.
 
-The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make touches the checkout and written last. It names every manifest value the resolve turns on, each lock's source and its hash as placed in its package, the hash of each `package_config.json` the resolve wrote, and the SDK version that resolved it: the Dart SDK's from `dart --version`, or the Flutter framework's from `flutter --version --machine`. A kept lock is copied into its package as `pubspec.lock` before the resolve, so a git checkout carries it as a file its pin lacks. A checkout stands where its directory is there, its stamp matches what the survey read, and each package's lock and `package_config.json` is the one stamped, a kept lock's source beside its manifest too. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
+The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make touches the checkout and written last. It names the codebase, every manifest value the resolve turns on among its own, each lock's source and its hash as placed in its package, the hash of each `package_config.json` the resolve wrote, and the SDK version that resolved it: the Dart SDK's from `dart --version`, or the Flutter framework's from `flutter --version --machine`. A kept lock is copied into its package as `pubspec.lock` before the resolve, so a git checkout carries it as a file its pin lacks. A checkout stands where the package it hands out holds its `pubspec.yaml`, its stamp matches what the survey read, and each package's lock and `package_config.json` is the one stamped, a kept lock's source beside its manifest too. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
 
 Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
 
@@ -105,7 +105,7 @@ Deleting `.dart_tool/muster/` or the cache is always safe while no load runs, an
 
 ## Concurrency
 
-`dart test` runs a package's test files as isolates of one process, and `flutter test` as processes, so a load guards against both. A claim is a load's hold on one clone or one checkout. A load takes a claim on each before it touches it, and holds it until the codebase's stamp is written.
+`dart test` runs a package's test files as isolates of one process, and `flutter test` as processes, so a load guards against both. A claim is a load's hold on one clone or one checkout. A load takes a claim on each before it touches it, and holds it until the codebase's stamp is written. A hosted codebase has no clone, so its load takes its checkout's claim alone and starts no git.
 
 A claim is the kernel's lock on a file beside what it claims, `<name>.claim` beside a checkout and `<hash>.claim` beside a clone, taken through an open of the file that belongs to the load alone. On a POSIX system it is `flock`'s, since `fcntl`'s, the lock `dart:io` takes there, is held by the whole process and shuts out no isolate of it, and on Windows it is `LockFileEx`'s, which `dart:io` takes and which belongs to its handle. A load that finds a claim held tries it again after a pause.
 
@@ -123,7 +123,7 @@ Every expected failure is a value, so a consumer cannot reach a checkout without
 
 | Case | Carries |
 |---|---|
-| `Loaded` | The `Muster` that makes a scratch of each codebase the manifests name, and each codebase's `FetchOutcome` in the manifests' order, keyed by name |
+| `Loaded` | The `Muster` that makes a scratch of each git codebase the manifests name, and each codebase's `FetchOutcome` in the manifests' order, keyed by name |
 | `Refused` | Why the load refused, before any process or file write: a manifest whose file name does not end `.yaml`, one missing, unreadable or not YAML, a key's path in one, a name met twice, no manifest at all, a working directory the system cannot give, no cache, or a system muster takes no claim on |
 
 `FetchOutcome` is a sealed type:
@@ -143,7 +143,7 @@ A scratch's acts return their own outcomes, each failure an `ActFailure`: `Comma
 
 | Act | Gives | Or |
 |---|---|---|
-| `muster.scratch(name)` | `Scratched`, carrying the `Scratch` | `NotNamed` where no codebase of the load bears the name, or `ScratchFailed`, its directory removed |
+| `muster.scratch(name)` | `Scratched`, carrying the `Scratch` | `NotNamed` where no codebase of the load bears the name, `NoClone` where a hosted one does, or `ScratchFailed`, its directory removed |
 | `scratch.move(commit)` | `Moved` | `MoveFailed`, where a commit is on none of its URL's branches or tags after a fetch among them |
 | `scratch.dispose()` | `Disposed`, again where it is gone already | `DisposalFailed` |
 
@@ -182,7 +182,7 @@ The outside world reaches muster through three seams:
 - The environment, the system, the working directory and the temporary directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them. The system sets the lock a claim takes and the C library it calls, bound there, and a load on a POSIX system whose C library muster does not know refuses.
 - Files, through `dart:io` in `store` alone and never faked, since git and pub act on real directories whatever muster fakes. A claim's lock on a POSIX system goes through the C library's `flock`, its calls handed in by constructor, so a test fails one. A hold never released has its file closed once it is collected by one static native finalizer of the process's `close`, which `_Flock` binds as a static external, the one value and the one binding in `lib/` that outlive a load, since a native finalizer runs only while it is reachable itself and nothing of a load may be.
 
-`store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach pub.dev, one test a toolchain.
+`store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach a package server on the loopback, named to pub by `PUB_HOSTED_URL` in the environment a test hands in, with pub's cache in its temporary directory, and pub.dev by one test a toolchain.
 
 ## Output
 

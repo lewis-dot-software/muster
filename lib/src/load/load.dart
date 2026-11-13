@@ -16,7 +16,7 @@ final class Loaded extends Load {
   /// through [muster].
   const Loaded(this.muster, this.outcomes);
 
-  /// The muster that makes a scratch of each codebase the manifests name.
+  /// The muster that makes a scratch of each git codebase the manifests name.
   final Muster muster;
 
   /// Each codebase's outcome, keyed by its name, in the manifests' order,

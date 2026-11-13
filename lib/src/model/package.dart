@@ -2,7 +2,7 @@ import 'package_file.dart';
 import 'repo_path.dart';
 import 'repo_root.dart';
 
-/// A package a git codebase resolves.
+/// A package a codebase resolves.
 enum Package {
   /// The codebase's root, the package handed out.
   root,

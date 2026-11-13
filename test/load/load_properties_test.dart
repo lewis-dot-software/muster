@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:glados/glados.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -165,7 +166,7 @@ void main() {
           ),
         )
         .shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 15),
+    .new(numRuns: 15),
   ).test(
     'A load reads each toolchain\'s SDK version at most once, however many '
     'codebases it names.',
@@ -226,7 +227,7 @@ void main() {
     _notYamlName,
     any.choose(_By.values).shrinkingAtMost(gitTries),
     any.intInRange(0, 3).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 40),
+    .new(numRuns: 40),
   ).test('A manifest whose file name does not end `.yaml` refuses the load.', (
     String name,
     _By by,
@@ -264,7 +265,7 @@ void main() {
           (int before, String text) => (before, text),
         )
         .shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 40),
+    .new(numRuns: 40),
   ).test('A named manifest that is missing, unreadable or not YAML refuses the '
       'load, naming the file and why.', (
     _ManifestFault fault,
@@ -330,7 +331,7 @@ void main() {
 
   Glados(
     any.choose([null, '', ':', '::']).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 8),
+    .new(numRuns: 8),
   ).test(
     'A load with no manifest at all refuses: no `muster.yaml` at the root and '
     'nothing in `MUSTER_MANIFESTS`.',
@@ -359,7 +360,7 @@ void main() {
         )
         .shrinkingAtMost(gitTries),
     any.bool.shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 10),
+    .new(numRuns: 10),
   ).test(
     "Every codebase the manifests name gets exactly one outcome, in the "
     "manifests' order, keyed by its name.",
@@ -409,7 +410,7 @@ void main() {
   Glados2(
     any.choose(_Refusal.values).shrinkingAtMost(gitTries),
     any.intInRange(0, 3).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 24),
+    .new(numRuns: 24),
   ).test('A refused load starts no process and writes no file.', (
     _Refusal refusal,
     int before,
@@ -509,7 +510,7 @@ void main() {
           ),
         )
         .shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 10),
+    .new(numRuns: 10),
   ).test(
     'A load right after another load hands out the same paths, and clones, '
     'checks out and resolves nothing.',
@@ -536,7 +537,7 @@ void main() {
           for (final Package package in [.root, if (draw.example) .example]) {
             final KeptLockPath kept = .of(
               locksBeside(draw.listed ? listed : atRoot(temp)),
-              codebase,
+              Git(codebase),
               package,
             );
             await writeFile(kept.path, lockText);
@@ -570,7 +571,7 @@ void main() {
   Glados2(
     any.nonEmptyList(any.choose(_Fault.values)).shrinkingAtMost(gitTries),
     any.intInRange(0, 4).map((int n) => n == 0).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 12),
+    .new(numRuns: 12),
   ).test(
     'Every failure a codebase meets comes back as an outcome other than '
     '`Fetched`, and nothing throws out of `Muster.load` but a bug.',
@@ -658,7 +659,7 @@ void main() {
     any.nonEmptyList(any.bool).shrinkingAtMost(gitTries),
     any.set(any.intInRange(0, 3)).shrinkingAtMost(gitTries),
     any.set(any.intInRange(0, 2)).shrinkingAtMost(gitTries),
-    ExploreConfig(numRuns: 10),
+    .new(numRuns: 10),
   ).test('A checkout or a clone deleted by hand comes back on the next load.', (
     List<bool> fromSecond,
     Set<int> checkouts,

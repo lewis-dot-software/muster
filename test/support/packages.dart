@@ -51,6 +51,10 @@ Checkouts checkoutsIn(Directory temp, Runner runner) => .new(
   .new(runner),
 );
 
+/// The checkout of the codebase `app` among [checkouts].
+CheckoutPath appCheckout(Checkouts checkouts) =>
+    .of(checkouts.root, .parse('app')!);
+
 /// The codebase [name] of [origin], pinned at [commit], its [root] and
 /// [toolchain] as given.
 GitCodebase codebaseOf(

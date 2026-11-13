@@ -2,11 +2,13 @@
 /// so a tool's `dart test` loads them with no setup.
 ///
 /// A consumer names its codebases in a `muster.yaml` at its root, each by its
-/// git URL, its commit, its root inside the repo and its toolchain, and
-/// further manifests by `MUSTER_MANIFESTS`. [Muster.load] clones each URL
-/// once into a cache every consumer on the machine shares, checks each
-/// codebase out under the consumer's `.dart_tool/muster/`, resolves it on its
-/// lock, and gives each a [FetchOutcome], every failure among them a value.
+/// git URL, its commit, its root inside the repo and its toolchain, or by a
+/// package on pub.dev at its version, and further manifests by
+/// `MUSTER_MANIFESTS`. [Muster.load] clones each URL once into a cache every
+/// consumer on the machine shares, checks each git codebase out and unpacks
+/// each hosted one under the consumer's `.dart_tool/muster/`, resolves it on
+/// its lock, and gives each a [FetchOutcome], every failure among them a
+/// value.
 /// [Muster.scratch] gives a consumer that must move a codebase off its pin a
 /// worktree of its own to move, in a temporary directory.
 library;
@@ -15,7 +17,7 @@ export 'src/load/load.dart' show Load, Loaded, Refused;
 export 'src/load/muster.dart' show Muster;
 export 'src/load/scratch.dart' show Scratch;
 export 'src/load/scratching.dart'
-    show Scratching, Scratched, NotNamed, ScratchFailed;
+    show Scratching, Scratched, NotNamed, NoClone, ScratchFailed;
 export 'src/model/codebase_name.dart' show CodebaseName;
 export 'src/model/command.dart' show Command;
 export 'src/model/disposal.dart' show Disposal, Disposed, DisposalFailed;
@@ -44,7 +46,6 @@ export 'src/model/load_refusal.dart'
         ManifestUnreadable,
         ManifestInvalid,
         CodebaseNamedTwice,
-        HostedNotLoaded,
         NoWorkingDirectory,
         NoCache,
         NoClaim;
