@@ -10,6 +10,7 @@ import 'manifest_parse.dart';
 import 'manifest_refusal.dart';
 import 'package_name.dart';
 import 'package_version.dart';
+import 'quiet_yaml_node.dart';
 import 'repo_root.dart';
 import 'resolution.dart';
 import 'toolchain.dart';
@@ -73,7 +74,7 @@ final Map<String, _Key> _keys = _Key.values.asNameMap();
 
 YamlNode _document(String text) {
   try {
-    return loadYamlNode(text);
+    return quietYamlNode(text);
   } on YamlException catch (e) {
     throw _Refusal(NotYaml(_located(e)));
   }

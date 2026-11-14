@@ -1,12 +1,15 @@
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/manifest.dart';
 import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:muster/src/model/wanted.dart';
 import 'package:muster/src/model/written.dart';
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
+import '../support/lines_printed.dart';
 import '../support/manifests.dart';
 import '../support/refusals.dart';
 
@@ -402,5 +405,48 @@ codebases:
         );
       });
     }
+  });
+
+  group('a directive the YAML reader warns of is passed over, printing '
+      'nothing:', () {
+    for (final String directive in ['%FOO bar', '%YAML 1.3']) {
+      test(directive, () {
+        final String manifest = _one(_fields());
+        late final ManifestParse parse;
+        expect(
+          linesPrinted(
+            () => parse = parseManifest('$directive\n---\n$manifest'),
+          ),
+          isEmpty,
+        );
+        expect(
+          parse,
+          isA<ManifestParsed>().having(
+            (ManifestParsed p) => p.manifest.codebases,
+            'codebases',
+            switch (parseManifest(manifest)) {
+              ManifestParsed(:final Manifest manifest) => manifest.codebases,
+              final ManifestRefused refused => fail('refused $refused'),
+            },
+          ),
+        );
+      });
+    }
+  });
+
+  test("a warning callback the caller set stands after a parse, and hears "
+      "none of the parse's warnings, whether it parses or refuses", () {
+    final YamlWarningCallback before = yamlWarningCallback;
+    addTearDown(() => yamlWarningCallback = before);
+    final List<String> heard = [];
+    void hear(String message, [Object? _]) => heard.add(message);
+    yamlWarningCallback = hear;
+    expect(
+      parseManifest('%FOO\n---\n${_one(_fields())}'),
+      isA<ManifestParsed>(),
+    );
+    expect(parseManifest('%FOO\n---\ncodebases: [x'), isA<ManifestRefused>());
+    expect(heard, isEmpty);
+    expect(yamlWarningCallback, same(hear));
   });
 }

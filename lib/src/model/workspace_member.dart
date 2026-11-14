@@ -1,12 +1,14 @@
 import 'package:yaml/yaml.dart';
 
+import 'quiet_yaml_node.dart';
+
 /// Whether [pubspec], a package's `pubspec.yaml`, makes it a member of a pub
 /// workspace, `resolution: workspace`. A pubspec that is no YAML map makes
 /// none.
 bool workspaceMember(String pubspec) {
-  final Object? yaml;
+  final YamlNode yaml;
   try {
-    yaml = loadYaml(pubspec);
+    yaml = quietYamlNode(pubspec);
   } on YamlException {
     return false;
   }

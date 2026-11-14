@@ -5,6 +5,7 @@ import 'package:muster/src/model/workspace_member.dart';
 import 'package:test/test.dart';
 
 import '../support/hosted.dart';
+import '../support/lines_printed.dart';
 
 void main() {
   group('workspaceMember', () {
@@ -19,6 +20,22 @@ void main() {
       expect(workspaceMember('- workspace\n'), isFalse);
       expect(workspaceMember(''), isFalse);
     });
+
+    test(
+      'reads past a directive the YAML reader warns of, printing nothing',
+      () {
+        late final bool member;
+        expect(
+          linesPrinted(
+            () => member = workspaceMember(
+              '%FOO bar\n---\nname: a\nresolution: workspace\n',
+            ),
+          ),
+          isEmpty,
+        );
+        expect(member, isTrue);
+      },
+    );
   });
 
   group('pubspecOverrides', () {

@@ -60,4 +60,16 @@ void main() {
     expect(refused.stderr, startsWith('no manifest: '));
     expect((await muster(['nope'])).exitCode, 64);
   });
+
+  test("the muster command writes its rows alone to standard output, and "
+      "nothing to standard error, for a manifest opening on a directive the "
+      "YAML reader warns of", () async {
+    await File(atRoot(temp)).writeAsString('%FOO bar\n---\ncodebases: {}\n');
+    for (final String verb in ['fetch', 'lock']) {
+      final ProcessResult run = await muster([verb]);
+      expect(run.exitCode, 0, reason: verb);
+      expect(run.stdout, 'name\toutcome\tdetail\n', reason: verb);
+      expect(run.stderr, isEmpty, reason: verb);
+    }
+  });
 }

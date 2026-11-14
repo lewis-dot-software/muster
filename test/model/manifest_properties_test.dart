@@ -14,6 +14,7 @@ import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/wanted.dart';
 
+import '../support/lines_printed.dart';
 import '../support/manifests.dart';
 import '../support/refusals.dart';
 
@@ -44,6 +45,20 @@ Set<String> _otherKeys(Codebase codebase) => switch (codebase) {
 /// [key], or a key it is not where it is one of [known].
 String _unknownAmong(String key, Set<String> known) =>
     known.contains(key) ? '${key}x' : key;
+
+/// A directive the YAML reader warns of: one of a name it does not know, with
+/// or without a parameter, or a `%YAML` of 1.3 or later.
+final Generator<String> _warnedDirective = any.either(
+  any.combine2(
+    any.nonEmptyLetters,
+    any.lowercaseLetters,
+    (String name, String parameter) => switch (name) {
+      'YAML' || 'TAG' => '%${name}X $parameter',
+      _ => '%$name $parameter',
+    },
+  ),
+  any.intInRange(3, 100).map((int minor) => '%YAML 1.$minor'),
+);
 
 /// A value its key cannot take: the key, and the text that refuses it.
 enum _Bad { commit, toolchain, root, name }
@@ -662,6 +677,20 @@ void main() {
       ]),
     );
   });
+
+  Glados2(any.codebases(), _warnedDirective).test(
+    'A directive the YAML reader warns of, opening a manifest, leaves its '
+    'parse as it stands without one, and prints nothing.',
+    (List<Codebase> codebases, String directive) {
+      final String text = renderManifest(codebases.map(anyEntryOf).toList());
+      late final List<Codebase> parsed;
+      expect(
+        linesPrinted(() => parsed = _parsed('$directive\n---\n$text')),
+        isEmpty,
+      );
+      expect(parsed, codebases);
+    },
+  );
 
   final Generator<GitCodebase> nearby = any.gitCodebase(
     urls: any.choose(['/srv/a.git', '/srv/b.git']),
