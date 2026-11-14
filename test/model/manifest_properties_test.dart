@@ -80,6 +80,18 @@ final Generator<String> _warnedDirective = any.either(
 /// A value its key cannot take: the key, and the text that refuses it.
 enum _Bad { commit, toolchain, root, name }
 
+/// A git codebase's key whose value no character that breaks a line stands
+/// in, with what its key wants.
+enum _Unbroken {
+  git(.gitUrl),
+  root(.rootInsideRepo);
+
+  const _Unbroken(this.wanted);
+
+  /// What the key wants of its value.
+  final Wanted wanted;
+}
+
 /// How a full hash is made into a commit that is no full hash.
 enum _CommitFault { cut, capital, stray, long }
 
@@ -355,34 +367,47 @@ void main() {
   });
 
   Glados(
-    any.combine4(
+    any.combine5(
       any.someGitCodebases(),
       any.intInRange(0, 1 << 16),
+      any.choose(_Unbroken.values),
       any.intInRange(0, 1 << 16),
       _breaking,
-      (List<GitCodebase> codebases, int where, int at, String breaking) =>
-          (codebases, where, at, breaking),
+      (
+        List<GitCodebase> codebases,
+        int where,
+        _Unbroken key,
+        int at,
+        String breaking,
+      ) => (codebases, where, key, at, breaking),
     ),
-  ).test("A git URL holding a character that breaks a line refuses the load, "
-      "naming its key's path.", (input) {
-    final (List<GitCodebase> codebases, int where, int at, String breaking) =
-        input;
+  ).test("A git URL or a `root` holding a character that breaks a line "
+      "refuses the load, naming its key's path.", (input) {
+    final (
+      List<GitCodebase> codebases,
+      int where,
+      _Unbroken key,
+      int at,
+      String breaking,
+    ) = input;
     final List<Entry> entries = codebases.map(entryOf).toList();
     final int target = where % entries.length;
-    final (String name, List<Field> fields) = entries[target];
+    final GitCodebase codebase = codebases[target];
+    final String value = switch (key) {
+      .git => codebase.url.url,
+      .root => codebase.root.path,
+    };
     entries[target] = (
-      name,
+      codebase.name.name,
       [
-        for (final (String key, String value) in fields)
-          if (key == 'git')
-            (key, _inserted(value, at, breaking))
-          else
-            (key, value),
+        for (final Field field in entries[target].$2)
+          if (field.$1 != key.name) field,
+        (key.name, _inserted(value, at, breaking)),
       ],
     );
     expect(
       parseManifest(renderManifest(entries)),
-      badValue(['codebases', name, 'git'], .gitUrl),
+      badValue(['codebases', codebase.name.name, key.name], key.wanted),
     );
   });
 

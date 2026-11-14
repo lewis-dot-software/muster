@@ -338,6 +338,10 @@ codebases:
       ('root', '/abs', .rootInsideRepo),
       ('root', 'C:/pkgs', .rootInsideRepo),
       ('root', r'..\pkgs', .rootInsideRepo),
+      ('root', 'pkgs/app\n', .rootInsideRepo),
+      ('root', 'pkgs\r\napp', .rootInsideRepo),
+      ('root', 'pkgs/a\u2028pp', .rootInsideRepo),
+      ('root', 'pkgs/a\x00pp', .rootInsideRepo),
     ]) {
       test('`$key` of ${value.isEmpty ? 'nothing' : '"$value"'}', () {
         expect(
@@ -400,6 +404,16 @@ codebases:
           '    commit: $_sha1\n    toolchain: dart',
         ),
         badValue(['codebases', 'app', 'git'], .gitUrl),
+      );
+    });
+
+    test('a root written as a block, its line break kept', () {
+      expect(
+        parseManifest(
+          'codebases:\n  app:\n    git: /srv/a.git\n    commit: $_sha1\n'
+          '    root: |\n      packages/app\n    toolchain: dart',
+        ),
+        badValue(['codebases', 'app', 'root'], .rootInsideRepo),
       );
     });
 

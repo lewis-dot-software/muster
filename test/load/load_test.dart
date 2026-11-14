@@ -416,6 +416,41 @@ void main() {
       );
     });
 
+    test('on a root holding a line break, naming its path', () async {
+      final GitCodebase app = await codebaseNamed('app');
+      final (String name, List<Field> fields) = entryOf(app);
+      await writeFile(
+        atRoot(temp),
+        renderManifest([
+          (
+            name,
+            [
+              for (final Field field in fields)
+                if (field.$1 != 'root') field,
+              ('root', '${app.root.path}\n'),
+            ],
+          ),
+        ]),
+      );
+      await refuses(
+        isA<ManifestInvalid>().having(
+          (ManifestInvalid i) => i.refusal,
+          'refusal',
+          isA<BadValue>()
+              .having(
+                (BadValue b) => b.path,
+                'path',
+                pathOf(['codebases', 'app', 'root']),
+              )
+              .having(
+                (BadValue b) => b.wanted,
+                'wanted',
+                Wanted.rootInsideRepo,
+              ),
+        ),
+      );
+    });
+
     test('on a name met in two manifests, naming it and both', () async {
       final GitCodebase app = await codebaseNamed('app');
       final String listed = p.join(temp.path, 'listed.yaml');
