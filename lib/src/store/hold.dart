@@ -14,9 +14,10 @@ import 'store_fault.dart';
 /// of the file this hold made, so it shuts out every other open of the file,
 /// an isolate's of the same process as much as another process's.
 ///
-/// The kernel lets the lock go when that open closes: at [release], at the
-/// end of the isolate group that took it, or at the end of its process,
-/// whether it exits or is killed. So a hold its holder never releases never
+/// The kernel lets the lock go when that open closes: at [release], on a
+/// POSIX system once a hold never released is collected, at the end of the
+/// isolate group that took it, or at the end of its process, whether it exits
+/// or is killed. So a hold its holder never releases never
 /// blocks a later one, with no holder named and nothing to take over.
 sealed class Hold {
   const Hold();
