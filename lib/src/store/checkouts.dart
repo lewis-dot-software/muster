@@ -57,8 +57,8 @@ import 'runner.dart';
 import 'sdk_versions.dart';
 import 'store_fault.dart';
 
-/// A consumer's checkouts, one a codebase under its root: a git codebase's a
-/// worktree of its clone in a [Cache], and a hosted one's its package
+/// A consumer's checkouts, one per codebase under its root: a git codebase's
+/// a worktree of its clone in a [Cache], and a hosted one's its package
 /// unpacked, their processes run by a [Runner] and their acts held under
 /// [Claims].
 class Checkouts {

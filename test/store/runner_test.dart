@@ -65,7 +65,7 @@ void main() {
     'SSH_ASKPASS_REQUIRE': 'force',
   };
 
-  /// Expects [printed], one `name=value` to a line, to name every variable
+  /// Expects [printed], one `name=value` per line, to name every variable
   /// of [reaches] with its value, and a `PATH` that ends in the one handed
   /// in, since git puts its own directory ahead of it.
   void expectReached(String printed) {

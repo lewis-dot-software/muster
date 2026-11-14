@@ -32,7 +32,7 @@ final class Cli {
 
   /// Runs the command [arguments] name, and gives the code to exit with.
   ///
-  /// `fetch [manifest...]` loads and writes a row a codebase, tab-separated
+  /// `fetch [manifest...]` loads and writes a row per codebase, tab-separated
   /// under a header: its name, its outcome and that outcome's own detail.
   /// `lock [manifest...]` writes the kept locks the codebases lack and
   /// removes those no codebase names, writing a row each, a removed lock's

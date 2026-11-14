@@ -13,7 +13,7 @@ import 'loads.dart';
 import 'locking.dart';
 
 /// The runs of the process muster runs in: its environment, its system, its
-/// working directory and its temporary directory read once a run, at its
+/// working directory and its temporary directory read once per run, at its
 /// start, and every process the run starts given that environment alone.
 final class ProcessLoads implements Loads {
   /// The runs of the process muster runs in, its system's name read by

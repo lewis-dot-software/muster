@@ -372,7 +372,7 @@ void main() {
     any.bool.shrinkingAtMost(gitTries),
     .new(numRuns: 10),
   ).test(
-    'A load naming git and hosted codebases gives one outcome a codebase, in '
+    'A load naming git and hosted codebases gives one outcome per codebase, in '
     "the manifests' order, whatever its kind.",
     (List<List<(int, bool, _Kind)>> manifests, bool rootFirst) => inTemp((
       Directory temp,

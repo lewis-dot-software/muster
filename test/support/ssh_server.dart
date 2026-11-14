@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'shell_quoted.dart';
 
 /// An sshd a test's ssh starts as its proxy command, serving one connection
-/// a run as the user the test runs as, with its keys and configuration in a
+/// per run as the user the test runs as, with its keys and configuration in a
 /// directory of its own.
 class SshServer {
   SshServer._(this._directory, this._sshd, this._user);

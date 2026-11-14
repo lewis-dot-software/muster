@@ -13,7 +13,7 @@ import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/packages.dart';
 
-/// A hosted package fetched from pub.dev itself, one test a toolchain, its
+/// A hosted package fetched from pub.dev itself, one test per toolchain, its
 /// archives in the user's own pub cache.
 void main() {
   late Directory temp;
