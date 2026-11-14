@@ -301,7 +301,7 @@ void main() {
       'claims and their locker collected with it', () async {
     await abandoned(
       abandonedNames,
-      () => .new(Locker.of(.posix, Platform.operatingSystem)!),
+      () => .new(.of(.posix, Platform.operatingSystem)!),
     );
     await collected();
     expect(await freeOf(abandonedNames), everyElement(isTrue));
@@ -311,7 +311,7 @@ void main() {
       'claims still reachable', () async {
     final List<Claims> kept = [];
     await abandoned(abandonedNames, () {
-      final Claims claims = .new(Locker.of(.posix, Platform.operatingSystem)!);
+      final Claims claims = .new(.of(.posix, Platform.operatingSystem)!);
       kept.add(claims);
       return claims;
     });
