@@ -36,6 +36,23 @@ final Generator<String> _anyKey = any.either(
   any.nonEmptyLowercaseLetters,
 );
 
+/// A character that breaks a line: a control character but a tab, or a line
+/// break Unicode names.
+final Generator<String> _breaking = any.choose([
+  for (int code = 0; code < 0x20; code++)
+    if (code != 0x09) String.fromCharCode(code),
+  for (int code = 0x7f; code < 0xa0; code++) String.fromCharCode(code),
+  '\u2028',
+  '\u2029',
+]);
+
+/// [text] with [inserted] put in at [at], counted round the places it can
+/// stand.
+String _inserted(String text, int at, String inserted) {
+  final int index = at % (text.length + 1);
+  return text.replaceRange(index, index, inserted);
+}
+
 /// The keys of the kind [codebase] is not.
 Set<String> _otherKeys(Codebase codebase) => switch (codebase) {
   Git() => _hostedKeys,
@@ -334,6 +351,38 @@ void main() {
     expect(
       parseManifest(renderManifest(entries)),
       unknownKey(['codebases', name, key]),
+    );
+  });
+
+  Glados(
+    any.combine4(
+      any.someGitCodebases(),
+      any.intInRange(0, 1 << 16),
+      any.intInRange(0, 1 << 16),
+      _breaking,
+      (List<GitCodebase> codebases, int where, int at, String breaking) =>
+          (codebases, where, at, breaking),
+    ),
+  ).test("A git URL holding a character that breaks a line refuses the load, "
+      "naming its key's path.", (input) {
+    final (List<GitCodebase> codebases, int where, int at, String breaking) =
+        input;
+    final List<Entry> entries = codebases.map(entryOf).toList();
+    final int target = where % entries.length;
+    final (String name, List<Field> fields) = entries[target];
+    entries[target] = (
+      name,
+      [
+        for (final (String key, String value) in fields)
+          if (key == 'git')
+            (key, _inserted(value, at, breaking))
+          else
+            (key, value),
+      ],
+    );
+    expect(
+      parseManifest(renderManifest(entries)),
+      badValue(['codebases', name, 'git'], .gitUrl),
     );
   });
 

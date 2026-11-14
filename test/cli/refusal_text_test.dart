@@ -151,6 +151,43 @@ void main() {
         '"a\\nb": c\n',
         r'"a\nb": a key muster does not know',
       ),
+      'a key below the top holding a line break, quoted apart from the keys '
+          'before it': (
+        'codebases:\n  app:\n    toolchain: dart\n    "a\\nb": x\n',
+        r'codebases.app."a\nb": a key muster does not know',
+      ),
+      'a block key, as written with none of the break its block ends on': (
+        'codebases: {}\n? - a\n  - b\n: x\n',
+        r'"- a\n  - b": a key muster does not know',
+      ),
+      'an empty key at the top, quoted': (
+        'codebases: {}\n"": x\n',
+        '"": a key muster does not know',
+      ),
+      'a key holding a dot, quoted apart from the keys either side': (
+        'codebases:\n  app:\n    toolchain: dart\n    a.b: x\n',
+        'codebases.app."a.b": a key muster does not know',
+      ),
+      'a codebase named with a dot, quoted': (
+        'codebases:\n  a.b: {}\n',
+        'codebases."a.b": a.b is not a name of lowercase letters, digits and '
+            'underscores, opening on a letter',
+      ),
+      'a key opening on a quote, quoted with it escaped': (
+        'codebases: {}\n\'"a\': x\n',
+        r'"\"a": a key muster does not know',
+      ),
+      'a key that is no string, as the manifest writes it': (
+        'codebases: {}\nTrue: x\n',
+        'True: a key muster does not know',
+      ),
+      'a git URL written as a block over lines, quoted with its breaks '
+          'escaped': (
+        'codebases:\n  app:\n    git: |\n      /srv/a.git\n      /srv/b.git\n'
+            '    commit: $_sha1\n    toolchain: dart\n',
+        r'codebases.app.git: "|\n      /srv/a.git\n      /srv/b.git" is not '
+            'a git URL',
+      ),
     };
     for (final MapEntry(key: String name, value: (String text, String line))
         in cases.entries) {

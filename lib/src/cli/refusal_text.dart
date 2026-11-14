@@ -1,9 +1,9 @@
-import 'dart:convert';
-
 import '../model/key_path.dart';
 import '../model/load_refusal.dart';
 import '../model/manifest_refusal.dart';
 import '../model/os.dart';
+import '../model/breaks_line.dart';
+import '../model/quoted.dart';
 import '../model/wanted.dart';
 import '../model/written.dart';
 
@@ -54,7 +54,7 @@ String _manifestText(ManifestRefusal refusal) => switch (refusal) {
 /// [text] after the key at [path], or alone where [path] is the top, which
 /// no key names.
 String _at(KeyPath path, String text) =>
-    path == .top ? text : '${_line(path.dotted)}: $text';
+    path == .top ? text : '${path.dotted}: $text';
 
 String _writtenText(Written written) => switch (written) {
   WrittenText(:final String text) => _line(text),
@@ -76,19 +76,6 @@ String _wantedText(Wanted wanted) => switch (wanted) {
   .resolution => 'alone or as-dependency',
 };
 
-/// [text] as it stands, or quoted as a JSON string where it holds a control
-/// character but a tab or a line break Unicode names, so it never breaks the
-/// line: each of those escaped, the ones `jsonEncode` leaves among them.
-String _line(String text) => text.contains(_breaking)
-    ? jsonEncode(text).replaceAllMapped(
-        _unescaped,
-        (Match match) =>
-            '\\u${match[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
-      )
-    : text;
-
-/// Every control character but a tab, and Unicode's line breaks beyond them.
-final RegExp _breaking = .new(r'[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029]');
-
-/// What [_breaking] holds that `jsonEncode` writes as it stands.
-final RegExp _unescaped = .new(r'[\x7f-\x9f\u2028\u2029]');
+/// [text] as it stands, or quoted where it holds a character that breaks a
+/// line, so it never breaks the line.
+String _line(String text) => breaksLine(text) ? quoted(text) : text;

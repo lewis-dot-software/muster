@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:glados/glados.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/codebase_name.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/key_path.dart';
+import 'package:muster/src/model/quoted.dart';
 import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/toolchain.dart';
 
@@ -27,17 +26,17 @@ String renderManifest(List<Entry> entries, {List<Field> top = const []}) {
     text.writeln('codebases:');
     for (final (String name, List<Field> fields) in entries) {
       if (fields.isEmpty) {
-        text.writeln('  ${jsonEncode(name)}: {}');
+        text.writeln('  ${quoted(name)}: {}');
         continue;
       }
-      text.writeln('  ${jsonEncode(name)}:');
+      text.writeln('  ${quoted(name)}:');
       for (final (String key, String value) in fields) {
-        text.writeln('    ${jsonEncode(key)}: ${jsonEncode(value)}');
+        text.writeln('    ${quoted(key)}: ${quoted(value)}');
       }
     }
   }
   for (final (String key, String value) in top) {
-    text.writeln('${jsonEncode(key)}: ${jsonEncode(value)}');
+    text.writeln('${quoted(key)}: ${quoted(value)}');
   }
   return '$text';
 }

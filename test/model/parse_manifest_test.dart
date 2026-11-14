@@ -179,8 +179,20 @@ codebases:
       },
     );
 
-    test('a key that is no string', () {
+    test('a key that is no string, as the manifest writes it', () {
       expect(parseManifest('codebases: {}\n1: x'), unknownKey(['1']));
+      expect(parseManifest('codebases: {}\nTrue: x'), unknownKey(['True']));
+    });
+
+    test('an empty key at the top, apart from the top itself', () {
+      expect(parseManifest('codebases: {}\n"": x'), unknownKey(['']));
+    });
+
+    test('a key holding a dot, apart from the keys either side of it', () {
+      expect(
+        parseManifest(_one(_fields(change: {'a.b': 'x'}))),
+        unknownKey(['codebases', 'app', 'a.b']),
+      );
     });
   });
 
@@ -310,6 +322,10 @@ codebases:
     for (final (String key, String value, Wanted wanted) in [
       ('git', '', .gitUrl),
       ('git', '--upload-pack=touch /tmp/x', .gitUrl),
+      ('git', '/srv/a.git\n', .gitUrl),
+      ('git', '/srv/a.git\r\n/srv/b.git', .gitUrl),
+      ('git', '/srv/a\u2028b.git', .gitUrl),
+      ('git', '/srv/a\x00b.git', .gitUrl),
       ('commit', 'main', .fullHash),
       ('commit', 'abcdef1', .fullHash),
       ('commit', 'AB' * 20, .fullHash),
@@ -374,6 +390,16 @@ codebases:
             isA<WrittenText>().having((w) => w.text, 'text', 'go'),
           ),
         ),
+      );
+    });
+
+    test('a git URL written as a block over lines', () {
+      expect(
+        parseManifest(
+          'codebases:\n  app:\n    git: |\n      /srv/a.git\n      /srv/b.git\n'
+          '    commit: $_sha1\n    toolchain: dart',
+        ),
+        badValue(['codebases', 'app', 'git'], .gitUrl),
       );
     });
 

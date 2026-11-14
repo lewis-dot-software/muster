@@ -91,8 +91,9 @@ String _located(YamlException e) =>
 
 Manifest _manifest(YamlNode document) {
   final YamlMap top = _mapping(document, .top);
-  for (final Object? key in top.keys) {
-    if (key is! String || !_topKeys.containsKey(key)) {
+  for (final Object? node in top.nodes.keys) {
+    final String key = _key(node as YamlNode);
+    if (!_topKeys.containsKey(key)) {
       throw _Refusal(UnknownKey(.top.child(key)));
     }
   }
@@ -109,7 +110,7 @@ Manifest _manifest(YamlNode document) {
 }
 
 Codebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
-  final KeyPath at = codebases.child(key.value);
+  final KeyPath at = codebases.child(_key(key));
   final CodebaseName name =
       switch (_text(key)) {
         final String text => .parse(text),
@@ -150,8 +151,9 @@ typedef _Fields = ({YamlMap map, KeyPath at});
 /// of either kind's.
 _Kind _kind(_Fields fields) {
   _Kind? kind;
-  for (final Object? key in fields.map.keys) {
-    final _Key? known = key is String ? _keys[key] : null;
+  for (final Object? node in fields.map.nodes.keys) {
+    final String key = _key(node as YamlNode);
+    final _Key? known = _keys[key];
     if (known == null) {
       throw _Refusal(UnknownKey(fields.at.child(key)));
     }
@@ -215,6 +217,14 @@ String? _text(YamlNode node) => switch (node) {
   YamlScalar(value: final String text) => text,
   YamlScalar(value: num() || bool()) => node.span.text,
   _ => null,
+};
+
+/// The key [node] is, as the manifest writes it: a string's own text, or
+/// any other key's text as written, less the line breaks a block's span
+/// ends on.
+String _key(YamlNode node) => switch (node) {
+  YamlScalar(value: final String text) => text,
+  _ => node.span.text.trimRight(),
 };
 
 /// What the manifest writes at [node]: a plain value's text as written, less
