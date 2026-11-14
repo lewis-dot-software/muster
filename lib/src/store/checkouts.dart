@@ -117,7 +117,7 @@ class Checkouts {
     return _claims.holding(at.claim, () async {
       final Survey survey = await _survey(Git(codebase), locks, at);
       final Checkout checkout = (
-        package: .of(at, codebase.root, .root),
+        package: packageIn(at, codebase.root, .root),
         sdk: survey.sdk,
       );
       if (!stands(Git(codebase), survey)) {
@@ -151,7 +151,7 @@ class Checkouts {
           survey.sdk,
         );
       }
-      return (package: PackagePath.unpacked(at, codebase), sdk: survey.sdk);
+      return (package: unpackedPackage(at, codebase), sdk: survey.sdk);
     });
   }
 
@@ -202,7 +202,7 @@ class Checkouts {
             {
               for (final Package package in Package.values)
                 if (await _hash(
-                      KeptLockPath.of(locks, Git(codebase), package).path,
+                      keptLockOf(locks, Git(codebase), package).path,
                     ) !=
                     null)
                   package,
@@ -250,11 +250,11 @@ class Checkouts {
   ) async {
     final List<KeptLockPath> written = [];
     for (final Package package in lacking) {
-      final PackagePath path = .inCheckout(at, codebase, package);
+      final PackagePath path = packageInCheckout(at, codebase, package);
       // A lock it was served would seed the resolve, which starts from none.
       await removeFile(path.lock.path);
       await _runner.run(codebase.toolchain.lock(path));
-      final KeptLockPath kept = .of(locks, codebase, package);
+      final KeptLockPath kept = keptLockOf(locks, codebase, package);
       await _keep(path, kept);
       written.add(kept);
     }
@@ -310,7 +310,7 @@ class Checkouts {
   ) => switch (choice) {
     LocksChosen(:final Map<Package, LockSource> locks) => locks,
     LockLacking(:final Package package) => throw StoreFault(
-      Unlocked(.of(locks, codebase, package)),
+      Unlocked(keptLockOf(locks, codebase, package)),
     ),
   };
 
@@ -339,11 +339,12 @@ class Checkouts {
         case .committed:
           break;
         case .kept:
-          final KeptLockPath kept = .of(locks, codebase, package);
+          final KeptLockPath kept = keptLockOf(locks, codebase, package);
           await fileAct(
             kept.path,
-            () => File(kept.path)
-                .copy(PackagePath.inCheckout(at, codebase, package).lock.path),
+            () =>
+                File(kept.path)
+                    .copy(packageInCheckout(at, codebase, package).lock.path),
           );
       }
     }
@@ -352,7 +353,7 @@ class Checkouts {
         in chosen.entries) {
       packages[package] = await _resolve(
         codebase,
-        .inCheckout(at, codebase, package),
+        packageInCheckout(at, codebase, package),
         source,
       );
     }
@@ -382,11 +383,7 @@ class Checkouts {
       case .alone:
         break;
       case .asDependency:
-        final PubspecPath around = PackagePath.ofHosted(
-          at,
-          codebase,
-          .root,
-        ).pubspec;
+        final PubspecPath around = hostedPackage(at, codebase, .root).pubspec;
         await fileAct(
           around.path,
           () => File(around.path).writeAsString(aroundPubspec(codebase)),
@@ -397,15 +394,15 @@ class Checkouts {
       // The root's own pubspec, under either resolution, since the package
       // around it is muster's.
       final PubspecPath pubspec = switch (package) {
-        .root => PackagePath.unpacked(at, codebase).pubspec,
-        .example => PackagePath.ofHosted(at, codebase, package).pubspec,
+        .root => unpackedPackage(at, codebase).pubspec,
+        .example => hostedPackage(at, codebase, package).pubspec,
       };
       final List<int>? bytes = await bytesIfThere(pubspec.path);
       if (!hostedResolves(package, held: bytes != null)) {
         continue;
       }
       packages.add(package);
-      final PubspecOverridesPath path = PackagePath.ofHosted(
+      final PubspecOverridesPath path = hostedPackage(
         at,
         codebase,
         package,
@@ -432,8 +429,10 @@ class Checkouts {
   }
 
   /// The survey of [codebase]'s checkout at [at], its kept locks in [locks].
-  /// Git reads a git checkout only where a stamp is there to weigh it
-  /// against, and never a hosted one.
+  /// Its packages are read only where a directory stands at [at], so
+  /// anything else there, a file among them, reads as no checkout. Git reads
+  /// a git checkout only where a stamp is there to weigh it against, and
+  /// never a hosted one.
   Future<Survey> _survey(
     Codebase codebase,
     LocksDirectory locks,
@@ -446,26 +445,27 @@ class Checkouts {
       ),
       null => null,
     };
+    final bool there = await _there(at);
     final Worktree? worktree = switch (codebase) {
-      Git() when stamp != null && await _there(at) => await _status(at),
+      Git() when stamp != null && there => await _status(at),
       Git() || Hosted() => null,
     };
     final Map<Package, SurveyedPackage> packages = {};
     for (final Package package in Package.values) {
-      final PackagePath path = .inCheckout(at, codebase, package);
+      final PackagePath path = packageInCheckout(at, codebase, package);
       packages[package] = (
-        lock: await _hash(path.lock.path),
-        keptLock: await _hash(KeptLockPath.of(locks, codebase, package).path),
-        packageConfig: await _hash(path.packageConfig.path),
+        lock: there ? await _hash(path.lock.path) : null,
+        keptLock: await _hash(keptLockOf(locks, codebase, package).path),
+        packageConfig: there ? await _hash(path.packageConfig.path) : null,
       );
     }
     final PubspecPath handedOut = switch (codebase) {
-      Git(codebase: final GitCodebase git) => PackagePath.of(
+      Git(codebase: final GitCodebase git) => packageIn(
         at,
         git.root,
         .root,
       ).pubspec,
-      Hosted(codebase: final HostedCodebase hosted) => PackagePath.unpacked(
+      Hosted(codebase: final HostedCodebase hosted) => unpackedPackage(
         at,
         hosted,
       ).pubspec,
@@ -474,7 +474,8 @@ class Checkouts {
       sdk: sdk,
       stamp: stamp,
       worktree: worktree,
-      there: await fileAct(handedOut.path, File(handedOut.path).exists),
+      there:
+          there && await fileAct(handedOut.path, File(handedOut.path).exists),
       packages: .unmodifiable(packages),
     );
     return survey;

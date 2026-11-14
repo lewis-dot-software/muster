@@ -27,12 +27,12 @@ void main() {
     expect(checkout.path, r'C:\work\tool\.dart_tool\muster\app');
     expect(checkout.stamp.path, r'C:\work\tool\.dart_tool\muster\app.stamp');
     expect(
-      PackagePath.of(checkout, .parse('pkgs/a')!, .root).packageConfig.path,
+      packageIn(checkout, .parse('pkgs/a')!, .root).packageConfig.path,
       r'C:\work\tool\.dart_tool\muster\app\pkgs\a\.dart_tool'
       r'\package_config.json',
     );
     expect(
-      PackagePath.of(checkout, .parse('pkgs/a')!, .example).lock.path,
+      packageIn(checkout, .parse('pkgs/a')!, .example).lock.path,
       r'C:\work\tool\.dart_tool\muster\app\pkgs\a\example\pubspec.lock',
     );
   });
@@ -40,7 +40,7 @@ void main() {
   test('a package sits at its root inside the checkout, the example under '
       'it, with its lock and package config inside', () {
     final CheckoutPath checkout = .of(.new('/c', .posix), app);
-    final PackagePath top = .of(checkout, .top, .root);
+    final PackagePath top = packageIn(checkout, .top, .root);
     expect(top.path, '/c/.dart_tool/muster/app');
     expect(top.lock.path, '/c/.dart_tool/muster/app/pubspec.lock');
     expect(
@@ -48,7 +48,7 @@ void main() {
       '/c/.dart_tool/muster/app/.dart_tool/package_config.json',
     );
     expect(
-      PackagePath.of(checkout, .parse('pkgs/a')!, .example).path,
+      packageIn(checkout, .parse('pkgs/a')!, .example).path,
       '/c/.dart_tool/muster/app/pkgs/a/example',
     );
   });
@@ -99,11 +99,11 @@ void main() {
     );
     final String key = LockKey.of(Git(pinned)).hex;
     expect(
-      KeptLockPath.of(locks, Git(pinned), .root).path,
+      keptLockOf(locks, Git(pinned), .root).path,
       '/c/muster_locks/app-$key.lock',
     );
     expect(
-      KeptLockPath.of(locks, Git(pinned), .example).path,
+      keptLockOf(locks, Git(pinned), .example).path,
       '/c/muster_locks/app-$key.example.lock',
     );
   });
@@ -121,7 +121,7 @@ void main() {
       .dart,
     );
     expect(
-      KeptLockPath.of(locks, Git(pinned), .example).path,
+      keptLockOf(locks, Git(pinned), .example).path,
       r'C:\c\muster_locks\app-'
       '${LockKey.of(Git(pinned)).hex}.example.lock',
     );

@@ -4,9 +4,10 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/cli/cli.dart';
 import 'package:muster/src/cli/exit_code.dart';
 import 'package:muster/src/cli/verb.dart';
-import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/load/loads.dart';
+import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/lock_removal.dart';
 import 'package:path/path.dart' as p;
@@ -168,11 +169,11 @@ void main() {
   });
 
   group('`muster lock`', () {
-    final KeptLockPath written = .listed(
+    final KeptLockPath written = listedKeptLock(
       locksBeside('/consumer/muster.yaml'),
       'app-1.lock',
     )!;
-    final KeptLockPath removed = .listed(
+    final KeptLockPath removed = listedKeptLock(
       locksBeside('/consumer/muster.yaml'),
       'gone-1.lock',
     )!;

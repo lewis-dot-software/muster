@@ -79,7 +79,7 @@ void main() {
 
   /// The version of the Dart SDK on `PATH`.
   Future<SdkVersion> dartVersion() async =>
-      .read(.dart, (await runner.run(Toolchain.dart.version)).stdout)!;
+      readSdkVersion(.dart, (await runner.run(Toolchain.dart.version)).stdout)!;
 
   /// Whether a command given since the last clear made the checkout again.
   bool madeAgain() => runner.given.any(
@@ -188,7 +188,7 @@ void main() {
         origin,
         await onMain(packageFiles('app', locked: false)),
       );
-      final KeptLockPath kept = .of(locks, Git(codebase), .root);
+      final KeptLockPath kept = keptLockOf(locks, Git(codebase), .root);
       final String text = '# kept\n$lockText';
       await writeFile(kept.path, text);
       await checkouts.checkout(Git(codebase), locks);
@@ -208,7 +208,7 @@ void main() {
           ...packageFiles('app_example', at: 'example', locked: false),
         }),
       );
-      final KeptLockPath kept = .of(locks, Git(codebase), .example);
+      final KeptLockPath kept = keptLockOf(locks, Git(codebase), .example);
       final String text = '# kept\n$lockText';
       await writeFile(kept.path, text);
       await checkouts.checkout(Git(codebase), locks);
@@ -236,9 +236,9 @@ void main() {
           ...packageFiles('app_example', at: 'example', locked: false),
         }),
       );
-      final KeptLockPath kept = .of(locks, Git(codebase), .example);
+      final KeptLockPath kept = keptLockOf(locks, Git(codebase), .example);
       await writeFile(kept.path, lockText);
-      final PackagePath example = .of(
+      final PackagePath example = packageIn(
         appCheckout(checkouts),
         codebase.root,
         .example,
@@ -270,7 +270,7 @@ void main() {
         origin,
         await onMain(packageFiles('app')),
       );
-      final KeptLockPath kept = .of(locks, Git(codebase), .root);
+      final KeptLockPath kept = keptLockOf(locks, Git(codebase), .root);
       await writeFile(kept.path, '# kept\n$lockText');
       await checkouts.checkout(Git(codebase), locks);
       expect(await File(inCheckout('pubspec.lock')).readAsString(), lockText);
@@ -298,7 +298,7 @@ void main() {
             isA<Unlocked>().having(
               (Unlocked u) => u.lock,
               'lock',
-              KeptLockPath.of(locks, Git(unlocked), .example),
+              keptLockOf(locks, Git(unlocked), .example),
             ),
           ),
         ),
@@ -324,7 +324,7 @@ void main() {
             isA<Unlocked>().having(
               (Unlocked u) => u.lock,
               'lock',
-              KeptLockPath.of(locks, Git(unlocked), .root),
+              keptLockOf(locks, Git(unlocked), .root),
             ),
           ),
         ),
@@ -494,7 +494,7 @@ void main() {
       origin,
       await onMain(packageFiles('app', locked: false)),
     );
-    final KeptLockPath kept = .of(locks, Git(codebase), .root);
+    final KeptLockPath kept = keptLockOf(locks, Git(codebase), .root);
     await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(kept.path).writeAsString('# again\n$lockText');
@@ -512,7 +512,7 @@ void main() {
       origin,
       await onMain(packageFiles('app', locked: false)),
     );
-    final KeptLockPath kept = .of(locks, Git(codebase), .root);
+    final KeptLockPath kept = keptLockOf(locks, Git(codebase), .root);
     await writeFile(kept.path, lockText);
     await warm(codebase);
     await File(inCheckout('pubspec.lock')).writeAsString('# edited\n$lockText');
@@ -672,7 +672,7 @@ void main() {
     );
     expect(
       checkout.sdk,
-      SdkVersion.read(
+      readSdkVersion(
         .flutter,
         (await runner.run(Toolchain.flutter.version)).stdout,
       ),

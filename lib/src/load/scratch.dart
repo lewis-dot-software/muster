@@ -11,9 +11,7 @@ import '../store/store_fault.dart';
 /// own to move to any commit, since no load reads it, until it is disposed
 /// of.
 final class Scratch {
-  /// The scratch at [_at], of [_codebase], moved and removed through
-  /// [_scratches].
-  Scratch(this._scratches, this._codebase, this._at);
+  Scratch._(this._scratches, this._codebase, this._at);
 
   final Scratches _scratches;
 
@@ -22,7 +20,7 @@ final class Scratch {
   final ScratchPath _at;
 
   /// The package at the codebase's root, inside the scratch.
-  PackagePath get package => .inScratch(_at, _codebase.root);
+  PackagePath get package => packageInScratch(_at, _codebase.root);
 
   /// Moves the scratch to [commit], holding that commit's tracked files
   /// alone: every tracked file's edit reverted and every other file removed,
@@ -54,3 +52,8 @@ final class Scratch {
     }
   }
 }
+
+/// The scratch at [at], of [codebase], moved and removed through
+/// [scratches].
+Scratch scratchOf(Scratches scratches, GitCodebase codebase, ScratchPath at) =>
+    ._(scratches, codebase, at);

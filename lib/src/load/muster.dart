@@ -6,14 +6,13 @@ import '../store/scratches.dart';
 import '../store/store_fault.dart';
 import 'load.dart';
 import 'process_loads.dart';
+import 'scratch.dart';
 import 'scratching.dart';
 
 /// muster's entry: the load of a consumer's codebases, and the scratches a
 /// consumer moves off their pins.
 final class Muster {
-  /// The muster that makes a scratch of each git codebase of [_codebases],
-  /// by its name, through [_scratches].
-  Muster(this._codebases, this._scratches);
+  Muster._(this._codebases, this._scratches);
 
   final Map<CodebaseName, Codebase> _codebases;
 
@@ -49,7 +48,7 @@ final class Muster {
   /// beside.
   ///
   /// Returns [Scratched], [NotNamed] where no codebase of the load bears
-  /// [name], [NoClone] where a hosted one does, and [ScratchFailed] where
+  /// [name], [NotGit] where a hosted one does, and [ScratchFailed] where
   /// the scratch cannot be made, its directory removed. Nothing throws but a
   /// bug.
   Future<Scratching> scratch(CodebaseName name) async {
@@ -58,15 +57,20 @@ final class Muster {
       case Git(codebase: final GitCodebase git):
         codebase = git;
       case Hosted():
-        return NoClone(name);
+        return NotGit(name);
       case null:
         return NotNamed(name);
     }
     try {
       final ScratchPath at = await _scratches.make(codebase);
-      return Scratched(.new(_scratches, codebase, at));
+      return Scratched(scratchOf(_scratches, codebase, at));
     } on StoreFault catch (fault) {
       return ScratchFailed(fault.act);
     }
   }
 }
+
+/// The muster that makes a scratch of each git codebase of [codebases], by
+/// its name, through [scratches].
+Muster musterOf(Map<CodebaseName, Codebase> codebases, Scratches scratches) =>
+    ._(codebases, scratches);

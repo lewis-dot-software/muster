@@ -4,6 +4,7 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:test/test.dart';
 
@@ -23,6 +24,7 @@ void main() {
   late PackageServer server;
   late SpyRunner runner;
   late GitCodebase app;
+  late GitCodebase bare;
   late HostedCodebase lib;
 
   setUp(() async {
@@ -33,6 +35,12 @@ void main() {
     final Commit pin = await origin.commit(null, packageFiles('app'));
     await origin.ref('refs/heads/main', pin);
     app = codebaseOf(origin, pin);
+    final Commit unlocked = await origin.commit(
+      null,
+      packageFiles('bare', locked: false),
+    );
+    await origin.ref('refs/heads/bare', unlocked);
+    bare = codebaseOf(origin, unlocked, name: 'bare');
     serveLeaf(server, 'a', '1.0.0', example: true);
     lib = hostedOf('a', name: 'lib');
     await writeFile(
@@ -48,7 +56,7 @@ void main() {
 
   /// The kept lock of the hosted codebase's [package].
   KeptLockPath keptOfLib([Package package = .root]) =>
-      .of(locksBeside(atRoot(temp)), Hosted(lib), package);
+      keptLockOf(locksBeside(atRoot(temp)), Hosted(lib), package);
 
   test('a manifest naming a git and a hosted codebase locks and loads both, '
       'in its order', () async {
@@ -99,7 +107,7 @@ void main() {
   });
 
   test(
-    'a scratch of a hosted codebase is refused as NoClone, naming it',
+    'a scratch of a hosted codebase is refused as NotGit, naming it',
     () async {
       await loaderIn(temp, runner).lock();
       final Load load = await loaderIn(temp, runner).load();
@@ -109,8 +117,64 @@ void main() {
       };
       expect(
         await muster.scratch(lib.name),
-        isA<NoClone>().having((NoClone n) => n.name, 'name', lib.name),
+        isA<NotGit>().having((NotGit n) => n.name, 'name', lib.name),
       );
     },
   );
+
+  group("a file standing at a checkout's path is removed and the checkout "
+      'made afresh where a load or a lock makes it, of a git and a hosted '
+      'codebase alike,', () {
+    setUp(() async {
+      await writeFile(
+        atRoot(temp),
+        renderManifest([entryOf(app), entryOf(bare), hostedEntryOf(lib)]),
+      );
+    });
+
+    /// Stands a file at the checkout path of each of [names], in place of
+    /// any checkout there.
+    Future<void> fileAt(List<String> names) async {
+      for (final String name in names) {
+        final Directory checkout = .new(checkoutAt(temp, name));
+        if (await checkout.exists()) {
+          await checkout.delete(recursive: true);
+        }
+        await writeFile(checkout.path, 'a file\n');
+      }
+    }
+
+    /// Matches a load that fetched every codebase.
+    Matcher fetched() => loadedWith({
+      'app': fetchedAt(checkoutAt(temp, 'app')),
+      'bare': fetchedAt(checkoutAt(temp, 'bare')),
+      'lib': fetchedAt('${checkoutAt(temp, 'lib')}/a-1.0.0'),
+    });
+
+    test('by `muster lock`, which leaves the file of a codebase it writes no '
+        'lock for, since it makes no checkout of one', () async {
+      await fileAt(['app', 'bare', 'lib']);
+      expect(
+        await loaderIn(temp, runner).lock(),
+        lockedWith({
+          'app': wrote(const []),
+          'bare': wrote([
+            keptLockOf(locksBeside(atRoot(temp)), Git(bare), .root),
+          ]),
+          'lib': wrote([keptOfLib(), keptOfLib(.example)]),
+        }),
+      );
+      for (final String name in ['bare', 'lib']) {
+        expect(await Directory(checkoutAt(temp, name)).exists(), isTrue);
+      }
+      expect(await File(checkoutAt(temp, 'app')).exists(), isTrue);
+      expect(await loaderIn(temp, runner).load(), fetched());
+    });
+
+    test('by a load', () async {
+      await loaderIn(temp, runner).lock();
+      await fileAt(['app', 'bare', 'lib']);
+      expect(await loaderIn(temp, runner).load(), fetched());
+    });
+  });
 }

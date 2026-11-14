@@ -17,14 +17,14 @@ List<UnnamedLock> chooseUnnamed(
   final Set<KeptLockPath> named = {
     for (final Codebase codebase in codebases)
       for (final Package package in Package.values)
-        .of(locks, codebase, package),
+        keptLockOf(locks, codebase, package),
   };
   final Set<PartialLockPath> partials = {
     for (final KeptLockPath lock in named) .of(lock),
   };
   return [
     for (final String name in [...listed]..sort()) ...[
-      if (KeptLockPath.listed(locks, name) case final KeptLockPath lock
+      if (listedKeptLock(locks, name) case final KeptLockPath lock
           when !named.contains(lock))
         UnnamedKept(lock),
       if (PartialLockPath.listed(locks, name) case final PartialLockPath partial

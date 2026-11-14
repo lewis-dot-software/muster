@@ -3,17 +3,23 @@ import 'dart:io';
 import 'package:glados/glados.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/locking.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/hosted_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/resolution.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
+import '../support/package_server.dart';
 import '../support/packages.dart';
 import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
@@ -37,6 +43,31 @@ final Generator<_Codebase> _codebase = any.combine4(
 /// The text a kept lock standing before a lock holds, which no resolve
 /// writes, so a lock that rewrote it would show.
 const String _standing = '# kept before the lock\n$lockText';
+
+/// One hosted codebase of the closed cases: how it resolves, whether its
+/// package serves an example, and which of its packages' kept locks stand
+/// before the lock.
+typedef _Hosted = ({
+  Resolution resolution,
+  bool example,
+  Set<Package> standing,
+});
+
+/// Every closed case of a hosted codebase, each subset of its packages
+/// standing among them.
+final List<_Hosted> _hostedCases = [
+  for (final Resolution resolution in Resolution.values)
+    for (final bool example in [false, true])
+      for (final Set<Package> standing in [
+        <Package>{},
+        {.root},
+        if (example) ...[
+          {.example},
+          {.root, .example},
+        ],
+      ])
+        (resolution: resolution, example: example, standing: standing),
+];
 
 void main() {
   Glados2(
@@ -129,6 +160,100 @@ void main() {
         }),
       );
       expect(await locks(), written);
+    }),
+  );
+
+  Glados(any.int.shrinkingAtMost(gitTries), .new(numRuns: 1)).test(
+    '`muster lock` writes the kept locks a hosted package and its example '
+    'lack, and a load after it gives `Fetched`.',
+    (int seed) => inTemp((Directory temp) async {
+      final PackageServer server = await .start();
+      try {
+        final SpyRunner runner = .new({
+          ...hermetic(temp),
+          ...pubVariables(temp, server),
+        });
+        // Every closed case at once, in an order of the draw's.
+        final List<(int, _Hosted)> cases = [..._hostedCases.indexed]
+          ..shuffle(.new(seed));
+        final List<HostedCodebase> codebases = [
+          for (final (int i, _Hosted draw) in cases)
+            hostedOf('p$i', name: 'c$i', resolution: draw.resolution),
+        ];
+        for (final (int i, _Hosted draw) in cases) {
+          serveLeaf(server, 'p$i', '1.0.0', example: draw.example);
+        }
+        await writeFile(
+          atRoot(temp),
+          renderManifest(codebases.map(hostedEntryOf).toList()),
+        );
+        Set<Package> packagesOf(_Hosted draw) => {
+          .root,
+          if (draw.example) .example,
+        };
+        List<KeptLockPath> keptLocks(
+          HostedCodebase codebase,
+          Set<Package> of,
+        ) => [
+          for (final Package package in Package.values)
+            if (of.contains(package))
+              keptLockOf(locksBeside(atRoot(temp)), Hosted(codebase), package),
+        ];
+        // A lock with none standing writes every one.
+        expect(
+          await loaderIn(temp, runner).lock(),
+          lockedWith({
+            for (final (int at, (_, _Hosted draw)) in cases.indexed)
+              codebases[at].name.name: wrote(
+                keptLocks(codebases[at], packagesOf(draw)),
+              ),
+          }),
+        );
+        final Map<KeptLockPath, String> kept = {};
+        for (final (int at, (_, _Hosted draw)) in cases.indexed) {
+          for (final KeptLockPath lock in keptLocks(
+            codebases[at],
+            packagesOf(draw),
+          )) {
+            kept[lock] = await File(lock.path).readAsString();
+          }
+          for (final KeptLockPath lock in keptLocks(
+            codebases[at],
+            packagesOf(draw).difference(draw.standing),
+          )) {
+            await File(lock.path).delete();
+          }
+        }
+        // A lock with some standing writes those lacking alone.
+        expect(
+          await loaderIn(temp, runner).lock(),
+          lockedWith({
+            for (final (int at, (_, _Hosted draw)) in cases.indexed)
+              codebases[at].name.name: wrote(
+                keptLocks(
+                  codebases[at],
+                  packagesOf(draw).difference(draw.standing),
+                ),
+              ),
+          }),
+        );
+        for (final MapEntry<KeptLockPath, String>(key: lock, value: text)
+            in kept.entries) {
+          expect(await File(lock.path).readAsString(), text, reason: lock.path);
+        }
+        expect(
+          await loaderIn(temp, runner).load(),
+          loadedWith({
+            for (final HostedCodebase codebase in codebases)
+              codebase.name.name: fetchedAt(
+                '${checkoutAt(temp, codebase.name.name)}/'
+                '${codebase.package.name}-1.0.0',
+              ),
+          }),
+        );
+      } finally {
+        await server.close();
+      }
     }),
   );
 }

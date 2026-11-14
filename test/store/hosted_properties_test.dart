@@ -338,7 +338,7 @@ void main() {
           final Checkout checkout = await bench.lockedCheckout(codebase);
           expect(
             checkout.package.path,
-            PackagePath.unpacked(bench.checkout, codebase).path,
+            unpackedPackage(bench.checkout, codebase).path,
           );
           final List<String> resolved = resolvedIn(
             bench.checkout,
@@ -368,7 +368,7 @@ void main() {
                 p.posix.relative(
                   p.posix.joinAll(
                     p.split(
-                      PackagePath.ofHosted(
+                      hostedPackage(
                         bench.checkout,
                         codebase,
                         package,
@@ -438,7 +438,9 @@ void main() {
             );
             await bench.lockedCheckout(codebase);
             expect(
-              await configuredIn(.ofHosted(bench.checkout, codebase, .root)),
+              await configuredIn(
+                hostedPackage(bench.checkout, codebase, .root),
+              ),
               {
                 'a',
                 ...draw.dependencies,
@@ -498,11 +500,7 @@ void main() {
           final Checkout checkout = await bench.lockedCheckout(codebase);
           final Map<String, Object?> config = jsonDecode(
             await File(
-              PackagePath.ofHosted(
-                bench.checkout,
-                codebase,
-                .root,
-              ).packageConfig.path,
+              hostedPackage(bench.checkout, codebase, .root).packageConfig.path,
             ).readAsString(),
           ) as Map<String, Object?>;
           final Map<String, Object?> a = (config['packages']! as List<Object?>)
@@ -514,7 +512,7 @@ void main() {
             p.normalize(
               p.join(
                 p.dirname(
-                  PackagePath.ofHosted(
+                  hostedPackage(
                     bench.checkout,
                     codebase,
                     .root,
@@ -572,7 +570,7 @@ void main() {
           );
           await bench.lockedCheckout(codebase);
           PackagePath of(Package package) =>
-              .ofHosted(bench.checkout, codebase, package);
+              hostedPackage(bench.checkout, codebase, package);
           final String marker = fileIn(bench.checkout, 'a-1.0.0/marker.txt');
           // Each off alone, on a checkout that stands once the last is made
           // again.
@@ -613,7 +611,7 @@ void main() {
               expect(
                 await File(of(package).lock.path).readAsString(),
                 await File(
-                  KeptLockPath.of(bench.locks, Hosted(codebase), package).path,
+                  keptLockOf(bench.locks, Hosted(codebase), package).path,
                 ).readAsString(),
                 reason: '$off',
               );
@@ -648,11 +646,11 @@ void main() {
           );
           expect(await bench.checkouts.lock(Hosted(codebase), bench.locks), [
             for (final Package package in _packages(shape))
-              KeptLockPath.of(bench.locks, Hosted(codebase), package),
+              keptLockOf(bench.locks, Hosted(codebase), package),
           ]);
           for (final Package package in gone) {
             final File kept = .new(
-              KeptLockPath.of(bench.locks, Hosted(codebase), package).path,
+              keptLockOf(bench.locks, Hosted(codebase), package).path,
             );
             if (await kept.exists()) {
               await kept.delete();
@@ -677,11 +675,7 @@ void main() {
                   isA<Unlocked>().having(
                     (Unlocked u) => u.lock,
                     'lock',
-                    KeptLockPath.of(
-                      bench.locks,
-                      Hosted(codebase),
-                      lacking.first,
-                    ),
+                    keptLockOf(bench.locks, Hosted(codebase), lacking.first),
                   ),
                 ),
               ),
@@ -692,11 +686,7 @@ void main() {
           final Map<Package, String> locks = {
             for (final Package package in _packages(shape))
               package: await File(
-                PackagePath.ofHosted(
-                  bench.checkout,
-                  codebase,
-                  package,
-                ).lock.path,
+                hostedPackage(bench.checkout, codebase, package).lock.path,
               ).readAsString(),
           };
           for (final MapEntry<Package, String>(key: package, value: lock)
@@ -704,7 +694,7 @@ void main() {
             expect(
               lock,
               await File(
-                KeptLockPath.of(bench.locks, Hosted(codebase), package).path,
+                keptLockOf(bench.locks, Hosted(codebase), package).path,
               ).readAsString(),
             );
           }

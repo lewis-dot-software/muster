@@ -18,7 +18,7 @@ final LocksDirectory _locks = .beside(.parse('/m/muster.yaml', .posix)!);
 List<String> _namedFiles(List<GitCodebase> codebases) => [
   for (final GitCodebase codebase in codebases)
     for (final Package package in Package.values)
-      p.posix.basename(KeptLockPath.of(_locks, Git(codebase), package).path),
+      p.posix.basename(keptLockOf(_locks, Git(codebase), package).path),
 ];
 
 void main() {
@@ -58,7 +58,7 @@ void main() {
       ],
       [
         for (final String name in [...listed]..sort())
-          if ((KeptLockPath.listed(_locks, name) != null ||
+          if ((listedKeptLock(_locks, name) != null ||
                   PartialLockPath.listed(_locks, name) != null) &&
               !keep.contains(name))
             name,
@@ -69,7 +69,7 @@ void main() {
   test('a file named .lock alone, or with no .lock before .partial, is '
       'neither a kept lock nor a partial', () {
     for (final String name in ['.lock', '.lock.partial', 'a.partial']) {
-      expect(KeptLockPath.listed(_locks, name), isNull);
+      expect(listedKeptLock(_locks, name), isNull);
       expect(PartialLockPath.listed(_locks, name), isNull);
     }
   });

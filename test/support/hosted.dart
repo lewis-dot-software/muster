@@ -134,7 +134,7 @@ List<String> resolvedIn(
         p.posix.joinAll([
           ...p.split(
             p.relative(
-              PackagePath.ofHosted(checkout, codebase, package).path,
+              hostedPackage(checkout, codebase, package).path,
               from: checkout.path,
             ),
           ),

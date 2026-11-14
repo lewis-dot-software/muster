@@ -45,7 +45,7 @@ void main() {
 
   /// The version of [toolchain]'s SDK on `PATH`.
   Future<SdkVersion> versionOf(Toolchain toolchain) async =>
-      .read(toolchain, (await runner.run(toolchain.version)).stdout)!;
+      readSdkVersion(toolchain, (await runner.run(toolchain.version)).stdout)!;
 
   test('a hosted checkout comes back unpacked at its version, resolved, '
       'handed out at its package, with the SDK that resolved it, and stamped '
@@ -85,8 +85,8 @@ void main() {
     serveLeaf(server, 'a', '1.0.0', example: true);
     final HostedCodebase codebase = hostedOf('a');
     expect(await checkouts.lock(Hosted(codebase), locks), [
-      KeptLockPath.of(locks, Hosted(codebase), .root),
-      KeptLockPath.of(locks, Hosted(codebase), .example),
+      keptLockOf(locks, Hosted(codebase), .root),
+      keptLockOf(locks, Hosted(codebase), .example),
     ]);
     await checkouts.checkout(Hosted(codebase), locks);
     runner.commands.clear();
@@ -98,10 +98,9 @@ void main() {
     serveLeaf(server, 'a', '1.0.0', example: true);
     final HostedCodebase codebase = hostedOf('a');
     await checkouts.lock(Hosted(codebase), locks);
-    await File(KeptLockPath.of(locks, Hosted(codebase), .example).path)
-        .delete();
+    await File(keptLockOf(locks, Hosted(codebase), .example).path).delete();
     expect(await checkouts.lock(Hosted(codebase), locks), [
-      KeptLockPath.of(locks, Hosted(codebase), .example),
+      keptLockOf(locks, Hosted(codebase), .example),
     ]);
   });
 
@@ -187,11 +186,15 @@ void main() {
     final HostedCodebase codebase = hostedOf('a');
     await lockedCheckout(checkouts, locks, codebase);
     expect(
-      await configuredIn(.ofHosted(appCheckout(checkouts), codebase, .root)),
+      await configuredIn(
+        hostedPackage(appCheckout(checkouts), codebase, .root),
+      ),
       {'a', 'c'},
     );
     expect(
-      await configuredIn(.ofHosted(appCheckout(checkouts), codebase, .example)),
+      await configuredIn(
+        hostedPackage(appCheckout(checkouts), codebase, .example),
+      ),
       {'a', 'a_example', 'c'},
     );
   });
@@ -209,7 +212,7 @@ void main() {
     await lockedCheckout(checkouts, locks, codebase);
     expect(
       await File(
-        PackagePath.ofHosted(
+        hostedPackage(
           appCheckout(checkouts),
           codebase,
           .example,
@@ -259,7 +262,7 @@ void main() {
       final HostedCodebase codebase = hostedOf('a');
       await checkouts.lock(Hosted(codebase), locks);
       expect(
-        await File(KeptLockPath.of(locks, Hosted(codebase), .root).path)
+        await File(keptLockOf(locks, Hosted(codebase), .root).path)
             .readAsString(),
         allOf(contains('version: "1.1.0"'), isNot(contains('"1.0.0"'))),
       );
@@ -320,7 +323,9 @@ void main() {
       );
       expect(await File(checkout.package.packageConfig.path).exists(), isFalse);
       expect(
-        await configuredIn(.ofHosted(appCheckout(checkouts), codebase, .root)),
+        await configuredIn(
+          hostedPackage(appCheckout(checkouts), codebase, .root),
+        ),
         {'a', aroundName},
       );
     },

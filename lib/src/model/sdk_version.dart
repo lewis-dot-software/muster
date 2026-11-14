@@ -8,20 +8,20 @@ extension type const SdkVersion._(String version) {
   /// The version [text] is, or null where it is empty or holds whitespace.
   static SdkVersion? parse(String text) =>
       text.isEmpty || text.contains(_whitespace) ? null : ._(text);
-
-  /// The version [toolchain]'s version command wrote in [output], or null
-  /// where the output names none: the word after `Dart SDK version:` for
-  /// `dart --version`, and `frameworkVersion` in the JSON object
-  /// `flutter --version --machine` writes, past any line before it.
-  static SdkVersion? read(Toolchain toolchain, String output) =>
-      switch (toolchain) {
-        .dart => switch (_dartVersion.firstMatch(output)?.group(1)) {
-          final String version => parse(version),
-          null => null,
-        },
-        .flutter => _frameworkVersion(output),
-      };
 }
+
+/// The version [toolchain]'s version command wrote in [output], or null where
+/// the output names none: the word after `Dart SDK version:` for
+/// `dart --version`, and `frameworkVersion` in the JSON object
+/// `flutter --version --machine` writes, past any line before it.
+SdkVersion? readSdkVersion(Toolchain toolchain, String output) =>
+    switch (toolchain) {
+      .dart => switch (_dartVersion.firstMatch(output)?.group(1)) {
+        final String version => .parse(version),
+        null => null,
+      },
+      .flutter => _frameworkVersion(output),
+    };
 
 final RegExp _whitespace = .new(r'\s');
 

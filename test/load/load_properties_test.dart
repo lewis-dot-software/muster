@@ -1,19 +1,23 @@
 import 'dart:io';
 
 import 'package:glados/glados.dart';
-import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
+import 'package:muster/src/load/locking.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/git.dart';
+import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
+import '../support/package_server.dart';
 import '../support/packages.dart';
 import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
@@ -91,6 +95,8 @@ class _Bench {
 
   Future<Load> load([Runner? by]) => loader(by).load(named: _named);
 
+  Future<Locking> lock([Runner? by]) => loader(by).lock(named: _named);
+
   String checkoutOf(GitCodebase codebase) =>
       checkoutAt(temp, codebase.name.name);
 }
@@ -128,6 +134,9 @@ final Generator<String> _notYamlName = any
 
 /// A fault a named manifest can meet.
 enum _ManifestFault { missing, unreadable, notYaml }
+
+/// A codebase's kind, as its manifest names it.
+enum _Kind { git, hosted }
 
 /// A fault that refuses a load.
 enum _Refusal {
@@ -351,10 +360,11 @@ void main() {
     any
         .nonEmptyList(
           any.list(
-            any.combine2(
+            any.combine3(
               any.intInRange(0, 6),
               any.bool,
-              (int n, bool good) => (n, good),
+              any.choose(_Kind.values),
+              (int n, bool good, _Kind kind) => (n, good, kind),
             ),
           ),
         )
@@ -362,49 +372,79 @@ void main() {
     any.bool.shrinkingAtMost(gitTries),
     .new(numRuns: 10),
   ).test(
-    "Every codebase the manifests name gets exactly one outcome, in the "
-    "manifests' order, keyed by its name.",
-    (List<List<(int, bool)>> manifests, bool rootFirst) =>
-        inTemp((Directory temp) async {
-          final _Bench bench = await .make(temp);
-          final Set<int> seen = {};
-          final Map<String, Matcher> expected = {};
-          for (final (int index, List<(int, bool)> codebases)
-              in manifests.indexed) {
-            final List<GitCodebase> named = [];
-            for (final (int n, bool good) in codebases) {
-              if (!seen.add(n)) {
-                continue;
-              }
-              final GitCodebase codebase = await bench.codebase(
-                'c$n',
-                packageFiles('c$n'),
-              );
-              named.add(
-                good
-                    ? codebase
-                    : codebaseOf(
-                        bench.origins.first,
-                        .parse('${n}a'.padRight(40, 'a'))!,
-                        name: 'c$n',
-                      ),
-              );
-              expected['c$n'] = good
-                  ? fetchedAt(bench.checkoutOf(codebase))
-                  : isA<PinMissing>();
+    'A load naming git and hosted codebases gives one outcome a codebase, in '
+    "the manifests' order, whatever its kind.",
+    (List<List<(int, bool, _Kind)>> manifests, bool rootFirst) => inTemp((
+      Directory temp,
+    ) async {
+      final _Bench bench = await .make(temp);
+      final PackageServer server = await .start();
+      try {
+        final SpyRunner pub = .new({
+          ...hermetic(temp),
+          ...pubVariables(temp, server),
+        });
+        final Set<int> seen = {};
+        final Map<String, Matcher> expected = {};
+        for (final (int index, List<(int, bool, _Kind)> codebases)
+            in manifests.indexed) {
+          final List<Entry> named = [];
+          for (final (int n, bool good, _Kind kind) in codebases) {
+            if (!seen.add(n)) {
+              continue;
             }
-            if (index == 0 && rootFirst) {
-              await writeManifest(atRoot(temp), named);
-            } else {
-              await bench.manifest(
-                'm$index',
-                named,
-                rootFirst ? .variable : .argument,
-              );
+            switch (kind) {
+              case .git:
+                final GitCodebase codebase = await bench.codebase(
+                  'c$n',
+                  packageFiles('c$n'),
+                );
+                named.add(
+                  entryOf(
+                    good
+                        ? codebase
+                        : codebaseOf(
+                            bench.origins.first,
+                            .parse('${n}a'.padRight(40, 'a'))!,
+                            name: 'c$n',
+                          ),
+                  ),
+                );
+                expected['c$n'] = good
+                    ? fetchedAt(bench.checkoutOf(codebase))
+                    : isA<PinMissing>();
+              case .hosted:
+                serveLeaf(server, 'h$n', '1.0.0');
+                // A version no host serves fails its unpack.
+                named.add(
+                  hostedEntryOf(
+                    hostedOf(
+                      'h$n',
+                      name: 'c$n',
+                      version: good ? '1.0.0' : '9.9.9',
+                    ),
+                  ),
+                );
+                expected['c$n'] = good
+                    ? fetchedAt('${checkoutAt(temp, 'c$n')}/h$n-1.0.0')
+                    : isA<CommandFailed>();
             }
           }
-          expect(await bench.load(), loadedWith(expected));
-        }),
+          if (index == 0 && rootFirst) {
+            await writeFile(atRoot(temp), renderManifest(named));
+          } else {
+            final String path = p.join(temp.path, 'manifests', 'm$index.yaml');
+            await writeFile(path, renderManifest(named));
+            bench.give(path, rootFirst ? .variable : .argument);
+          }
+        }
+        // Every hosted codebase loads on a kept lock, which a lock writes.
+        await bench.lock(pub);
+        expect(await bench.load(pub), loadedWith(expected));
+      } finally {
+        await server.close();
+      }
+    }),
   );
 
   Glados2(
@@ -535,7 +575,7 @@ void main() {
         (draw.listed ? inListed : atRootManifest).add(codebase);
         if (!draw.committed) {
           for (final Package package in [.root, if (draw.example) .example]) {
-            final KeptLockPath kept = .of(
+            final KeptLockPath kept = keptLockOf(
               locksBeside(draw.listed ? listed : atRoot(temp)),
               Git(codebase),
               package,

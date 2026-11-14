@@ -100,7 +100,7 @@ A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory
 
 The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make touches the checkout and written last. It names the codebase, every manifest value the resolve turns on among its own, each lock's source and its hash as placed in its package, the hash of each `package_config.json` the resolve wrote, and the SDK version that resolved it: the Dart SDK's from `dart --version`, or the Flutter framework's from `flutter --version --machine`. A kept lock is copied into its package as `pubspec.lock` before the resolve, so a git checkout carries it as a file its pin lacks. A checkout stands where the package it hands out holds its `pubspec.yaml`, its stamp matches what the survey read, and each package's lock and `package_config.json` is the one stamped, a kept lock's source beside its manifest too. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
 
-Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
+Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. A file standing in a checkout's place reads as no checkout, and is removed as a directory that is no worktree is. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
 
 Deleting `.dart_tool/muster/` or the cache is always safe while no load runs, and costs one fetch.
 
@@ -144,7 +144,7 @@ A scratch's acts return their own outcomes, each failure an `ActFailure`: `Comma
 
 | Act | Gives | Or |
 |---|---|---|
-| `muster.scratch(name)` | `Scratched`, carrying the `Scratch` | `NotNamed` where no codebase of the load bears the name, `NoClone` where a hosted one does, or `ScratchFailed`, its directory removed |
+| `muster.scratch(name)` | `Scratched`, carrying the `Scratch` | `NotNamed` where no codebase of the load bears the name, `NotGit` where a hosted one does, or `ScratchFailed`, its directory removed |
 | `scratch.move(commit)` | `Moved` | `MoveFailed`, where a commit is on none of its URL's branches or tags after a fetch among them |
 | `scratch.dispose()` | `Disposed`, again where it is gone already | `DisposalFailed` |
 
@@ -193,4 +193,4 @@ The exit codes are one enum in `cli`, and its doc comment is their home.
 
 ## Package
 
-muster is one package, its library `lib/muster.dart` exporting `Muster`, `Load`, `FetchOutcome`, the scratch's types and their cases, the whole surface a consumer imports.
+muster is one package, its library `lib/muster.dart` the whole surface a consumer imports: `Muster`, `Load`, `FetchOutcome`, the scratch's types and their cases, and every type a public member of theirs names. Each maker whose parameters name a type of muster's own that the surface leaves out, a checkout's paths', a kept lock's, an SDK version read's and a scratch's among them, stays inside the package.

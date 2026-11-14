@@ -7,8 +7,11 @@ import 'package:path/path.dart' as p;
 
 import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/hosted.dart';
 import '../support/loads.dart';
+import '../support/manifests.dart';
 import '../support/origin.dart';
+import '../support/package_server.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
 import '../support/shrinking_at_most.dart';
@@ -129,7 +132,7 @@ void main() {
         final Scratching made = await muster!.scratch(app.name);
         final Scratch scratch = switch (made) {
           Scratched(:final Scratch scratch) => scratch,
-          NotNamed() || NoClone() || ScratchFailed() => fail('$made'),
+          NotNamed() || NotGit() || ScratchFailed() => fail('$made'),
         };
         final String at = scratch.package.path;
         for (final (int index, _Dirt dirt) in draw.moves) {
@@ -271,6 +274,54 @@ void main() {
             .notARepo ||
             .cacheBlocked:
           expect(await scratchesLeft(temp), isEmpty);
+      }
+    });
+  });
+
+  Glados2(
+    any.nonEmptyList(any.bool).shrinkingAtMost(gitTries),
+    any.nonEmptyList(any.intInRange(0, 6)).shrinkingAtMost(gitTries),
+    .new(numRuns: 10),
+  ).test('A scratch asked of a hosted codebase gives `NotGit` and starts no '
+      'process.', (List<bool> hosted, List<int> asks) async {
+    await inTemp((Directory temp) async {
+      // A server serving nothing, so no unpack reaches pub.dev.
+      final PackageServer server = await .start();
+      try {
+        final SpyRunner runner = .new({
+          ...hermetic(temp),
+          ...pubVariables(temp, server),
+        });
+        final Origin origin = await .make(temp, runner);
+        final Commit commit = await origin.commit(null, packageFiles('app'));
+        await origin.ref('refs/heads/main', commit);
+        final List<Entry> entries = [];
+        final List<CodebaseName> hostedNames = [];
+        for (final (int i, bool isHosted) in hosted.take(4).indexed) {
+          if (isHosted) {
+            entries.add(hostedEntryOf(hostedOf('p$i', name: 'c$i')));
+            hostedNames.add(.parse('c$i')!);
+          } else {
+            entries.add(entryOf(codebaseOf(origin, commit, name: 'c$i')));
+          }
+        }
+        await writeFile(atRoot(temp), renderManifest(entries));
+        final Muster muster = switch (await loaderIn(temp, runner).load()) {
+          Loaded(:final Muster muster) => muster,
+          Refused(:final LoadRefusal reason) => fail('refused: $reason'),
+        };
+        for (final int ask in hostedNames.isEmpty ? <int>[] : asks.take(4)) {
+          final CodebaseName name = hostedNames[ask % hostedNames.length];
+          final int before = runner.commands.length;
+          expect(
+            await muster.scratch(name),
+            isA<NotGit>().having((NotGit n) => n.name, 'name', name),
+          );
+          expect(runner.commands, hasLength(before), reason: '$name');
+        }
+        expect(await scratchesLeft(temp), isEmpty);
+      } finally {
+        await server.close();
       }
     });
   });

@@ -26,11 +26,11 @@ final class NotNamed extends Scratching {
   final CodebaseName name;
 }
 
-/// A codebase the load's manifests name with no clone to make a scratch of:
-/// a hosted one.
-final class NoClone extends Scratching {
+/// A codebase the load's manifests name that is not a git codebase, a hosted
+/// one, so it has no commits for a scratch to move between.
+final class NotGit extends Scratching {
   /// The make refused for [name].
-  const NoClone(this.name);
+  const NotGit(this.name);
 
   /// The name asked for.
   final CodebaseName name;

@@ -1,10 +1,11 @@
-import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
-import 'package:muster/src/model/checkout_path.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/consumer_root.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/package_path.dart';
 
 /// A case of [FetchOutcome], each named once in [of], so a case the type
 /// gains fails the build until it is named here.
@@ -49,10 +50,10 @@ enum OutcomeCase {
     required Executable executable,
   }) => switch (this) {
     .fetched => Fetched(
-      .of(CheckoutPath.of(_root, codebase.name), codebase.root, .root),
+      packageIn(.of(_root, codebase.name), codebase.root, .root),
       .parse('3.13.0')!,
     ),
-    .unlocked => Unlocked(.of(_locks, Git(codebase), package)),
+    .unlocked => Unlocked(keptLockOf(_locks, Git(codebase), package)),
     .commandFailed => CommandFailed(
       (executable: executable, arguments: ['clone', codebase.url.url]),
       exitCode,

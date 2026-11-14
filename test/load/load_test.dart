@@ -1,9 +1,11 @@
 import 'dart:io';
 
-import 'package:muster/src/model/codebase.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/kept_lock_path.dart';
+import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
@@ -67,7 +69,11 @@ void main() {
     final String second = p.join(temp.path, 'elsewhere', 'bench.yaml');
     await writeManifest(atRoot(temp), [app]);
     await writeManifest(second, [bench]);
-    final KeptLockPath kept = .of(locksBeside(second), Git(bench), .root);
+    final KeptLockPath kept = keptLockOf(
+      locksBeside(second),
+      Git(bench),
+      .root,
+    );
     await writeFile(kept.path, lockText);
     expect(
       await load(variables: {'MUSTER_MANIFESTS': second}),
@@ -100,7 +106,7 @@ void main() {
           'app': isA<Fetched>().having(
             (Fetched f) => f.sdk,
             'sdk',
-            SdkVersion.read(
+            readSdkVersion(
               .dart,
               (await runner.run(Toolchain.dart.version)).stdout,
             ),
@@ -138,7 +144,7 @@ void main() {
         'app': isA<Unlocked>().having(
           (Unlocked u) => u.lock,
           'lock',
-          KeptLockPath.of(
+          keptLockOf(
             locksBeside(atRoot(temp, 'sub/bench.yaml')),
             Git(app),
             .root,

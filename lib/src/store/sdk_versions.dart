@@ -28,7 +28,7 @@ class SdkVersions {
   Future<SdkVersion> _version(Toolchain toolchain) async {
     final Command command = toolchain.version;
     final Ran ran = await _runner.run(command);
-    return .read(toolchain, ran.stdout) ??
+    return readSdkVersion(toolchain, ran.stdout) ??
         (throw StoreFault(
           CommandFailed(command, ran.exitCode, ran.stdout, ran.stderr),
         ));

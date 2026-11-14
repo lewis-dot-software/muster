@@ -73,7 +73,7 @@ void main() {
       final String second = p.join(temp.path, 'elsewhere', 'bench.yaml');
       await writeManifest(atRoot(temp), [codebaseOf(origin, app)]);
       await writeManifest(second, [benchCodebase]);
-      final KeptLockPath kept = .of(
+      final KeptLockPath kept = keptLockOf(
         locksBeside(second),
         Git(benchCodebase),
         .root,

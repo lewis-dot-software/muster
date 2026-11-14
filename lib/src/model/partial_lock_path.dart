@@ -11,7 +11,7 @@ extension type const PartialLockPath._(String path) {
   /// lock's file name with `.partial` after it.
   static PartialLockPath? listed(LocksDirectory locks, String name) =>
       name.endsWith(_suffix) &&
-          KeptLockPath.listed(
+          listedKeptLock(
                 locks,
                 name.substring(0, name.length - _suffix.length),
               ) !=

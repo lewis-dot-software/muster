@@ -30,28 +30,28 @@ void main() {
 
   test('dart\'s version is the word after "Dart SDK version:"', () {
     expect(
-      SdkVersion.read(
+      readSdkVersion(
         .dart,
         'Dart SDK version: 3.13.7 (stable) (Thu Oct 22) on "macos_arm64"\n',
       ),
       SdkVersion.parse('3.13.7'),
     );
-    expect(SdkVersion.read(.dart, 'no version here'), isNull);
+    expect(readSdkVersion(.dart, 'no version here'), isNull);
   });
 
   test('flutter\'s version is frameworkVersion in its JSON, past any line '
       'before it', () {
     expect(
-      SdkVersion.read(
+      readSdkVersion(
         .flutter,
         'Waiting for another flutter command...\n'
         '{"frameworkVersion": "3.47.9", "dartSdkVersion": "3.13.7"}\n',
       ),
       SdkVersion.parse('3.47.9'),
     );
-    expect(SdkVersion.read(.flutter, '{"channel": "stable"}'), isNull);
-    expect(SdkVersion.read(.flutter, '{not json}'), isNull);
-    expect(SdkVersion.read(.flutter, 'Dart SDK version: 3.13.7'), isNull);
+    expect(readSdkVersion(.flutter, '{"channel": "stable"}'), isNull);
+    expect(readSdkVersion(.flutter, '{not json}'), isNull);
+    expect(readSdkVersion(.flutter, 'Dart SDK version: 3.13.7'), isNull);
   });
 
   test('a version is neither empty nor holds whitespace', () {

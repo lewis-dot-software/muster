@@ -17,7 +17,7 @@ export 'src/load/load.dart' show Load, Loaded, Refused;
 export 'src/load/muster.dart' show Muster;
 export 'src/load/scratch.dart' show Scratch;
 export 'src/load/scratching.dart'
-    show Scratching, Scratched, NotNamed, NoClone, ScratchFailed;
+    show Scratching, Scratched, NotNamed, NotGit, ScratchFailed;
 export 'src/model/codebase_name.dart' show CodebaseName;
 export 'src/model/command.dart' show Command;
 export 'src/model/disposal.dart' show Disposal, Disposed, DisposalFailed;
@@ -63,6 +63,8 @@ export 'src/model/manifest_refusal.dart'
         MissingKind,
         BadValue;
 export 'src/model/package_path.dart' show PackagePath;
+export 'src/model/pubspec_overrides_path.dart' show PubspecOverridesPath;
+export 'src/model/pubspec_path.dart' show PubspecPath;
 export 'src/model/sdk_version.dart' show SdkVersion;
 export 'src/model/wanted.dart' show Wanted;
 export 'src/model/written.dart'

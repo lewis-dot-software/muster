@@ -102,7 +102,7 @@ class Loader implements Loads {
         outcomes[codebase.name] = fault.failure;
       }
     }
-    final Muster muster = .new(
+    final Muster muster = musterOf(
       .unmodifiable(<CodebaseName, Codebase>{
         for (final (:codebase, manifest: _) in read.codebases)
           codebase.name: codebase,
