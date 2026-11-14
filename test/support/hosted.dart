@@ -25,13 +25,15 @@ Map<String, String> pubVariables(Directory temp, PackageServer server) => {
 
 /// The pubspec of the package [name] at [version], depending on each of
 /// [dependencies] and dev depending on each of [devDependencies] from the
-/// host it is served from, each beside its constraint, and a member of a pub
+/// host it is served from, each beside its constraint, overriding each of
+/// [dependencyOverrides] to the path beside it, and a member of a pub
 /// workspace where [workspace] holds.
 String hostedPubspec(
   String name,
   String version, {
   Map<String, String> dependencies = const {},
   Map<String, String> devDependencies = const {},
+  Map<String, String> dependencyOverrides = const {},
   bool workspace = false,
 }) => [
   'name: $name',
@@ -46,6 +48,12 @@ String hostedPubspec(
   if (devDependencies.isNotEmpty) 'dev_dependencies:',
   for (final MapEntry<String, String>(:key, :value) in devDependencies.entries)
     '  $key: ${jsonEncode(value)}',
+  if (dependencyOverrides.isNotEmpty) 'dependency_overrides:',
+  for (final MapEntry<String, String>(:key, :value)
+      in dependencyOverrides.entries) ...[
+    '  $key:',
+    '    path: ${jsonEncode(value)}',
+  ],
   '',
 ].join('\n');
 

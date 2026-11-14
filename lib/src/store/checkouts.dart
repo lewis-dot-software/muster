@@ -13,6 +13,7 @@ import '../model/clone_path.dart';
 import '../model/codebase.dart';
 import '../model/consumer_root.dart';
 import '../model/content_hash.dart';
+import '../model/example_path_outside.dart';
 import '../model/fetch_outcome.dart';
 import '../model/git_codebase.dart';
 import '../model/hosted_codebase.dart';
@@ -21,6 +22,7 @@ import '../model/lock_choice.dart';
 import '../model/lock_source.dart';
 import '../model/locks_directory.dart';
 import '../model/locks_lacking.dart';
+import '../model/outside_path.dart';
 import '../model/package.dart';
 import '../model/package_path.dart';
 import '../model/parse_stamp.dart';
@@ -29,6 +31,7 @@ import '../model/hosted_resolves.dart';
 import '../model/pubspec_overrides.dart';
 import '../model/pubspec_overrides_path.dart';
 import '../model/pubspec_path.dart';
+import '../model/read_published_pubspec.dart';
 import '../model/read_at_commit.dart';
 import '../model/repo_path.dart';
 import '../model/read_status.dart';
@@ -36,11 +39,11 @@ import '../model/render_stamp.dart';
 import '../model/sdk_version.dart';
 import '../model/stamp.dart';
 import '../model/stamped_package.dart';
+import '../model/stamped_example.dart';
 import '../model/stands.dart';
 import '../model/survey.dart';
 import '../model/surveyed_package.dart';
 import '../model/unpack_command.dart';
-import '../model/workspace_member.dart';
 import '../model/worktree.dart';
 import 'add_worktree.dart';
 import 'cache.dart';
@@ -116,17 +119,18 @@ class Checkouts {
     final CheckoutPath at = .of(root, codebase.name);
     return _claims.holding(at.claim, () async {
       final Survey survey = await _survey(Git(codebase), locks, at);
-      final Checkout checkout = (
-        package: packageIn(at, codebase.root, .root),
-        sdk: survey.sdk,
-      );
-      if (!stands(Git(codebase), survey)) {
-        await _claims.holding(
+      final Stamp stamp = switch (survey.stamp) {
+        final Stamp stamp when stands(Git(codebase), survey) => stamp,
+        _ => await _claims.holding(
           ClonePath.of(_cache.directory, codebase.url).claim,
           () => _makeGit(codebase, locks, at, survey),
-        );
-      }
-      return checkout;
+        ),
+      };
+      return (
+        package: packageIn(at, codebase.root, .root),
+        example: stampedExample(stamp, packageIn(at, codebase.root, .example)),
+        sdk: survey.sdk,
+      );
     });
   }
 
@@ -137,22 +141,41 @@ class Checkouts {
     final CheckoutPath at = .of(root, codebase.name);
     return _claims.holding(at.claim, () async {
       final Survey survey = await _survey(Hosted(codebase), locks, at);
-      if (!stands(Hosted(codebase), survey)) {
-        await _unstamp(at);
-        await _resolveAndStamp(
-          Hosted(codebase),
-          locks,
-          at,
-          _chosen(
-            Hosted(codebase),
-            locks,
-            chooseLocks(await _unpack(at, codebase), _kept(survey)),
-          ),
-          survey.sdk,
-        );
-      }
-      return (package: unpackedPackage(at, codebase), sdk: survey.sdk);
+      final Stamp stamp = switch (survey.stamp) {
+        final Stamp stamp when stands(Hosted(codebase), survey) => stamp,
+        _ => await _makeHosted(codebase, locks, at, survey),
+      };
+      return (
+        package: unpackedPackage(at, codebase),
+        example: stampedExample(stamp, hostedPackage(at, codebase, .example)),
+        sdk: survey.sdk,
+      );
     });
+  }
+
+  /// [codebase]'s checkout at [at] unpacked afresh at its pin, its packages
+  /// resolved on their locks and its stamp written last, the [survey] read
+  /// of it before. Returns the stamp.
+  Future<Stamp> _makeHosted(
+    HostedCodebase codebase,
+    LocksDirectory locks,
+    CheckoutPath at,
+    Survey survey,
+  ) async {
+    await _unstamp(at);
+    final _Unpacked unpacked = await _unpack(at, codebase);
+    return _resolveAndStamp(
+      Hosted(codebase),
+      locks,
+      at,
+      _chosen(
+        Hosted(codebase),
+        locks,
+        chooseLocks(unpacked.packages, _kept(survey)),
+      ),
+      unpacked.unresolved,
+      survey.sdk,
+    );
   }
 
   /// The kept locks, in [locks], that [codebase]'s packages lack, each
@@ -233,7 +256,7 @@ class Checkouts {
       }
       await _unstamp(at);
       final List<Package> lacking = locksLacking(
-        await _unpack(at, codebase),
+        (await _unpack(at, codebase)).packages,
         _kept(survey),
       );
       return _keepLacking(Hosted(codebase), locks, at, lacking);
@@ -282,8 +305,8 @@ class Checkouts {
 
   /// [codebase]'s checkout at [at] made at its pin from its clone, its
   /// packages resolved on their locks and its stamp written last, the
-  /// [survey] read of it before.
-  Future<void> _makeGit(
+  /// [survey] read of it before. Returns the stamp.
+  Future<Stamp> _makeGit(
     GitCodebase codebase,
     LocksDirectory locks,
     CheckoutPath at,
@@ -297,7 +320,7 @@ class Checkouts {
     );
     await _unstamp(at);
     await _place(at, clone, codebase);
-    await _resolveAndStamp(Git(codebase), locks, at, chosen, survey.sdk);
+    return _resolveAndStamp(Git(codebase), locks, at, chosen, null, survey.sdk);
   }
 
   /// The lock each package resolves on in [choice], or a [StoreFault] of
@@ -323,12 +346,14 @@ class Checkouts {
 
   /// [codebase]'s packages in the checkout at [at], each with the lock
   /// [chosen] for it in place, resolved by [sdk]'s toolchain, and the stamp
-  /// written last.
-  Future<void> _resolveAndStamp(
+  /// written last, naming the path dependency that left its example
+  /// [unresolved], where one did. Returns the stamp.
+  Future<Stamp> _resolveAndStamp(
     Codebase codebase,
     LocksDirectory locks,
     CheckoutPath at,
     Map<Package, LockSource> chosen,
+    OutsidePath? unresolved,
     SdkVersion sdk,
   ) async {
     // Every lock is in place before any package resolves, so no resolve
@@ -360,22 +385,26 @@ class Checkouts {
     final Stamp stamp = (
       codebase: codebase,
       packages: .unmodifiable(packages),
+      unresolved: unresolved,
       sdk: sdk,
     );
     await fileAct(
       at.stamp.path,
       () => File(at.stamp.path).writeAsString(renderStamp(stamp)),
     );
+    return stamp;
   }
 
   /// [codebase]'s package unpacked afresh into the checkout at [at],
   /// whatever stood there removed first, and the package around it written
   /// in the checkout's top where it resolves as a dependency, each package's
-  /// overrides written where it needs them to resolve alone and holds none,
-  /// and what it
-  /// holds of its packages: the root always, and the example where it holds
-  /// a pubspec of its own.
-  Future<AtCommit> _unpack(CheckoutPath at, HostedCodebase codebase) async {
+  /// overrides written where it needs them to resolve alone and holds none.
+  ///
+  /// Returns what it holds of its packages: the root always, and the example
+  /// where it holds a pubspec of its own and no path dependency of it leaves
+  /// the package, which is then left unresolved, with no overrides written,
+  /// and the dependency returned beside them.
+  Future<_Unpacked> _unpack(CheckoutPath at, HostedCodebase codebase) async {
     await removeDirectory(at.path);
     await fileAct(at.path, () => Directory(at.path).create(recursive: true));
     await _runner.run(unpackCommand(codebase, at));
@@ -390,6 +419,7 @@ class Checkouts {
         );
     }
     final Set<Package> packages = {};
+    OutsidePath? unresolved;
     for (final Package package in Package.values) {
       // The root's own pubspec, under either resolution, since the package
       // around it is muster's.
@@ -397,26 +427,33 @@ class Checkouts {
         .root => unpackedPackage(at, codebase).pubspec,
         .example => hostedPackage(at, codebase, package).pubspec,
       };
-      final List<int>? bytes = await bytesIfThere(pubspec.path);
-      if (!hostedResolves(package, held: bytes != null)) {
+      final String? text = await _textIfThere(pubspec.path);
+      if (!hostedResolves(package, held: text != null)) {
         continue;
       }
-      packages.add(package);
       final PubspecOverridesPath path = hostedPackage(
         at,
         codebase,
         package,
       ).overrides;
+      final String? served = await _textIfThere(path.path);
+      if ((package, text) case (.example, final String example)) {
+        unresolved = examplePathOutside(
+          example,
+          served,
+          codebase.package,
+          at.os,
+        );
+        if (unresolved != null) {
+          continue;
+        }
+      }
+      packages.add(package);
       if (pubspecOverrides(
             codebase,
             package,
-            member: switch (bytes) {
-              final List<int> bytes => workspaceMember(
-                utf8.decode(bytes, allowMalformed: true),
-              ),
-              null => false,
-            },
-            holding: await bytesIfThere(path.path) != null,
+            published: readPublishedPubspec(text ?? ''),
+            holding: served != null,
           )
           case final String overrides) {
         await fileAct(
@@ -425,8 +462,18 @@ class Checkouts {
         );
       }
     }
-    return (packages: packages, locked: const <Package>{});
+    return (
+      packages: (packages: packages, locked: const <Package>{}),
+      unresolved: unresolved,
+    );
   }
+
+  /// The text of the file at [path], or null where nothing is there.
+  Future<String?> _textIfThere(String path) async =>
+      switch (await bytesIfThere(path)) {
+        final List<int> bytes => utf8.decode(bytes, allowMalformed: true),
+        null => null,
+      };
 
   /// The survey of [codebase]'s checkout at [at], its kept locks in [locks].
   /// Its packages are read only where a directory stands at [at], so
@@ -601,3 +648,7 @@ class Checkouts {
 
 /// The code git exits with where it finds no repo it can read.
 const int _notARepo = 128;
+
+/// What a hosted package unpacked holds of its [packages], and the path
+/// dependency that left its example [unresolved], null where none did.
+typedef _Unpacked = ({AtCommit packages, OutsidePath? unresolved});

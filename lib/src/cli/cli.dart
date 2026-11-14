@@ -12,6 +12,7 @@ import 'exit_code.dart';
 import 'as_fetch_failure.dart';
 import 'failure_cells.dart';
 import 'failure_note.dart';
+import 'fetched_detail.dart';
 import 'refusal_text.dart';
 import 'verb.dart';
 
@@ -82,8 +83,8 @@ final class Cli {
         for (final MapEntry(key: CodebaseName name, value: FetchOutcome outcome)
             in outcomes.entries) {
           switch (outcome) {
-            case Fetched(:final package):
-              _row(name.name, 'Fetched', package.path);
+            case final Fetched fetched:
+              _row(name.name, 'Fetched', fetchedDetail(fetched));
             case final FetchFailure failure:
               final (String shown, String detail) = failureCells(failure);
               _row(name.name, shown, detail);

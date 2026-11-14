@@ -2,25 +2,31 @@ import 'package:glados/glados.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/lock_source.dart';
+import 'package:muster/src/model/outside_path.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/package_name.dart';
 import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/stamp.dart';
 import 'package:muster/src/model/stamped_package.dart';
 
 import 'manifests.dart';
 
-/// The stamp of [codebase], its [packages] resolved by [sdk].
+/// The stamp of [codebase], its [packages] resolved by [sdk], its example
+/// left [unresolved] for the path dependency named, where one is.
 Stamp stampOf(
   Codebase codebase,
   Map<Package, StampedPackage> packages,
-  SdkVersion sdk,
-) => (codebase: codebase, packages: packages, sdk: sdk);
+  SdkVersion sdk, {
+  OutsidePath? unresolved,
+}) =>
+    (codebase: codebase, packages: packages, unresolved: unresolved, sdk: sdk);
 
 /// Matches a stamp whose every value is [stamp]'s, its packages compared
 /// entry by entry.
 Matcher sameStamp(Stamp stamp) => isA<Stamp>()
     .having((Stamp s) => s.codebase, 'codebase', stamp.codebase)
     .having((Stamp s) => s.packages, 'packages', equals(stamp.packages))
+    .having((Stamp s) => s.unresolved, 'unresolved', stamp.unresolved)
     .having((Stamp s) => s.sdk, 'sdk', stamp.sdk);
 
 /// The generators the stamp's property tests draw from.
@@ -58,7 +64,34 @@ extension StampAnys on Any {
     },
   );
 
-  /// A stamp of any codebase, of either kind.
-  Generator<Stamp> get stamp =>
-      combine3(anyCodebase(), stampedPackages, sdkVersion, stampOf);
+  /// A path dependency that leaves its package, its path any text, line
+  /// breaks and quotes among it.
+  Generator<OutsidePath> get outsidePath => combine2(
+    choose(['b', 'freezed_annotation', 'a.b']),
+    choose(['', '\n', '\t', '"', r'\', '\u2028']),
+    (String dependency, String odd) => (
+      dependency: PackageName.parse(dependency)!,
+      path: '../../$dependency$odd',
+    ),
+  );
+
+  /// A stamp of any codebase, of either kind, its example left unresolved
+  /// or not where it stamps none.
+  Generator<Stamp> get stamp => combine4(
+    anyCodebase(),
+    stampedPackages,
+    sdkVersion,
+    outsidePath.nullable,
+    (
+      Codebase codebase,
+      Map<Package, StampedPackage> packages,
+      SdkVersion sdk,
+      OutsidePath? outside,
+    ) => stampOf(
+      codebase,
+      packages,
+      sdk,
+      unresolved: packages.containsKey(Package.example) ? null : outside,
+    ),
+  );
 }

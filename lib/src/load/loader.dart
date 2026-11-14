@@ -97,7 +97,11 @@ class Loader implements Loads {
           codebase,
           .beside(read.manifests[manifest]),
         );
-        outcomes[codebase.name] = Fetched(checkout.package, checkout.sdk);
+        outcomes[codebase.name] = Fetched(
+          checkout.package,
+          checkout.example,
+          checkout.sdk,
+        );
       } on StoreFault catch (fault) {
         outcomes[codebase.name] = fault.failure;
       }

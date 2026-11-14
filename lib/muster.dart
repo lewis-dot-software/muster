@@ -22,6 +22,8 @@ export 'src/model/codebase_name.dart' show CodebaseName;
 export 'src/model/command.dart' show Command;
 export 'src/model/disposal.dart' show Disposal, Disposed, DisposalFailed;
 export 'src/model/commit.dart' show Commit;
+export 'src/model/example.dart'
+    show Example, NoExample, ExampleResolved, ExampleUnresolved;
 export 'src/model/executable.dart' show Executable;
 export 'src/model/fetch_outcome.dart'
     show
@@ -53,7 +55,9 @@ export 'src/model/lock_path.dart' show LockPath;
 export 'src/model/manifest_path.dart' show ManifestPath;
 export 'src/model/move.dart' show Move, Moved, MoveFailed;
 export 'src/model/os.dart' show Os;
+export 'src/model/outside_path.dart' show OutsidePath;
 export 'src/model/package_config_path.dart' show PackageConfigPath;
+export 'src/model/package_name.dart' show PackageName;
 export 'src/model/manifest_refusal.dart'
     show
         ManifestRefusal,

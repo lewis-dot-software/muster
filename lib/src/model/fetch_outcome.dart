@@ -1,5 +1,6 @@
 import 'command.dart';
 import 'commit.dart';
+import 'example.dart';
 import 'executable.dart';
 import 'git_url.dart';
 import 'kept_lock_path.dart';
@@ -15,11 +16,14 @@ sealed class FetchOutcome {
 /// A codebase brought to its pin and resolved.
 final class Fetched extends FetchOutcome {
   /// The codebase whose [package], the one to hand a tool, was resolved by
-  /// [sdk].
-  const Fetched(this.package, this.sdk);
+  /// [sdk], beside what was made of its [example].
+  const Fetched(this.package, this.example, this.sdk);
 
   /// The package to hand a tool, inside the codebase's checkout.
   final PackagePath package;
+
+  /// The package's example: none, resolved, or left unresolved and why.
+  final Example example;
 
   /// The version of the SDK that resolved it.
   final SdkVersion sdk;

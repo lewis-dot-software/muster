@@ -1,63 +1,106 @@
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/published_pubspec.dart';
+import 'package:muster/src/model/read_published_pubspec.dart';
 import 'package:muster/src/model/pubspec_overrides.dart';
-import 'package:muster/src/model/workspace_member.dart';
 import 'package:test/test.dart';
 
 import '../support/hosted.dart';
 import '../support/lines_printed.dart';
 
 void main() {
-  group('workspaceMember', () {
-    test('holds for a pubspec of `resolution: workspace` alone', () {
-      expect(workspaceMember('name: a\nresolution: workspace\n'), isTrue);
-      expect(workspaceMember('name: a\nresolution: external\n'), isFalse);
-      expect(workspaceMember('name: a\n'), isFalse);
+  group('readPublishedPubspec', () {
+    test('reads a member for a pubspec of `resolution: workspace` alone', () {
+      expect(
+        readPublishedPubspec('name: a\nresolution: workspace\n').member,
+        isTrue,
+      );
+      expect(
+        readPublishedPubspec('name: a\nresolution: external\n').member,
+        isFalse,
+      );
+      expect(readPublishedPubspec('name: a\n').member, isFalse);
     });
 
-    test('holds for no pubspec that is no YAML map', () {
-      expect(workspaceMember('name: [a\n'), isFalse);
-      expect(workspaceMember('- workspace\n'), isFalse);
-      expect(workspaceMember(''), isFalse);
+    test('reads overrides for a pubspec holding `dependency_overrides`, '
+        'empty or not', () {
+      expect(
+        readPublishedPubspec(
+          'name: a\ndependency_overrides:\n  b:\n    path: ../b\n',
+        ).overrides,
+        isTrue,
+      );
+      expect(
+        readPublishedPubspec('name: a\ndependency_overrides:\n').overrides,
+        isTrue,
+      );
+      expect(readPublishedPubspec('name: a\n').overrides, isFalse);
+    });
+
+    test('reads neither from a pubspec that is no YAML map', () {
+      for (final String pubspec in ['name: [a\n', '- workspace\n', '']) {
+        expect(readPublishedPubspec(pubspec), (
+          member: false,
+          overrides: false,
+        ));
+      }
     });
 
     test(
       'reads past a directive the YAML reader warns of, printing nothing',
       () {
-        late final bool member;
+        late final PublishedPubspec published;
         expect(
           linesPrinted(
-            () => member = workspaceMember(
+            () => published = readPublishedPubspec(
               '%FOO bar\n---\nname: a\nresolution: workspace\n',
             ),
           ),
           isEmpty,
         );
-        expect(member, isTrue);
+        expect(published.member, isTrue);
       },
     );
   });
 
   group('pubspecOverrides', () {
+    /// Every pubspec a package may publish, by what muster reads of it.
+    const List<PublishedPubspec> published = [
+      (member: false, overrides: false),
+      (member: false, overrides: true),
+      (member: true, overrides: false),
+      (member: true, overrides: true),
+    ];
+
     test("a root resolved alone sets no resolution where it is a workspace's "
-        'member, and needs none where it is not', () {
+        'member, and no dependency overrides where its pubspec holds some', () {
       expect(
-        pubspecOverrides(hostedOf('a'), .root, member: true, holding: false),
-        'resolution:\n',
-      );
-      expect(
-        pubspecOverrides(hostedOf('a'), .root, member: false, holding: false),
-        isNull,
+        [
+          for (final PublishedPubspec published in published)
+            pubspecOverrides(
+              hostedOf('a'),
+              .root,
+              published: published,
+              holding: false,
+            ),
+        ],
+        [
+          null,
+          'dependency_overrides:\n',
+          'resolution:\n',
+          'resolution:\ndependency_overrides:\n',
+        ],
       );
     });
 
-    test('a root resolved as a dependency needs none, member or not', () {
-      for (final bool member in [true, false]) {
+    test('a root resolved as a dependency needs none, whatever its pubspec '
+        'holds', () {
+      for (final PublishedPubspec published in published) {
         expect(
           pubspecOverrides(
             hostedOf('a', resolution: .asDependency),
             .root,
-            member: member,
+            published: published,
             holding: false,
           ),
           isNull,
@@ -72,14 +115,18 @@ void main() {
         hostedOf('a'),
         hostedOf('a', resolution: .asDependency),
       ]) {
-        expect(
-          pubspecOverrides(codebase, .example, member: false, holding: false),
-          'dependency_overrides:\n  a:\n    path: ..\n',
-        );
-        expect(
-          pubspecOverrides(codebase, .example, member: true, holding: false),
-          'resolution:\ndependency_overrides:\n  a:\n    path: ..\n',
-        );
+        for (final PublishedPubspec published in published) {
+          expect(
+            pubspecOverrides(
+              codebase,
+              .example,
+              published: published,
+              holding: false,
+            ),
+            '${published.member ? 'resolution:\n' : ''}'
+            'dependency_overrides:\n  a:\n    path: ..\n',
+          );
+        }
       }
     });
 
@@ -89,12 +136,12 @@ void main() {
         hostedOf('a', resolution: .asDependency),
       ]) {
         for (final Package package in Package.values) {
-          for (final bool member in [true, false]) {
+          for (final PublishedPubspec published in published) {
             expect(
               pubspecOverrides(
                 codebase,
                 package,
-                member: member,
+                published: published,
                 holding: true,
               ),
               isNull,

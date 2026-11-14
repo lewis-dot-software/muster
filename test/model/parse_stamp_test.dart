@@ -70,7 +70,30 @@ void main() {
           'packageConfig': hash.hex,
         },
       },
+      'unresolved': null,
     });
+  });
+
+  final Stamp unresolvedStamp = stampOf(
+    Hosted(hosted('freezed', 'freezed', '4.0.3', .alone, .dart)),
+    {.root: (source: .kept, lock: hash, packageConfig: hash)},
+    .parse('3.38.1')!,
+    unresolved: (
+      dependency: .parse('freezed_annotation')!,
+      path: '../../freezed_annotation',
+    ),
+  );
+
+  test('a stamp of an example left unresolved names its path dependency, and '
+      'is read back', () {
+    expect(jsonOf(unresolvedStamp)['unresolved'], {
+      'dependency': 'freezed_annotation',
+      'path': '../../freezed_annotation',
+    });
+    expect(
+      parseStamp(jsonEncode(jsonOf(unresolvedStamp))),
+      sameStamp(unresolvedStamp),
+    );
   });
 
   test('text that holds no stamp reads as none', () {
@@ -106,8 +129,30 @@ void main() {
       ..['hosted'] = 'my-dio';
     final Map<String, Object?> reservedPackage = jsonOf(hostedStamp)
       ..['hosted'] = 'class';
+    final Map<String, Object?> unresolvedLeftOut = jsonOf(git)
+      ..remove('unresolved');
+    final Map<String, Object?> unresolvedBesideExample = jsonOf(unresolvedStamp)
+      ..['packages'] = jsonOf(hostedStamp)['packages'];
+    final Map<String, Object?> unresolvedBadName = jsonOf(unresolvedStamp)
+      ..['unresolved'] = {'dependency': 'my-annotation', 'path': '../../x'};
+    final Map<String, Object?> unresolvedExtra = jsonOf(unresolvedStamp)
+      ..['unresolved'] = {
+        'dependency': 'freezed_annotation',
+        'path': '../../x',
+        'depth': 1,
+      };
+    final Map<String, Object?> unresolvedPathless = jsonOf(unresolvedStamp)
+      ..['unresolved'] = {'dependency': 'freezed_annotation'};
+    final Map<String, Object?> unresolvedText = jsonOf(unresolvedStamp)
+      ..['unresolved'] = 'freezed_annotation';
     for (final String text in [
       '',
+      jsonEncode(unresolvedLeftOut),
+      jsonEncode(unresolvedBesideExample),
+      jsonEncode(unresolvedBadName),
+      jsonEncode(unresolvedExtra),
+      jsonEncode(unresolvedPathless),
+      jsonEncode(unresolvedText),
       'not json',
       '[]',
       jsonEncode(rootless),

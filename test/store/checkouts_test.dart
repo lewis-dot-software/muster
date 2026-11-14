@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:muster/src/model/codebase.dart';
+import 'package:muster/src/model/example.dart';
 import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/commit.dart';
@@ -154,8 +155,9 @@ void main() {
       },
     );
 
-    test('an example with a pubspec of its own is resolved beside the root, '
-        'and an example/ with none is not', () async {
+    test('an example with a pubspec of its own is resolved beside the root '
+        'and handed out resolved, and an example/ with none is not, and is '
+        'handed out as none', () async {
       final GitCodebase codebase = codebaseOf(
         origin,
         await onMain({
@@ -163,23 +165,40 @@ void main() {
           ...packageFiles('app_example', at: 'example'),
         }),
       );
-      await checkouts.checkout(Git(codebase), locks);
+      final Checkout resolved = await checkouts.checkout(Git(codebase), locks);
       expect(
         await File(inCheckout('example/.dart_tool/package_config.json'))
             .exists(),
         isTrue,
       );
       expect((await stamp())?.packages.keys, [Package.root, Package.example]);
+      expect(
+        resolved.example,
+        ExampleResolved(
+          packageIn(appCheckout(checkouts), codebase.root, .example),
+        ),
+      );
+      expect(
+        (await checkoutsIn(
+          temp,
+          runner,
+        ).checkout(Git(codebase), locks)).example,
+        resolved.example,
+      );
       final Commit bare = await onMain({
         ...packageFiles('app'),
         'example/main.dart': 'void main() {}\n',
       });
-      await checkouts.checkout(Git(codebaseOf(origin, bare)), locks);
+      final Checkout none = await checkouts.checkout(
+        Git(codebaseOf(origin, bare)),
+        locks,
+      );
       expect(
         await Directory(inCheckout('example/.dart_tool')).exists(),
         isFalse,
       );
       expect((await stamp())?.packages.keys, [Package.root]);
+      expect(none.example, const NoExample());
     });
 
     test('a package whose commit holds no lock resolves on its kept lock, '

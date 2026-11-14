@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:muster/src/model/around_pubspec.dart';
 import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/codebase.dart';
+import 'package:muster/src/model/example.dart';
 import 'package:muster/src/model/executable.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
@@ -48,12 +49,13 @@ void main() {
       readSdkVersion(toolchain, (await runner.run(toolchain.version)).stdout)!;
 
   test('a hosted checkout comes back unpacked at its version, resolved, '
-      'handed out at its package, with the SDK that resolved it, and stamped '
-      'with the codebase', () async {
+      'handed out at its package, with no example where it serves none and '
+      'the SDK that resolved it, and stamped with the codebase', () async {
     serveLeaf(server, 'a', '1.2.3');
     final HostedCodebase codebase = hostedOf('a', version: '1.2.3');
     final Checkout checkout = await lockedCheckout(checkouts, locks, codebase);
     expect(checkout.package.path, '${appCheckout(checkouts).path}/a-1.2.3');
+    expect(checkout.example, const NoExample());
     expect(checkout.sdk, await versionOf(.dart));
     expect(await File(checkout.package.packageConfig.path).exists(), isTrue);
     expect(

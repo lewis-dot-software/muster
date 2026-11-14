@@ -51,6 +51,7 @@ enum OutcomeCase {
   }) => switch (this) {
     .fetched => Fetched(
       packageIn(.of(_root, codebase.name), codebase.root, .root),
+      const NoExample(),
       .parse('3.13.0')!,
     ),
     .unlocked => Unlocked(keptLockOf(_locks, Git(codebase), package)),

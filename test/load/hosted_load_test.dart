@@ -74,6 +74,44 @@ void main() {
     );
   });
 
+  test("each `Fetched` carries its checkout's example: none for a git "
+      'codebase that holds none, resolved for a hosted one that resolves, and '
+      'left unresolved, naming the path dependency, for one that path-depends '
+      'outside its package', () async {
+    server.serve('out', '1.0.0', {
+      'pubspec.yaml': hostedPubspec('out', '1.0.0'),
+      'example/pubspec.yaml':
+          '${examplePubspec('out')}  sibling:\n    path: ../../sibling\n',
+    });
+    final HostedCodebase out = hostedOf('out', name: 'out');
+    await writeFile(
+      atRoot(temp),
+      renderManifest([entryOf(app), hostedEntryOf(lib), hostedEntryOf(out)]),
+    );
+    await loaderIn(temp, runner).lock();
+    Matcher example(Object? matcher) =>
+        isA<Fetched>().having((Fetched f) => f.example, 'example', matcher);
+    expect(
+      await loaderIn(temp, runner).load(),
+      loadedWith({
+        'app': example(const NoExample()),
+        'lib': example(
+          isA<ExampleResolved>().having(
+            (ExampleResolved e) => e.package.path,
+            'package',
+            '${checkoutAt(temp, 'lib')}/a-1.0.0/example',
+          ),
+        ),
+        'out': example(
+          ExampleUnresolved((
+            dependency: .parse('sibling')!,
+            path: '../../sibling',
+          )),
+        ),
+      }),
+    );
+  });
+
   test('a hosted codebase with no kept lock loads as Unlocked, beside a git '
       'codebase that fetches', () async {
     expect(

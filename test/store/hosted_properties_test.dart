@@ -5,6 +5,7 @@ import 'package:glados/glados.dart';
 import 'package:muster/src/model/around_pubspec.dart';
 import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/checkout_path.dart';
+import 'package:muster/src/model/example.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
@@ -45,6 +46,34 @@ const List<String> _pool = [
   'example/pubspec.lock',
   'example/pubspec_overrides.yaml',
 ];
+
+/// A path dependency an example may take beside its package: its [name],
+/// its [path] and whether that path leaves the package.
+typedef _Dependency = ({String name, String path, bool outside});
+
+/// The path dependencies a property draws for an example: one inside the
+/// package that it serves, one above it and one absolute, neither served.
+const List<_Dependency> _extraDependencies = [
+  (name: 'b', path: '../packages/b', outside: false),
+  (name: 'c', path: '../../c', outside: true),
+  (name: 'd', path: '/d', outside: true),
+];
+
+/// Each way an example whose every path stays inside its package fails to
+/// resolve.
+enum _Unresolvable {
+  /// A dependency no host serves.
+  unserved,
+
+  /// A dependency served at no version its constraint takes.
+  unsatisfied,
+
+  /// A path inside the package that it does not serve.
+  missingInside,
+
+  /// A pubspec that is no YAML.
+  notYaml,
+}
 
 /// What stood in a checkout before it was made afresh.
 enum _Before {
@@ -361,7 +390,7 @@ void main() {
               if (pubspecOverrides(
                     codebase,
                     package,
-                    member: shape.workspace,
+                    published: (member: shape.workspace, overrides: false),
                     holding: _servesOverrides(shape, package),
                   )
                   case final String overrides)
@@ -455,6 +484,221 @@ void main() {
       }
     },
   );
+
+  Glados(
+    any.set(any.choose(['r', 'd', 'o'])).shrinkingAtMost(gitTries),
+    .new(numRuns: 3),
+  ).test('A hosted package resolved `alone` resolves with none of the '
+      '`dependency_overrides` its pubspec publishes.', (
+    Set<String> overridden,
+  ) async {
+    // Every membership, so none is left to the draws.
+    for (final bool workspace in [false, true]) {
+      await _onBench((_Bench bench) async {
+        // `r` a dependency, `d` a dev dependency and `o` neither, each
+        // drawn overridden to a path the package does not ship, which only
+        // a resolve without the overrides passes by.
+        bench.server.serve('a', '1.0.0', {
+          'pubspec.yaml': hostedPubspec(
+            'a',
+            '1.0.0',
+            workspace: workspace,
+            dependencies: {'r': '^1.0.0'},
+            devDependencies: {'d': '^1.0.0'},
+            dependencyOverrides: {
+              for (final String d in overridden) d: '../unshipped_$d',
+            },
+          ),
+        });
+        for (final String leaf in ['r', 'd', 'o']) {
+          serveLeaf(bench.server, leaf, '1.0.0');
+        }
+        final HostedCodebase codebase = hostedOf('a');
+        await bench.lockedCheckout(codebase);
+        final PackagePath root = hostedPackage(bench.checkout, codebase, .root);
+        expect(await configuredIn(root), {'a', 'r', 'd'});
+        expect(
+          await File(root.lock.path).readAsString(),
+          isNot(contains('source: path')),
+        );
+      });
+    }
+  });
+
+  Glados(
+    any
+        .combine3(
+          any.list(any.choose(_extraDependencies)),
+          any.bool,
+          any.choose(Resolution.values),
+          (List<_Dependency> extra, bool selfOutside, Resolution resolution) =>
+              (
+                extra: extra.toSet().toList(),
+                selfOutside: selfOutside,
+                resolution: resolution,
+              ),
+        )
+        .shrinkingAtMost(gitTries),
+    .new(numRuns: 2),
+  ).test(
+    "A hosted package's example is left unresolved exactly when its pubspec "
+    'path-depends outside the package on a package muster does not override '
+    "to the package's own path, and `Fetched` says which.",
+    (
+      ({List<_Dependency> extra, bool selfOutside, Resolution resolution})
+      drawn,
+    ) async {
+      // Rows where each kind of dependency set, each value of the package's
+      // own path and each membership meets every other in one at least, the
+      // draw's own beside them, so none is left to the draws: an example
+      // with no path but the package's, one inside, the package's own path
+      // above it, and one outside, first or after one inside, and an
+      // overrides file served empty of YAML, which pub reads as none, so the
+      // package's own path and its membership are left out beside it.
+      for (final (
+            List<_Dependency> extra,
+            bool selfOutside,
+            bool workspace,
+            String? served,
+          )
+          in [
+            (const <_Dependency>[], false, false, null),
+            (const <_Dependency>[], true, true, null),
+            ([_extraDependencies[0]], false, true, null),
+            ([_extraDependencies[0]], true, false, null),
+            (
+              [_extraDependencies[1], _extraDependencies[0]],
+              false,
+              false,
+              null,
+            ),
+            ([_extraDependencies[0], _extraDependencies[2]], true, true, null),
+            ([_extraDependencies[1]], false, false, ''),
+            ([_extraDependencies[0]], false, false, '# served\n'),
+            (drawn.extra, drawn.selfOutside, false, null),
+          ]) {
+        await _onBench((_Bench bench) async {
+          bench.server.serve('a', '1.0.0', {
+            'pubspec.yaml': hostedPubspec('a', '1.0.0', workspace: workspace),
+            'packages/b/pubspec.yaml': pubspecOf('b'),
+            'example/pubspec.yaml': [
+              'name: a_example',
+              'environment:',
+              '  sdk: ^3.${workspace ? 6 : 0}.0',
+              if (workspace) 'resolution: workspace',
+              'dependencies:',
+              '  a:',
+              '    path: ${selfOutside ? '../../a' : '..'}',
+              for (final _Dependency(:name, :path) in extra) ...[
+                '  $name:',
+                '    path: $path',
+              ],
+              '',
+            ].join('\n'),
+            'example/pubspec_overrides.yaml': ?served,
+          });
+          final HostedCodebase codebase = hostedOf(
+            'a',
+            resolution: drawn.resolution,
+          );
+          final _Dependency? first = extra
+              .where((_Dependency d) => d.outside)
+              .firstOrNull;
+          final PackagePath example = hostedPackage(
+            bench.checkout,
+            codebase,
+            .example,
+          );
+          expect(await bench.checkouts.lock(Hosted(codebase), bench.locks), [
+            keptLockOf(bench.locks, Hosted(codebase), .root),
+            if (first == null)
+              keptLockOf(bench.locks, Hosted(codebase), .example),
+          ]);
+          final Checkout checkout = await bench.checkouts.checkout(
+            Hosted(codebase),
+            bench.locks,
+          );
+          expect(checkout.example, switch (first) {
+            _Dependency(:final name, :final path) => ExampleUnresolved((
+              dependency: .parse(name)!,
+              path: path,
+            )),
+            null => ExampleResolved(example),
+          });
+          expect(
+            await File(
+              hostedPackage(bench.checkout, codebase, .root).packageConfig.path,
+            ).exists(),
+            isTrue,
+          );
+          expect(
+            await File(example.packageConfig.path).exists(),
+            first == null,
+          );
+          expect(
+            await File(example.overrides.path).exists(),
+            first == null || served != null,
+          );
+          expect(
+            (await bench.fresh.checkout(Hosted(codebase), bench.locks)).example,
+            checkout.example,
+          );
+        });
+      }
+    },
+  );
+
+  Glados(
+    any.choose(_Unresolvable.values).shrinkingAtMost(gitTries),
+    .new(numRuns: 4),
+  ).test('An example that fails to resolve for any other reason is its '
+      "codebase's failure, never `Fetched`.", (
+    _Unresolvable unresolvable,
+  ) async {
+    // Every resolution, so none is left to the draws.
+    for (final Resolution resolution in Resolution.values) {
+      await _onBench((_Bench bench) async {
+        serveLeaf(bench.server, 'b', '1.0.0');
+        bench.server.serve('a', '1.0.0', {
+          'pubspec.yaml': hostedPubspec('a', '1.0.0'),
+          'example/pubspec.yaml': switch (unresolvable) {
+            .unserved => '${examplePubspec('a')}  unserved: ^1.0.0\n',
+            .unsatisfied => '${examplePubspec('a')}  b: ^9.0.0\n',
+            .missingInside =>
+              '${examplePubspec('a')}  c:\n    path: ../missing\n',
+            .notYaml => 'name: [a_example\n',
+          },
+        });
+        final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+        await expectLater(
+          bench.checkouts.lock(Hosted(codebase), bench.locks),
+          throwsA(
+            isA<StoreFault>().having(
+              (StoreFault f) => f.failure,
+              'failure',
+              isA<CommandFailed>(),
+            ),
+          ),
+        );
+        // A lock of its own for the example, so its checkout reaches the
+        // resolve, which holds it to a lock that does not fit.
+        await writeFile(
+          keptLockOf(bench.locks, Hosted(codebase), .example).path,
+          lockText,
+        );
+        await expectLater(
+          bench.checkouts.checkout(Hosted(codebase), bench.locks),
+          throwsA(
+            isA<StoreFault>().having(
+              (StoreFault f) => f.failure,
+              'failure',
+              isA<CommandFailed>(),
+            ),
+          ),
+        );
+      });
+    }
+  });
 
   Glados(
     any.intInRange(1, 4).shrinkingAtMost(gitTries),

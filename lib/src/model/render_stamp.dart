@@ -4,11 +4,13 @@ import 'codebase.dart';
 import 'git_codebase.dart';
 import 'hosted_codebase.dart';
 import 'package.dart';
+import 'package_name.dart';
 import 'stamp.dart';
 import 'stamped_package.dart';
 
 /// The text of [stamp], a JSON object of its values, its codebase's as its
-/// kind writes them and its packages in [Package]'s order.
+/// kind writes them, its packages in [Package]'s order and its unresolved
+/// example's path dependency, null where there is none.
 String renderStamp(Stamp stamp) {
   final Map<String, Object?> codebase = switch (stamp.codebase) {
     Git(codebase: final GitCodebase git) => {
@@ -35,7 +37,17 @@ String renderStamp(Stamp stamp) {
           'packageConfig': stamped.packageConfig.hex,
         },
   };
-  final String json = const JsonEncoder.withIndent('  ')
-      .convert({...codebase, 'sdk': stamp.sdk.version, 'packages': packages});
+  final String json = const JsonEncoder.withIndent('  ').convert({
+    ...codebase,
+    'sdk': stamp.sdk.version,
+    'packages': packages,
+    'unresolved': switch (stamp.unresolved) {
+      (:final PackageName dependency, :final String path) => {
+        'dependency': dependency.name,
+        'path': path,
+      },
+      null => null,
+    },
+  });
   return '$json\n';
 }

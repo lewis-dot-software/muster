@@ -10,6 +10,7 @@ import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/lock_removal.dart';
+import 'package:muster/src/model/package_path.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -293,6 +294,51 @@ void main() {
   });
 
   group('the command line', () {
+    test("prints a `Fetched` row's detail as the package's path, and the "
+        'path dependency that left its example unresolved after it, its path '
+        'quoted, exiting 0', () async {
+      final PackagePath package = packageIn(
+        .of(.new('/consumer', .posix), .parse('app')!),
+        .parse('.')!,
+        .root,
+      );
+      final Map<CodebaseName, FetchOutcome> outcomes = {
+        .parse('none')!: Fetched(package, const NoExample(), .parse('3.13.0')!),
+        .parse('resolved')!: Fetched(
+          package,
+          ExampleResolved(
+            packageIn(
+              .of(.new('/consumer', .posix), .parse('app')!),
+              .parse('.')!,
+              .example,
+            ),
+          ),
+          .parse('3.13.0')!,
+        ),
+        .parse('unresolved')!: Fetched(
+          package,
+          ExampleUnresolved((
+            dependency: .parse('freezed_annotation')!,
+            path: '../../freezed\tannotation\n',
+          )),
+          .parse('3.13.0')!,
+        ),
+      };
+      final _Run run = await _run(FixedLoads.loading(outcomes), ['fetch']);
+      expect(run.code, ExitCode.done);
+      expect(run.err, isEmpty);
+      expect(_rows(run.out), [
+        ['none', 'Fetched', '/consumer/.dart_tool/muster/app'],
+        ['resolved', 'Fetched', '/consumer/.dart_tool/muster/app'],
+        [
+          'unresolved',
+          'Fetched',
+          '/consumer/.dart_tool/muster/app (example unresolved: '
+              'freezed_annotation at "../../freezed\\tannotation\\n")',
+        ],
+      ]);
+    });
+
     test('passes the manifests named on to the run, and none where none '
         'is', () async {
       final FixedLoads loads = .new();
