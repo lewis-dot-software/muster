@@ -61,6 +61,50 @@ void main() {
     }
   });
 
+  // A consumer's kept locks are named by these keys, so a change that moves
+  // one finds none of them and answers each load `Unlocked`. Each digest is
+  // the SHA-256 of a JSON list written by hand, not by the code under test.
+  test('a git codebase keeps the key its locks are named by since v0.1.0', () {
+    for (final (Codebase git, String hex) in [
+      (
+        _git('app', 'https://example.com/app.git', hash, '.', .dart),
+        'bd29bbb6b8915a90bd2fcc2cdf2a5d90f81117eec31e27db3492049a7def173f',
+      ),
+      (
+        _git(
+          'app',
+          'git@example.com:org/app.git',
+          '0123456789abcdef' * 4,
+          'packages/app',
+          .flutter,
+        ),
+        '9ec7eb69d89c83d97701680f9bfc9b7972c22be9eb89bfc3566979ea21123758',
+      ),
+      (
+        // A `\` the JSON escapes, and a letter past ASCII it does not.
+        _git('app', r'C:\srv\app.git', 'cd' * 20, 'pakete/café', .dart),
+        '7b5dd454d9d05044ca25599edd0503c2307f8f277a0f2a4e9387e95818eca4cc',
+      ),
+    ]) {
+      expect(LockKey.of(git).hex, hex);
+    }
+  });
+
+  test('a hosted codebase keeps the key its locks are named by', () {
+    for (final (Codebase package, String hex) in [
+      (
+        Hosted(hosted('app', 'args', '2.7.0', .alone, .dart)),
+        '34ffe6696846bc8b79160c4df71ff6d674ac234bb5b28dc30f9a2875e6469db3',
+      ),
+      (
+        Hosted(hosted('app', 'dio', '5.4.3+1', .asDependency, .flutter)),
+        '93fdf185f3cbe90b29035f0f1e4cb4eaf298b2ad8a1f0cb643c6280c925db433',
+      ),
+    ]) {
+      expect(LockKey.of(package).hex, hex);
+    }
+  });
+
   test("each value a hosted codebase's resolve turns on moves its key, and "
       'its name does not', () {
     final LockKey base = LockKey.of(
