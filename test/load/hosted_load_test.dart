@@ -1,11 +1,14 @@
 import 'dart:io';
 
 import 'package:muster/muster.dart';
+import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/package_path.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/git.dart';
@@ -107,6 +110,31 @@ void main() {
             dependency: .parse('sibling')!,
             path: '../../sibling',
           )),
+        ),
+      }),
+    );
+  });
+
+  test('a hosted package published with a file named `example` has no '
+      'example, and locks and loads as one holding none', () async {
+    serveLeaf(server, 'e', '1.0.0', files: {'example': 'a file\n'});
+    final HostedCodebase plain = hostedOf('e', name: 'plain');
+    await writeFile(atRoot(temp), renderManifest([hostedEntryOf(plain)]));
+    expect(
+      await loaderIn(temp, runner).lock(),
+      lockedWith({
+        'plain': wrote([
+          keptLockOf(locksBeside(atRoot(temp)), Hosted(plain), .root),
+        ]),
+      }),
+    );
+    expect(
+      await loaderIn(temp, runner).load(),
+      loadedWith({
+        'plain': isA<Fetched>().having(
+          (Fetched f) => f.example,
+          'example',
+          const NoExample(),
         ),
       }),
     );
@@ -215,4 +243,97 @@ void main() {
       expect(await loaderIn(temp, runner).load(), fetched());
     });
   });
+
+  for (final _InTheWay inTheWay in _InTheWay.values) {
+    group('a file standing where ${inTheWay.label} would stand meets one '
+        'answer from a load and from `muster lock`, of a git and a hosted '
+        'codebase alike,', () {
+      setUp(() async {
+        await writeFile(
+          atRoot(temp),
+          renderManifest([entryOf(app), entryOf(bare), hostedEntryOf(lib)]),
+        );
+        await loaderIn(temp, runner).lock();
+        // Each checkout made, so the file stands inside one.
+        await loaderIn(temp, runner).load();
+      });
+
+      /// Stands a file where [inTheWay] would stand in each checkout, in
+      /// place of anything there.
+      Future<void> fileInEach() async {
+        for (final (String name, Codebase codebase) in [
+          ('app', Git(app)),
+          ('bare', Git(bare)),
+          ('lib', Hosted(lib)),
+        ]) {
+          final String path = inTheWay.inCheckout(
+            .of(consumerIn(temp), .parse(name)!),
+            codebase,
+          );
+          final Directory standing = .new(path);
+          if (await standing.exists()) {
+            await standing.delete(recursive: true);
+          }
+          await writeFile(path, 'a file\n');
+        }
+      }
+
+      /// Matches a load that fetched every codebase.
+      Matcher fetched() => loadedWith({
+        'app': fetchedAt(checkoutAt(temp, 'app')),
+        'bare': fetchedAt(checkoutAt(temp, 'bare')),
+        'lib': fetchedAt('${checkoutAt(temp, 'lib')}/a-1.0.0'),
+      });
+
+      test('by `muster lock`, where a lock is lacking', () async {
+        for (final KeptLockPath kept in [
+          keptLockOf(locksBeside(atRoot(temp)), Git(bare), .root),
+          keptOfLib(),
+          keptOfLib(.example),
+        ]) {
+          await File(kept.path).delete();
+        }
+        await fileInEach();
+        expect(
+          await loaderIn(temp, runner).lock(),
+          lockedWith({
+            'app': wrote(const []),
+            'bare': wrote([
+              keptLockOf(locksBeside(atRoot(temp)), Git(bare), .root),
+            ]),
+            'lib': wrote([keptOfLib(), keptOfLib(.example)]),
+          }),
+        );
+        expect(await loaderIn(temp, runner).load(), fetched());
+      });
+
+      test('by a load', () async {
+        await fileInEach();
+        expect(await loaderIn(temp, runner).load(), fetched());
+      });
+    });
+  }
+}
+
+/// A directory a checkout's package holds, or would, where a test stands a
+/// file in its place.
+enum _InTheWay {
+  /// The example's package directory.
+  example("a checkout's example package directory"),
+
+  /// The root package's `.dart_tool`, which holds its `package_config.json`.
+  dartTool("a checkout's root package's `.dart_tool`");
+
+  const _InTheWay(this.label);
+
+  /// What the directory is, as a test's name says it.
+  final String label;
+
+  /// The directory's path in [codebase]'s checkout at [checkout].
+  String inCheckout(CheckoutPath checkout, Codebase codebase) => switch (this) {
+    .example => packageInCheckout(checkout, codebase, .example).path,
+    .dartTool => p.dirname(
+      packageInCheckout(checkout, codebase, .root).packageConfig.path,
+    ),
+  };
 }

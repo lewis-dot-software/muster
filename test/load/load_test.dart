@@ -514,4 +514,27 @@ void main() {
       );
     });
   });
+
+  test('a git pin tracking a file named `example` has no example, and loads '
+      'as one holding none, again over its checkout, the file kept as the '
+      "pin's", () async {
+    final GitCodebase app = await codebaseNamed('app', {
+      ...packageFiles('app'),
+      'example': 'a file\n',
+    });
+    await writeManifest(atRoot(temp), [app]);
+    final Matcher fetched = loadedWith({
+      'app': isA<Fetched>().having(
+        (Fetched f) => f.example,
+        'example',
+        const NoExample(),
+      ),
+    });
+    expect(await load(), fetched);
+    expect(await load(), fetched);
+    expect(
+      await File(p.join(checkoutOf('app'), 'example')).readAsString(),
+      'a file\n',
+    );
+  });
 }

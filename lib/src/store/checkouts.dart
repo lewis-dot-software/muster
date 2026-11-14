@@ -427,7 +427,7 @@ class Checkouts {
         .root => unpackedPackage(at, codebase).pubspec,
         .example => hostedPackage(at, codebase, package).pubspec,
       };
-      final String? text = await _textIfThere(pubspec.path);
+      final String? text = await _textIfThere(at, pubspec.path);
       if (!hostedResolves(package, held: text != null)) {
         continue;
       }
@@ -436,7 +436,7 @@ class Checkouts {
         codebase,
         package,
       ).overrides;
-      final String? served = await _textIfThere(path.path);
+      final String? served = await _textIfThere(at, path.path);
       if ((package, text) case (.example, final String example)) {
         unresolved = examplePathOutside(
           example,
@@ -468,18 +468,20 @@ class Checkouts {
     );
   }
 
-  /// The text of the file at [path], or null where nothing is there.
-  Future<String?> _textIfThere(String path) async =>
-      switch (await bytesIfThere(path)) {
+  /// The text of the file at [path] in the checkout at [at], or null where
+  /// [_bytesInDirectory] finds none.
+  Future<String?> _textIfThere(CheckoutPath at, String path) async =>
+      switch (await _bytesInDirectory(at, path)) {
         final List<int> bytes => utf8.decode(bytes, allowMalformed: true),
         null => null,
       };
 
   /// The survey of [codebase]'s checkout at [at], its kept locks in [locks].
-  /// Its packages are read only where a directory stands at [at], so
-  /// anything else there, a file among them, reads as no checkout. Git reads
-  /// a git checkout only where a stamp is there to weigh it against, and
-  /// never a hosted one.
+  /// Each file of its packages is read only where a directory stands at the
+  /// file's directory, so anything else there, a file among them, reads as
+  /// none of it, and anything else at [at] as no checkout. Git reads a git
+  /// checkout only where a stamp is there to weigh it against, and never a
+  /// hosted one.
   Future<Survey> _survey(
     Codebase codebase,
     LocksDirectory locks,
@@ -501,9 +503,9 @@ class Checkouts {
     for (final Package package in Package.values) {
       final PackagePath path = packageInCheckout(at, codebase, package);
       packages[package] = (
-        lock: there ? await _hash(path.lock.path) : null,
+        lock: await _hashInDirectory(at, path.lock.path),
         keptLock: await _hash(keptLockOf(locks, codebase, package).path),
-        packageConfig: there ? await _hash(path.packageConfig.path) : null,
+        packageConfig: await _hashInDirectory(at, path.packageConfig.path),
       );
     }
     final PubspecPath handedOut = switch (codebase) {
@@ -640,6 +642,24 @@ class Checkouts {
         final List<int> bytes => .of(bytes),
         null => null,
       };
+
+  /// The hash of the file at [path] in the checkout at [at], or null where
+  /// [_bytesInDirectory] finds none.
+  Future<ContentHash?> _hashInDirectory(CheckoutPath at, String path) async =>
+      switch (await _bytesInDirectory(at, path)) {
+        final List<int> bytes => .of(bytes),
+        null => null,
+      };
+
+  /// The bytes of the file at [path] in the checkout at [at], or null where
+  /// nothing is there or no directory stands at the file's directory, a file
+  /// in its place among them.
+  Future<List<int>?> _bytesInDirectory(CheckoutPath at, String path) async {
+    final String directory = at.os.paths.dirname(path);
+    return await fileAct(directory, Directory(directory).exists)
+        ? bytesIfThere(path)
+        : null;
+  }
 
   /// Whether a directory stands at [at].
   Future<bool> _there(CheckoutPath at) =>
