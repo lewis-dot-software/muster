@@ -54,8 +54,23 @@ enum _CommitFault { cut, capital, stray, long }
 /// How a root is made into one that leaves its repo.
 enum _RootFault { climb, climbBack, absolute, drive, backslash }
 
-/// How a pub package name is made into a name that is none.
+/// How a codebase name is made into a name that is none.
 enum _NameFault { lead, inner, empty }
+
+/// How a pub package's name is made into one pub refuses: a word pub
+/// reserves, a digit before it, a character no name holds inside it, a `.`
+/// before or after it, two `.` inside it, a digit opening a part after a
+/// `.`, or the empty name.
+enum _PackageFault {
+  reserved,
+  lead,
+  inner,
+  dotLead,
+  dotTrail,
+  dots,
+  partLead,
+  empty,
+}
 
 /// A spelling of a root other than its normal one, or its normal one.
 enum _Spelling { normal, dotSlash, doubleSlash, detour }
@@ -136,14 +151,38 @@ final Generator<String> _badRoot = any.combine3(
   },
 );
 
-/// A codebase name that is no pub package name.
+/// A codebase name that is none.
 final Generator<String> _badName = any.combine3(
-  any.packageName,
+  any.codebaseName,
   any.choose(_NameFault.values),
   any.choose(['-', '.', 'A', 'Z', ' ', 'é']),
   (String name, _NameFault fault, String char) => switch (fault) {
     .lead => '${'09_'[char.codeUnitAt(0) % 3]}$name',
     .inner => '${name[0]}$char${name.substring(1)}',
+    .empty => '',
+  },
+);
+
+/// A pub package's name that pub refuses, each fault of [_PackageFault]'s,
+/// a reserved word in its own case, in capitals or capitalised.
+final Generator<String> _badPackage = any.combine4(
+  any.packageName,
+  any.choose(_PackageFault.values),
+  any.choose(pubReserved.toList()),
+  any.intInRange(0, 1 << 16),
+  (String name, _PackageFault fault, String word, int at) => switch (fault) {
+    .reserved => switch (at % 3) {
+      0 => word,
+      1 => word.toUpperCase(),
+      _ => '${word[0].toUpperCase()}${word.substring(1)}',
+    },
+    .lead => '${at % 10}$name',
+    .inner =>
+      '${name[0]}${['-', ' ', 'é', '@', '/', '+'][at % 6]}${name.substring(1)}',
+    .dotLead => '.$name',
+    .dotTrail => '$name.',
+    .dots => '$name..$name',
+    .partLead => '$name.${at % 10}$name',
     .empty => '',
   },
 );
@@ -294,7 +333,7 @@ void main() {
   ).test("A value its key cannot take refuses the load, naming that key's "
       "path: a commit that is not a full hash, a toolchain that is not `dart` "
       "or `flutter`, a `root` that leaves its repo, or a codebase name that is "
-      "not a pub package name, `[a-z][a-z0-9_]*`.", (input) {
+      "not `[a-z][a-z0-9_]*`.", (input) {
     final (List<GitCodebase> codebases, int where, (_Bad bad, String text)) =
         input;
     final List<Entry> entries = codebases.map(entryOf).toList();
@@ -307,7 +346,7 @@ void main() {
         entries[target] = (text, fields);
         expect(
           parseManifest(renderManifest(entries)),
-          badValue(['codebases', text], .packageName),
+          badValue(['codebases', text], .codebaseName),
         );
         return;
       case .commit:
@@ -342,7 +381,7 @@ void main() {
             .choose(_HostedBad.values)
             .bind(
               (_HostedBad bad) => switch (bad) {
-                .package => _badName,
+                .package => _badPackage,
                 .version => _badVersion,
               }.map((String text) => (bad, text)),
             ),

@@ -225,6 +225,46 @@ codebases:
     }
   });
 
+  for (final String package in [
+    '_fe_analyzer_shared',
+    '_discoveryapis_commons',
+    'Args',
+    'async',
+    'a.b_c',
+    'class.x',
+  ]) {
+    test('a hosted package named "$package"', () {
+      expect(
+        parseManifest(_one(_hostedFields(change: {'hosted': package}))),
+        isA<ManifestParsed>().having(
+          (p) => p.manifest.codebases.single,
+          'codebase',
+          Hosted(hosted('app', package, '2.7.0', .alone, .dart)),
+        ),
+      );
+    });
+  }
+
+  test('every word pub lets stand names a hosted package, and every word it '
+      'reserves, in any case, refuses', () {
+    for (final String word in pubLetStand) {
+      expect(
+        parseManifest(_one(_hostedFields(change: {'hosted': word}))),
+        isA<ManifestParsed>(),
+        reason: word,
+      );
+    }
+    for (final String word in pubReserved) {
+      for (final String spelt in [word, word.toUpperCase()]) {
+        expect(
+          parseManifest(_one(_hostedFields(change: {'hosted': spelt}))),
+          badValue(['codebases', 'app', 'hosted'], .packageName),
+          reason: spelt,
+        );
+      }
+    }
+  });
+
   test('a resolution left out is alone', () {
     expect(
       parseManifest(_one(_hostedFields(drop: {'resolution'}))),
@@ -289,8 +329,16 @@ codebases:
     }
 
     for (final (String key, String value, Wanted wanted) in [
-      ('hosted', 'Args', .packageName),
       ('hosted', 'my-args', .packageName),
+      ('hosted', '9args', .packageName),
+      ('hosted', 'class', .packageName),
+      ('hosted', 'Class', .packageName),
+      ('hosted', 'AWAIT', .packageName),
+      ('hosted', '.args', .packageName),
+      ('hosted', 'args.', .packageName),
+      ('hosted', 'a..b', .packageName),
+      ('hosted', 'a.9b', .packageName),
+      ('hosted', '', .packageName),
       ('version', '2.7', .version),
       ('version', '^2.7.0', .version),
       ('version', 'v2.7.0', .version),
@@ -350,7 +398,7 @@ codebases:
       test('a codebase named "$name"', () {
         expect(
           parseManifest(renderManifest([(name, [])])),
-          badValue(['codebases', name], .packageName),
+          badValue(['codebases', name], .codebaseName),
         );
       });
     }

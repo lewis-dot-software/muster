@@ -109,14 +109,124 @@ HostedCodebase hosted(
 
 const String _lowercase = 'abcdefghijklmnopqrstuvwxyz';
 const String _hex = '0123456789abcdef';
+const String _letters = '${_lowercase}ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/// The words pub refuses as a package's name, in any case, as pub's source
+/// lists them.
+const Set<String> pubReserved = {
+  'abstract',
+  'as',
+  'assert',
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'covariant',
+  'default',
+  'deferred',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'external',
+  'false',
+  'final',
+  'finally',
+  'for',
+  'hide',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'inline',
+  'interface',
+  'is',
+  'late',
+  'library',
+  'mixin',
+  'new',
+  'null',
+  'of',
+  'on',
+  'operator',
+  'part',
+  'required',
+  'rethrow',
+  'return',
+  'sealed',
+  'set',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'type',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+};
+
+/// The words Dart reserves that pub takes as a package's name, since a
+/// package on pub.dev already bears each.
+const Set<String> pubLetStand = {
+  'async',
+  'base',
+  'dynamic',
+  'extension',
+  'factory',
+  'get',
+  'show',
+  'static',
+  'sync',
+  'typedef',
+  'when',
+};
 
 /// The generators the manifest's property tests draw from.
 extension ManifestAnys on Any {
-  /// A pub package name.
-  Generator<String> get packageName => combine2(
+  /// A codebase's name.
+  Generator<String> get codebaseName => combine2(
     choose(_lowercase.split('')),
     stringOf('${_lowercase}0123456789_'),
     (String head, String tail) => '$head$tail',
+  );
+
+  /// A pub package's name, as `dart pub get` takes one: a Dart identifier,
+  /// or identifiers joined by `.`, given a `_` where the whole is a word pub
+  /// reserves.
+  Generator<String> get packageName => combine2(
+    _identifier,
+    listWithLengthInRange(0, 3, _identifier),
+    (String head, List<String> tail) {
+      final String name = [head, ...tail].join('.');
+      return pubReserved.contains(name.toLowerCase()) ? '${name}_' : name;
+    },
+  );
+
+  /// A Dart identifier: one drawn letter by letter, one opening on `_` as
+  /// pub.dev's `_fe_analyzer_shared` does, or a word pub lets stand, in its
+  /// own case or capitalised.
+  Generator<String> get _identifier => either(
+    combine2(
+      choose('${_letters}_'.split('')),
+      stringOf('${_letters}0123456789_'),
+      (String head, String tail) => '$head$tail',
+    ),
+    choose([
+      '_fe_analyzer_shared',
+      '_discoveryapis_commons',
+      for (final String word in pubLetStand) ...[
+        word,
+        '${word[0].toUpperCase()}${word.substring(1)}',
+      ],
+    ]),
   );
 
   /// [length] lowercase hexadecimal digits.
@@ -145,7 +255,7 @@ extension ManifestAnys on Any {
     Generator<String>? commits,
     Generator<String>? roots,
   }) => combine5(
-    names ?? packageName,
+    names ?? codebaseName,
     urls ?? gitUrl,
     commits ?? fullHash,
     roots ?? normalRoot,
@@ -198,7 +308,7 @@ extension ManifestAnys on Any {
     Generator<String>? packages,
     Generator<String>? versions,
   }) => combine5(
-    names ?? packageName,
+    names ?? codebaseName,
     packages ?? packageName,
     versions ?? canonicalVersion,
     choose(Resolution.values),

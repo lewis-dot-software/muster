@@ -41,7 +41,7 @@ const String _standing = '# kept before the lock\n$lockText';
 void main() {
   Glados2(
     any.nonEmptyList(_codebase).shrinkingAtMost(gitTries),
-    any.list(any.packageName).shrinkingAtMost(gitTries),
+    any.list(any.codebaseName).shrinkingAtMost(gitTries),
     .new(numRuns: 10),
   ).test(
     '`muster lock` writes a kept lock for each codebase that needs one and '

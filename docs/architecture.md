@@ -69,7 +69,7 @@ A hosted package resolved `alone` takes its dev dependencies among its packages,
 
 The rules the manifest obeys:
 
-- A codebase's key is its name, a pub package name, `[a-z][a-z0-9_]*`, since it names a directory, a stamp and a kept lock. A name twice across the manifests of one load refuses it.
+- A codebase's key is its name, `[a-z][a-z0-9_]*`, since it names a directory, a stamp and a kept lock. A name twice across the manifests of one load refuses it.
 - A key muster does not know refuses the load before any fetch, named by its path from the top, as `codebases.app.depth` is. A key of the other kind's is one it does not know. So does a value its key cannot take, a `root` that leaves its repo among them, a codebase that is neither git nor hosted, and one that is both.
 - A manifest's file name ends `.yaml`. A manifest named that is missing, unreadable or not YAML refuses the load, and so does a load with no manifest at all.
 - `parseManifest` is the one place a manifest's YAML is read, and everything past it takes a `Manifest`. `workspaceMember` reads an unpacked package's pubspec for `resolution: workspace` alone.

@@ -38,6 +38,22 @@ void main() {
     }
   });
 
+  test('a hosted stamp of a package pub takes but no codebase name fits is '
+      'read back', () {
+    for (final String package in ['_fe_analyzer_shared', 'Dio', 'a.b']) {
+      final Stamp stamp = stampOf(
+        Hosted(hosted('dio', package, '5.9.0', .alone, .dart)),
+        {.root: (source: .kept, lock: hash, packageConfig: hash)},
+        .parse('3.13.7')!,
+      );
+      expect(
+        parseStamp(jsonEncode(jsonOf(stamp))),
+        sameStamp(stamp),
+        reason: package,
+      );
+    }
+  });
+
   test('a hosted stamp names its package, version and resolution', () {
     expect(jsonOf(hostedStamp), {
       'name': 'dio',
@@ -87,7 +103,9 @@ void main() {
     final Map<String, Object?> badResolution = jsonOf(hostedStamp)
       ..['resolution'] = 'asDependency';
     final Map<String, Object?> badPackage = jsonOf(hostedStamp)
-      ..['hosted'] = 'Dio';
+      ..['hosted'] = 'my-dio';
+    final Map<String, Object?> reservedPackage = jsonOf(hostedStamp)
+      ..['hosted'] = 'class';
     for (final String text in [
       '',
       'not json',
@@ -104,6 +122,7 @@ void main() {
       jsonEncode(badVersion),
       jsonEncode(badResolution),
       jsonEncode(badPackage),
+      jsonEncode(reservedPackage),
     ]) {
       expect(parseStamp(text), isNull, reason: text);
     }

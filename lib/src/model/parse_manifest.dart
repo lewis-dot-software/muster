@@ -114,7 +114,7 @@ Codebase _codebase(YamlNode key, YamlNode value, KeyPath codebases) {
         final String text => .parse(text),
         null => null,
       } ??
-      (throw _Refusal(BadValue(at, .packageName, _written(key))));
+      (throw _Refusal(BadValue(at, .codebaseName, _written(key))));
   final _Fields fields = (map: _mapping(value, at), at: at);
   return switch (_kind(fields)) {
     .git => Git((

@@ -65,6 +65,8 @@ String _writtenText(Written written) => switch (written) {
 
 String _wantedText(Wanted wanted) => switch (wanted) {
   .mapping => 'a mapping',
+  .codebaseName =>
+    'a name of lowercase letters, digits and underscores, opening on a letter',
   .packageName => 'a pub package name',
   .gitUrl => 'a git URL',
   .fullHash => "a commit's full hash",

@@ -121,6 +121,17 @@ void main() {
         'codebases:\n  app:\n    toolchain: dart\n',
         'codebases.app: neither git nor hosted',
       ),
+      'a codebase name pub takes but muster does not': (
+        'codebases:\n  _app:\n    hosted: args\n    version: 2.7.0\n'
+            '    toolchain: dart\n',
+        'codebases._app: _app is not a name of lowercase letters, digits and '
+            'underscores, opening on a letter',
+      ),
+      'a package name pub refuses': (
+        'codebases:\n  app:\n    hosted: class\n    version: 2.7.0\n'
+            '    toolchain: dart\n',
+        'codebases.app.hosted: class is not a pub package name',
+      ),
       'a version pub cannot read': (
         'codebases:\n  app:\n    hosted: args\n    version: ^2.7.0\n'
             '    toolchain: dart\n',

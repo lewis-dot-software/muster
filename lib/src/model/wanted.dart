@@ -3,8 +3,10 @@ enum Wanted {
   /// A mapping of keys to values.
   mapping,
 
-  /// A pub package name, `[a-z][a-z0-9_]*`, as a codebase's name and a
-  /// hosted package's are.
+  /// A codebase's name, `[a-z][a-z0-9_]*`.
+  codebaseName,
+
+  /// A pub package's name, as `dart pub get` takes one.
   packageName,
 
   /// A git URL, neither empty nor opening on `-`.
