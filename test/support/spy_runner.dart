@@ -14,9 +14,12 @@ class SpyRunner extends Runner {
 
   /// Each command given so far, by its executable and its arguments.
   List<String> get given => [
-    for (final Command command in commands)
-      '${command.executable.name} ${command.arguments.join(' ')}',
+    for (final Command command in commands) givenOf(command),
   ];
+
+  /// [command] by its executable and its arguments, as [given] lists it.
+  static String givenOf(Command command) =>
+      '${command.executable.name} ${command.arguments.join(' ')}';
 
   /// What a command left in place of its run, or null where it runs.
   Ran? Function(Command command) answer = (Command command) => null;
