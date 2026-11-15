@@ -4,10 +4,14 @@ import 'package:glados/glados.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/load/locking.dart';
+import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
+import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';
+import 'package:muster/src/model/parse_stamp.dart';
+import 'package:muster/src/model/stamp.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:muster/src/store/store_fault.dart';
@@ -138,6 +142,18 @@ enum _ManifestFault { missing, unreadable, notYaml }
 
 /// A codebase's kind, as its manifest names it.
 enum _Kind { git, hosted }
+
+/// How a codebase a load hands out resolves.
+enum _Handout {
+  /// A git codebase, resolved at its root.
+  git,
+
+  /// A hosted package resolved `alone`.
+  alone,
+
+  /// A hosted package resolved `as-dependency`.
+  asDependency,
+}
 
 /// A fault that refuses a load.
 enum _Refusal {
@@ -515,6 +531,71 @@ void main() {
         // Every hosted codebase loads on a kept lock, which a lock writes.
         await bench.lock(pub);
         expect(await bench.load(pub), loadedWith(expected));
+      } finally {
+        await server.close();
+      }
+    }),
+  );
+
+  Glados(any.bool.shrinkingAtMost(gitTries), .new(numRuns: 3)).test(
+    'The package config a `Fetched` names is the one its codebase\'s '
+    'resolve wrote, whatever its resolution.',
+    (bool example) => inTemp((Directory temp) async {
+      final _Bench bench = await .make(temp);
+      final PackageServer server = await .start();
+      try {
+        final SpyRunner pub = .new({
+          ...hermetic(temp),
+          ...pubVariables(temp, server),
+        });
+        serveLeaf(server, 'h', '1.0.0', example: example);
+        // Every resolution in one manifest, so none is left to the draws.
+        final List<Entry> entries = [
+          for (final _Handout handout in _Handout.values)
+            switch (handout) {
+              .git => entryOf(
+                await bench.codebase(
+                  'c${handout.index}',
+                  packageFiles('c${handout.index}'),
+                ),
+              ),
+              .alone => hostedEntryOf(hostedOf('h', name: 'c${handout.index}')),
+              .asDependency => hostedEntryOf(
+                hostedOf(
+                  'h',
+                  name: 'c${handout.index}',
+                  resolution: .asDependency,
+                ),
+              ),
+            },
+        ];
+        await writeFile(atRoot(temp), renderManifest(entries));
+        await bench.lock(pub);
+        final Load load = await bench.load(pub);
+        for (final _Handout handout in _Handout.values) {
+          final CodebaseName name = .parse('c${handout.index}')!;
+          final Stamp stamp = parseStamp(
+            await File(CheckoutPath.of(consumerIn(temp), name).stamp.path)
+                .readAsString(),
+          )!;
+          switch (load) {
+            case Loaded(:final Map<CodebaseName, FetchOutcome> outcomes):
+              switch (outcomes[name]) {
+                case Fetched(:final PackagePath package):
+                  expect(
+                    ContentHash.of(
+                      await File(package.packageConfig.path).readAsBytes(),
+                    ),
+                    stamp.packages[Package.root]!.packageConfig,
+                    reason: handout.name,
+                  );
+                case final FetchOutcome? other:
+                  fail('${handout.name}: $other');
+              }
+            case Refused():
+              fail('$load');
+          }
+        }
       } finally {
         await server.close();
       }

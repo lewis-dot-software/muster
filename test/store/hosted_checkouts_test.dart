@@ -308,28 +308,19 @@ void main() {
     );
   });
 
-  test(
-    'a package resolved as a dependency is handed out itself, the '
-    'package config a tool reads in it found in the package around it',
-    () async {
-      serveLeaf(server, 'a', '1.0.0');
-      final HostedCodebase codebase = hostedOf('a', resolution: .asDependency);
-      final Checkout checkout = await lockedCheckout(
-        checkouts,
-        locks,
-        codebase,
-      );
-      expect(
-        await File(checkout.package.pubspec.path).readAsString(),
-        hostedPubspec('a', '1.0.0'),
-      );
-      expect(await File(checkout.package.packageConfig.path).exists(), isFalse);
-      expect(
-        await configuredIn(
-          hostedPackage(appCheckout(checkouts), codebase, .root),
-        ),
-        {'a', aroundName},
-      );
-    },
-  );
+  test('a package resolved as a dependency is handed out itself, beside the '
+      'package config and lock of the package around it', () async {
+    serveLeaf(server, 'a', '1.0.0');
+    final HostedCodebase codebase = hostedOf('a', resolution: .asDependency);
+    final Checkout checkout = await lockedCheckout(checkouts, locks, codebase);
+    expect(
+      await File(checkout.package.pubspec.path).readAsString(),
+      hostedPubspec('a', '1.0.0'),
+    );
+    expect(await configuredIn(checkout.package), {'a', aroundName});
+    expect(
+      checkout.package.lock.path,
+      '${appCheckout(checkouts).path}/pubspec.lock',
+    );
+  });
 }

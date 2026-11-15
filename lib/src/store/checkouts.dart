@@ -127,7 +127,7 @@ class Checkouts {
         ),
       };
       return (
-        package: packageIn(at, codebase.root, .root),
+        package: handedOut(at, Git(codebase)),
         example: stampedExample(stamp, packageIn(at, codebase.root, .example)),
         sdk: survey.sdk,
       );
@@ -146,7 +146,7 @@ class Checkouts {
         _ => await _makeHosted(codebase, locks, at, survey),
       };
       return (
-        package: unpackedPackage(at, codebase),
+        package: handedOut(at, Hosted(codebase)),
         example: stampedExample(stamp, hostedPackage(at, codebase, .example)),
         sdk: survey.sdk,
       );
@@ -508,23 +508,12 @@ class Checkouts {
         packageConfig: await _hashInDirectory(at, path.packageConfig.path),
       );
     }
-    final PubspecPath handedOut = switch (codebase) {
-      Git(codebase: final GitCodebase git) => packageIn(
-        at,
-        git.root,
-        .root,
-      ).pubspec,
-      Hosted(codebase: final HostedCodebase hosted) => unpackedPackage(
-        at,
-        hosted,
-      ).pubspec,
-    };
+    final PubspecPath pubspec = handedOut(at, codebase).pubspec;
     final Survey survey = (
       sdk: sdk,
       stamp: stamp,
       worktree: worktree,
-      there:
-          there && await fileAct(handedOut.path, File(handedOut.path).exists),
+      there: there && await fileAct(pubspec.path, File(pubspec.path).exists),
       packages: .unmodifiable(packages),
     );
     return survey;

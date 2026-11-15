@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:muster/muster.dart';
@@ -138,6 +139,62 @@ void main() {
         ),
       }),
     );
+  });
+
+  test("a hosted codebase's `Fetched` names the lock and package config its "
+      'resolve wrote, which resolves the package handed out, for `alone` and '
+      '`as-dependency` alike', () async {
+    final HostedCodebase dependency = hostedOf(
+      'a',
+      name: 'dependency',
+      resolution: .asDependency,
+    );
+    await writeFile(
+      atRoot(temp),
+      renderManifest([hostedEntryOf(lib), hostedEntryOf(dependency)]),
+    );
+    await loaderIn(temp, runner).lock();
+    final Load load = await loaderIn(temp, runner).load();
+    for (final HostedCodebase codebase in [lib, dependency]) {
+      switch (load) {
+        case Loaded(:final Map<CodebaseName, FetchOutcome> outcomes):
+          switch (outcomes[codebase.name]) {
+            case Fetched(:final PackagePath package):
+              expect(
+                await File(package.lock.path).readAsString(),
+                await File(
+                  keptLockOf(
+                    locksBeside(atRoot(temp)),
+                    Hosted(codebase),
+                    .root,
+                  ).path,
+                ).readAsString(),
+                reason: codebase.name.name,
+              );
+              final Map<String, Object?> config = jsonDecode(
+                await File(package.packageConfig.path).readAsString(),
+              ) as Map<String, Object?>;
+              expect(
+                [
+                  for (final Object? entry
+                      in config['packages']! as List<Object?>)
+                    if (entry case {'name': 'a', 'rootUri': final String root})
+                      p.normalize(
+                        Uri.file(package.packageConfig.path)
+                            .resolve(root)
+                            .toFilePath(),
+                      ),
+                ],
+                [package.path],
+                reason: codebase.name.name,
+              );
+            case final FetchOutcome? other:
+              fail('${codebase.name.name}: $other');
+          }
+        case Refused():
+          fail('$load');
+      }
+    }
   });
 
   test('a hosted codebase with no kept lock loads as Unlocked, beside a git '

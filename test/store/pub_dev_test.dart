@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/locks_directory.dart';
-import 'package:muster/src/model/package_path.dart';
 import 'package:muster/src/store/checkouts.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:test/test.dart';
@@ -40,9 +39,7 @@ void main() {
     final Checkout checkout = await lockedCheckout(checkouts, locks, dio);
     expect(checkout.package.path, endsWith('/dio-5.9.0'));
     expect(
-      await configuredIn(
-        hostedPackage(.of(checkouts.root, dio.name), dio, .root),
-      ),
+      await configuredIn(checkout.package),
       containsAll(['dio', 'dio_web_adapter']),
     );
   });

@@ -12,8 +12,12 @@ import 'pubspec_path.dart';
 import 'repo_root.dart';
 import 'scratch_path.dart';
 
-/// The directory of one package inside a checkout or a scratch.
-extension type const PackagePath._(({String path, Os os}) _package) {
+/// The directory of one package inside a checkout or a scratch, beside the
+/// directory its resolve runs in: its own, or that of the package around it
+/// where it resolves as a dependency of that package.
+extension type const PackagePath._(
+  ({String path, String resolvedIn, Os os}) _package,
+) {
   /// The package's path.
   String get path => _package.path;
 
@@ -25,15 +29,24 @@ extension type const PackagePath._(({String path, Os os}) _package) {
   PubspecOverridesPath get overrides =>
       .inPackage(_package.os.paths.join(path, 'pubspec_overrides.yaml'));
 
-  /// The package's `pubspec.lock`.
-  LockPath get lock =>
-      .inPackage(_package.os.paths.join(path, PackageFile.lock.name));
+  /// The `pubspec.lock` the package's resolve writes.
+  LockPath get lock => .inPackage(
+    _package.os.paths.join(_package.resolvedIn, PackageFile.lock.name),
+  );
 
-  /// The `package_config.json` a resolve of the package writes.
+  /// The `package_config.json` the package's resolve writes.
   PackageConfigPath get packageConfig => .inPackage(
-    _package.os.paths.join(path, '.dart_tool', 'package_config.json'),
+    _package.os.paths.join(
+      _package.resolvedIn,
+      '.dart_tool',
+      'package_config.json',
+    ),
   );
 }
+
+/// The package at [path], in [os]'s paths, whose resolve runs in it.
+PackagePath _resolvingAlone(String path, Os os) =>
+    ._((path: path, resolvedIn: path, os: os));
 
 /// The [package] of a codebase whose root is [root], inside [checkout].
 PackagePath packageIn(CheckoutPath checkout, RepoRoot root, Package package) =>
@@ -58,16 +71,34 @@ PackagePath packageInCheckout(
   ),
 };
 
+/// The package [codebase]'s checkout at [checkout] hands a tool: a git
+/// codebase's root, and a hosted one's [unpackedPackage], its lock and
+/// package config those of the package around it where it resolves as a
+/// dependency.
+PackagePath handedOut(CheckoutPath checkout, Codebase codebase) =>
+    switch (codebase) {
+      Git(codebase: final GitCodebase git) => packageIn(
+        checkout,
+        git.root,
+        .root,
+      ),
+      Hosted(codebase: final HostedCodebase hosted) => ._((
+        path: unpackedPackage(checkout, hosted).path,
+        resolvedIn: hostedPackage(checkout, hosted, .root).path,
+        os: checkout.os,
+      )),
+    };
+
 /// The directory `dart pub unpack` unpacks [codebase]'s package into, inside
 /// [checkout]: `<package>-<version>`.
 PackagePath unpackedPackage(CheckoutPath checkout, HostedCodebase codebase) =>
-    ._((
-      path: checkout.os.paths.join(
+    _resolvingAlone(
+      checkout.os.paths.join(
         checkout.path,
         '${codebase.package.name}-${codebase.version.version}',
       ),
-      os: checkout.os,
-    ));
+      checkout.os,
+    );
 
 /// The directory [codebase]'s [package] resolves in, inside [checkout]: for
 /// the root, the checkout's top where it resolves as a dependency of the
@@ -81,11 +112,11 @@ PackagePath hostedPackage(
   final PackagePath unpacked = unpackedPackage(checkout, codebase);
   return switch ((package, codebase.resolution)) {
     (.root, .alone) => unpacked,
-    (.root, .asDependency) => ._((path: checkout.path, os: checkout.os)),
-    (.example, _) => ._((
-      path: checkout.os.paths.join(unpacked.path, 'example'),
-      os: checkout.os,
-    )),
+    (.root, .asDependency) => _resolvingAlone(checkout.path, checkout.os),
+    (.example, _) => _resolvingAlone(
+      checkout.os.paths.join(unpacked.path, 'example'),
+      checkout.os,
+    ),
   };
 }
 
@@ -100,9 +131,9 @@ PackagePath _inWorktree(
   Os os,
   RepoRoot root,
   Package package,
-) => ._((
-  path: os.paths.normalize(
+) => _resolvingAlone(
+  os.paths.normalize(
     os.paths.joinAll([worktree, ...package.inRepo(root).segments]),
   ),
-  os: os,
-));
+  os,
+);
