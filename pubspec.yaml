@@ -1,9 +1,17 @@
 name: muster
-publish_to: none
+description: Brings the real codebases a Dart or Flutter tool is tested against to the commits and versions it pins, resolved, inside its own dart test.
 version: 0.0.0+0
+repository: https://github.com/lewis-dot-software/muster
+topics:
+  - testing
+  - git
+  - pub
+publish_to: none
 
 environment:
   sdk: ^3.13.0
+workspace:
+  - example
 dev_dependencies:
   analyzer: ^14.7.0
   glados: ^1.1.7

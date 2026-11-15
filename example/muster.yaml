@@ -1,0 +1,9 @@
+codebases:
+  equatable:
+    git: https://github.com/felangel/equatable.git
+    commit: 272ff7e97642dacba8f1d6e6c20ab8d6d68e5c4c
+    toolchain: dart
+  path:
+    hosted: path
+    version: 1.9.1
+    toolchain: dart

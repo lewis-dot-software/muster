@@ -41,31 +41,7 @@ A hosted package skips Clone, and its Choose follows Check out, since whether it
 
 ## Manifest
 
-`muster.yaml` sits at the consumer's root, and `MUSTER_MANIFESTS` names further manifests, a path list in the platform's separator with an empty entry passed over, so a repo's tests reach codebases it cannot name. `Muster.load` takes manifests as arguments in place of both, and its root, the current directory where it is left out. A relative path, a manifest's or the root's, is read against the current directory. Wherever its manifests sit, a load's checkouts stand under its root.
-
-```yaml
-codebases:
-  app:
-    git: https://github.com/example/app.git
-    commit: <hash>
-    root: .
-    toolchain: flutter
-  analyzer:
-    hosted: analyzer
-    version: 14.7.0
-    resolution: as-dependency
-    toolchain: dart
-```
-
-| Key | Kind | Sets |
-|---|---|---|
-| `git`, `commit` | Git | Its URL, and the full hash it is pinned at |
-| `root` | Git | The package inside the repo that resolves and is handed out, `.` where it is left out |
-| `hosted`, `version` | Hosted | A package from pub.dev at its version |
-| `resolution` | Hosted | `alone` or `as-dependency`, `alone` where it is left out |
-| `toolchain` | Both | `dart` or `flutter`, the one that resolves it, never left out |
-
-A hosted package resolved `alone` takes its dev dependencies among its packages, as its own `pub get` would. One resolved `as-dependency` is the dependency of a package around it, its dev dependencies left out, for a package whose dev dependencies do not resolve.
+`muster.yaml` sits at the consumer's root, and `MUSTER_MANIFESTS` names further manifests, a path list in the platform's separator with an empty entry passed over, so a repo's tests reach codebases it cannot name. `Muster.load` takes manifests as arguments in place of both, and its root, the current directory where it is left out. A relative path, a manifest's or the root's, is read against the current directory. Wherever its manifests sit, a load's checkouts stand under its root. The keys a manifest takes are the [README](../README.md)'s.
 
 The rules the manifest obeys:
 
@@ -91,7 +67,7 @@ A kept lock is a lock muster keeps beside a manifest. Its file is `<name>-<key>.
 
 ## Store
 
-The cache is `MUSTER_CACHE` where it is set, else `$XDG_CACHE_HOME/muster` where that is an absolute path, else `~/.cache/muster`, and `%LOCALAPPDATA%\muster` on Windows in place of either, a variable set empty counting as unset. It holds one bare clone per git URL, its whole history, named by a hash of the URL as written. Its fetch carries every branch and tag, `+refs/heads/*:refs/heads/*` and `+refs/tags/*:refs/tags/*`, since a bare clone keeps no refspec of its own, and runs where the clone lacks the pin's commit. A new clone is cloned into its temporary clone, `<hash>.partial` beside it, and moved into place, so one that fails leaves nothing in the cache, and git takes its object format from the URL's repo. A clone cut short by its process's end leaves its temporary clone, which no load reads, and each call for a clone removes every temporary clone in the cache whose claim no other hold has, so none outlasts the next but where a process forked meanwhile still carries its claim to its exec. Its fetch prunes each ref the URL no longer has, so a branch deleted there never blocks one named under it. Git reaches a clone by `--git-dir`, since it refuses a bare repo found from a directory where `safe.bareRepository` is `explicit`.
+The cache, at the directory the [README](../README.md) names, holds one bare clone per git URL, its whole history, named by a hash of the URL as written. Its fetch carries every branch and tag, `+refs/heads/*:refs/heads/*` and `+refs/tags/*:refs/tags/*`, since a bare clone keeps no refspec of its own, and runs where the clone lacks the pin's commit. A new clone is cloned into its temporary clone, `<hash>.partial` beside it, and moved into place, so one that fails leaves nothing in the cache, and git takes its object format from the URL's repo. A clone cut short by its process's end leaves its temporary clone, which no load reads, and each call for a clone removes every temporary clone in the cache whose claim no other hold has, so none outlasts the next but where a process forked meanwhile still carries its claim to its exec. Its fetch prunes each ref the URL no longer has, so a branch deleted there never blocks one named under it. Git reaches a clone by `--git-dir`, since it refuses a bare repo found from a directory where `safe.bareRepository` is `explicit`.
 
 A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory per codebase by its name:
 
@@ -101,8 +77,6 @@ A consumer's checkouts sit under `.dart_tool/muster/` at its root, one directory
 The stamp is a file beside each checkout, `<name>.stamp`, deleted before a make touches the checkout and written last. It names the codebase, every manifest value the resolve turns on among its own, each lock's source and its hash as placed in its package, the hash of each `package_config.json` the resolve wrote, the path dependency that left a hosted example unresolved, and the SDK version that resolved it: the Dart SDK's from `dart --version`, or the Flutter framework's from `flutter --version --machine`. A kept lock is copied into its package as `pubspec.lock` before the resolve, so a git checkout carries it as a file its pin lacks. A checkout stands where the package it hands out holds its `pubspec.yaml`, its stamp matches what the survey read, and each package's lock and `package_config.json` is the one stamped, a kept lock's source beside its manifest too. A git checkout stands as well only where `HEAD` is the pin and no tracked file has changed. What a tool writes beside the tracked files, ignored or untracked, survives a standing checkout, so a tool's own cache inside it lasts across loads.
 
 Any other checkout is made again: a git one by `checkout --force --detach` and `clean -ffdx` where it is a worktree of its URL's clone, or removed and added afresh where it is not or its directory is gone, and a hosted one unpacked afresh. A file standing in a checkout's place reads as no checkout, and is removed as a directory that is no worktree is. A file standing where a directory holding a package's files would stand, the package's own or its `.dart_tool` among them, reads as none of those files. One the pin lacks goes where the checkout is made again, and a pin or a hosted package published with a file named `example` keeps it and holds no example. Git reaches a checkout by `-C` with `--git-dir=.git` and `--work-tree=.`, so a checkout whose `.git` is gone never sends git to a repo around the consumer.
-
-Deleting `.dart_tool/muster/` or the cache is always safe while no load runs, and costs one fetch.
 
 ## Concurrency
 
@@ -185,13 +159,11 @@ The outside world reaches muster through three seams:
 - The environment, the system, the working directory and the temporary directory, read from the process once at the public entry and passed down by constructor from there, so a test hands in its own, a cache in its temporary directory among them. The system sets the lock a claim takes and the C library it calls, bound there, and a load on a POSIX system whose C library muster does not know refuses.
 - Files, through `dart:io` in `store` alone and never faked, since git and pub act on real directories whatever muster fakes. A claim's lock on a POSIX system goes through the C library's `flock`, its calls handed in by constructor, so a test fails one. A hold never released has its file closed once it is collected by one static native finalizer of the process's `close`, which `_Flock` binds as a static external, the one value and the one binding in `lib/` that outlive a load, since a native finalizer runs only while it is reachable itself and nothing of a load may be.
 
-`store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach a package server on the loopback, named to pub by `PUB_HOSTED_URL` in the environment a test hands in, with pub's cache in its temporary directory, and pub.dev by one test per toolchain.
+`store`'s tests run on git repos a test makes in a temporary directory, with no network, and its prompt tests on an `sshd` started as ssh's proxy command and an HTTP server on the loopback. Hosted packages reach a package server on the loopback, named to pub by `PUB_HOSTED_URL` in the environment a test hands in, with pub's cache in its temporary directory, and pub.dev by one test per toolchain. The example's own `dart test`, the README's manifest and test, runs on a copy of the example in a temporary directory with a cache of its own, so it clones equatable from GitHub and unpacks `path` from pub.dev as a stranger's first run does, the one test that clones over the network.
 
 ## Output
 
-`muster fetch [manifest...]` loads and prints a row per codebase, tab-separated under a header: its name, its outcome and that outcome's own detail, the path for `Fetched`, followed by the dependency and its path quoted where its example was left unresolved, the lock for `Unlocked`, the command for `CommandFailed`, the executable for `Unstartable`, the path for `StoreFailed` and the commit for `PinMissing`. A refused load prints why and no rows. `muster lock [manifest...]` writes and removes locks and prints a row each in the same columns: `Wrote` or `Removed` and the lock, or a failure as `muster fetch` prints it, a removed lock's name empty, since no codebase names it. With no manifest named, each reads `muster.yaml` in the current directory and `MUSTER_MANIFESTS`. The rows go to standard output, and a refusal, a usage error and what a failure's row leaves out, a command's exit code and output or the system's reason for a file act, to standard error, a refusal in one line and each note in its row's order.
-
-The exit codes are one enum in `cli`, and its doc comment is their home.
+The rows `muster fetch` and `muster lock` print, and the codes they exit with, are the [README](../README.md)'s.
 
 ## Package
 

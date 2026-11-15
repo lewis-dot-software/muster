@@ -1,0 +1,10 @@
+name: muster_example
+description: A tool's tests loading equatable at its pin through muster.
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+resolution: workspace
+dev_dependencies:
+  muster: any
+  test: ^1.33.0

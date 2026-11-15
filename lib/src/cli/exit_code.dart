@@ -1,5 +1,4 @@
-/// The code the `muster` command exits with, the one home of what each
-/// means.
+/// The code the `muster` command exits with.
 enum ExitCode {
   /// Every codebase fetched, or every kept lock lacking written and every
   /// lock no codebase names removed. `--help` exits with it too.
