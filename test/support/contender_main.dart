@@ -1,7 +1,8 @@
-// A load, a claim held bare, or a claim taken and tried once more, run apart
-// from the test that starts it, as an isolate or a process, telling the test
-// each step it takes and waiting on the test's word where the test says to
-// pause. Started by `Contender` alone.
+// A load, a claim held bare, a claim taken and tried once more, or claims
+// never released and tried once they are collected, run apart from the test
+// that starts it, as an isolate or a process, telling the test each step it
+// takes and waiting on the test's word where the test says to pause. Started
+// by `Contender` alone.
 
 import 'dart:async';
 import 'dart:convert';
@@ -11,11 +12,14 @@ import 'dart:isolate';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/model/checkout_path.dart';
+import 'package:muster/src/model/claim_path.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/store_fault.dart';
 
 import 'act.dart';
+import 'collected.dart';
 import 'contention.dart';
+import 'keeping.dart';
 import 'locker.dart';
 import 'outcome_case.dart';
 import 'pause.dart';
@@ -78,6 +82,38 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
             ? Said.free.name
             : Said.kept.name,
       );
+    case .abandon:
+      final List<ClaimPath> abandoned = [
+        for (final Object? name in brief['names'] as List<Object?>)
+          CheckoutPath.of(.new(root, .posix), .parse(name! as String)!).claim,
+      ];
+      final Keeping keeping = .values.byName(brief['keeping'] as String);
+      final List<Claims> kept = [];
+      Claims taking() {
+        final Claims claims = .new(.of(.posix, Platform.operatingSystem)!);
+        switch (keeping) {
+          case .nothing:
+            break;
+          case .claims:
+            kept.add(claims);
+        }
+        return claims;
+      }
+
+      for (final ClaimPath claim in abandoned) {
+        await _abandon(claim, taking());
+      }
+      await collected();
+      // Each tried by the claims that took it where they are kept, so they
+      // stay reachable through their holds' collection.
+      final List<bool> free = [
+        for (final (int i, ClaimPath claim) in abandoned.indexed)
+          await switch (keeping) {
+            .nothing => Claims(testLocker),
+            .claims => kept[i],
+          }.holdingIfFree(claim, () async {}),
+      ];
+      line.say('${Said.tried.name} ${jsonEncode(free)}');
     case .load:
       final Map<String, String> variables = {
         for (final MapEntry<String, Object?>(:String key, :Object? value)
@@ -100,6 +136,19 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
   }
   await line.heard(.exit);
   await line.close();
+}
+
+/// The claim at [claim] taken by [claims] for an act that never ends, once
+/// it is taken, with nothing of its hold kept.
+Future<void> _abandon(ClaimPath claim, Claims claims) async {
+  final Completer<void> begun = .new();
+  unawaited(
+    claims.holding(claim, () async {
+      begun.complete();
+      await Completer<void>().future;
+    }),
+  );
+  await begun.future;
 }
 
 /// Each codebase's outcome, by its name: its case's name, and the path of

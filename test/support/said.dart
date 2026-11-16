@@ -20,4 +20,8 @@ enum Said {
 
   /// Its load is done, followed by each codebase's outcome as JSON.
   done,
+
+  /// Its claims never released were tried once after their collection,
+  /// followed by whether each was free, in order, as JSON.
+  tried,
 }

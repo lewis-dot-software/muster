@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'act.dart';
 import 'apart.dart';
 import 'contention.dart';
+import 'keeping.dart';
 import 'loads.dart';
 import 'outcome_case.dart';
 import 'pause.dart';
@@ -17,9 +18,10 @@ import 'take.dart';
 import 'told.dart';
 import 'word.dart';
 
-/// A load, a claim held bare, or a claim taken and tried once more, run apart
-/// from its test as an isolate or a process, which tells the test each step
-/// and waits on its word.
+/// A load, a claim held bare, a claim taken and tried once more, or claims
+/// never released and tried once they are collected, run apart from its test
+/// as an isolate or a process, which tells the test each step and waits on
+/// its word.
 class Contender {
   Contender._(this._tell, this._kill, Future<void> exited) {
     _exited = exited.then(
@@ -58,6 +60,23 @@ class Contender {
     'name': name,
     'take': take.name,
     'act': act.name,
+  });
+
+  /// A contender in a process of its own taking the claim on each checkout
+  /// of [names] under the consumer's [root] for an act that never ends,
+  /// keeping what [keeping] names of each and never releasing it, then
+  /// trying each once its hold is collected, which an isolate could not,
+  /// since a process another test file starts would carry the claims until
+  /// its exec.
+  static Future<Contender> abandoning(
+    String root,
+    List<String> names,
+    Keeping keeping,
+  ) => _start(.process, {
+    'contention': Contention.abandon.name,
+    'root': root,
+    'names': names,
+    'keeping': keeping.name,
   });
 
   /// A contender [apart] loading [manifests] with its root at [root], reading
@@ -199,6 +218,19 @@ class Contender {
         (String line) => line == Said.free.name || line == Said.kept.name,
       ) ==
       Said.free.name;
+
+  /// Whether each claim it never released was free, in order, where it was
+  /// tried once its hold was collected, once it has said.
+  Future<List<bool>> tried() async {
+    final String line = await until(
+      (String line) => _after(line, Said.tried) != null,
+    );
+    return [
+      for (final Object? free
+          in jsonDecode(_after(line, Said.tried)!) as List<Object?>)
+        free! as bool,
+    ];
+  }
 
   /// Each codebase's outcome, once the load is done.
   Future<Map<String, Told>> done() async {

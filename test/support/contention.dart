@@ -9,4 +9,9 @@ enum Contention {
   /// One checkout's claim taken and let go, then tried once more, in a
   /// process that starts no other, so no fork carries the claim.
   relet,
+
+  /// Claims taken for acts that never end and never released, collected,
+  /// then each tried once, in a process that starts no other, so no fork
+  /// carries a claim.
+  abandon,
 }
