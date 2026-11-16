@@ -7,7 +7,7 @@ import 'package:test/test.dart';
 import '../support/refusal_case.dart';
 
 /// What each refusal's line names, so a person can act on it.
-List<String> _named(LoadRefusal refusal) => switch (refusal) {
+List<Pattern> _named(LoadRefusal refusal) => switch (refusal) {
   NoManifest() => ['muster.yaml', 'MUSTER_MANIFESTS'],
   NotManifestName(:final String path) => [path, '.yaml'],
   ManifestMissing(:final manifest) => [manifest.path],
@@ -37,7 +37,7 @@ List<String> _named(LoadRefusal refusal) => switch (refusal) {
   NoCache(:final Os os) => [
     'MUSTER_CACHE',
     ...switch (os) {
-      .posix => ['XDG_CACHE_HOME', 'HOME'],
+      .posix => ['XDG_CACHE_HOME', RegExp(r'\bHOME\b')],
       .windows => ['LOCALAPPDATA'],
     },
   ],
@@ -65,11 +65,11 @@ final String _sha1 = 'ab' * 20;
 
 void main() {
   for (final LoadRefusal refusal in RefusalCase.every) {
-    test('a refusal of ${refusal.runtimeType} is one line naming what to '
-        'act on', () {
-      final String text = refusalText(refusal);
+    final String text = refusalText(refusal);
+    test('a refusal of ${refusal.runtimeType}, $text, is one line naming '
+        'what to act on', () {
       expect(text, isNot(contains('\n')));
-      for (final String named in _named(refusal)) {
+      for (final Pattern named in _named(refusal)) {
         expect(text, contains(named));
       }
     });

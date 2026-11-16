@@ -8,7 +8,8 @@ import '../model/wanted.dart';
 import '../model/written.dart';
 
 /// Why a run refused, in one line for a person to act on, any text in it
-/// holding a control character or a line break quoted with each escaped.
+/// holding a control character but a tab, or a line break, quoted with each
+/// escaped.
 String refusalText(LoadRefusal refusal) => switch (refusal) {
   NoManifest() =>
     'no manifest: none named, no muster.yaml in the working directory, and '

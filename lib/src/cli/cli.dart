@@ -10,6 +10,7 @@ import '../model/lock_outcome.dart';
 import '../model/lock_removal.dart';
 import 'exit_code.dart';
 import 'as_fetch_failure.dart';
+import 'cell.dart';
 import 'failure_cells.dart';
 import 'failure_note.dart';
 import 'fetched_detail.dart';
@@ -140,8 +141,9 @@ final class Cli {
     }
   }
 
+  /// Writes a row of [name], [outcome] and [detail], its detail a [cell].
   void _row(String name, String outcome, String detail) =>
-      _out.writeln('$name\t$outcome\t$detail');
+      _out.writeln('$name\t$outcome\t${cell(detail)}');
 
   /// Writes each of [failures]' notes, headed by its codebase's name, in
   /// their rows' order.

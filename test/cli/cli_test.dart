@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 
 import '../support/fixed_loads.dart';
 import '../support/git.dart';
+import '../support/lines_of.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
 import '../support/manifests.dart';
@@ -46,13 +47,9 @@ FetchOutcome _outcome(OutcomeCase kind, GitCodebase codebase) => kind.outcome(
 
 /// The rows [out] holds under its header, each split into its cells.
 List<List<String>> _rows(String out) {
-  final List<String> lines = out.split('\n');
-  expect(lines.first, 'name\toutcome\tdetail');
-  expect(lines.last, isEmpty);
-  return [
-    for (final String line in lines.sublist(1, lines.length - 1))
-      line.split('\t'),
-  ];
+  final List<List<String>> lines = linesOf(out);
+  expect(lines.first, ['name', 'outcome', 'detail']);
+  return lines.sublist(1);
 }
 
 void main() {
@@ -338,6 +335,84 @@ void main() {
         ],
       ]);
     });
+
+    test(
+      "quotes a row's detail holding a tab or a line break, or opening "
+      'on a quote, with each escaped, and leaves every other standing',
+      () async {
+        final GitCodebase tabbed = codebase(
+          'tabbed',
+          '/srv/a\tb.git',
+          'a' * 40,
+          'a\tb',
+          .dart,
+        );
+        final PackagePath rooted = packageIn(
+          .of(.new('/consumer', .posix), tabbed.name),
+          tabbed.root,
+          .root,
+        );
+        final _Run fetch = await _run(
+          FixedLoads.loading({
+            tabbed.name: _outcome(.commandFailed, tabbed),
+            .parse('broken')!: const StoreFailed('/con\nsumer/app', 'gone'),
+            .parse('quoted')!: const StoreFailed('"app', 'gone'),
+            .parse('plain')!: const StoreFailed('/consumer/a b"c', 'gone'),
+            .parse('rooted')!: Fetched(
+              rooted,
+              const NoExample(),
+              .parse('3.13.0')!,
+            ),
+            .parse('unresolved')!: Fetched(
+              rooted,
+              ExampleUnresolved((dependency: .parse('x')!, path: '../y')),
+              .parse('3.13.0')!,
+            ),
+          }),
+          ['fetch'],
+        );
+        expect(_rows(fetch.out), [
+          ['tabbed', 'CommandFailed', r'"git clone /srv/a\tb.git"'],
+          ['broken', 'StoreFailed', r'"/con\nsumer/app"'],
+          ['quoted', 'StoreFailed', r'"\"app"'],
+          ['plain', 'StoreFailed', '/consumer/a b"c'],
+          ['rooted', 'Fetched', r'"/consumer/.dart_tool/muster/tabbed/a\tb"'],
+          [
+            'unresolved',
+            'Fetched',
+            r'"/consumer/.dart_tool/muster/tabbed/a\tb (example unresolved: '
+                r'x at \"../y\")"',
+          ],
+        ]);
+        final _Run lock = await _run(
+          FixedLoads(
+            locks: Locked(
+              {
+                tabbed.name: LocksWritten([
+                  listedKeptLock(
+                    locksBeside('/con\tsumer/muster.yaml'),
+                    'a.lock',
+                  )!,
+                ]),
+              },
+              [
+                LockRemoved(
+                  listedKeptLock(
+                    locksBeside('/consumer/muster.yaml'),
+                    'go\u2028ne.lock',
+                  )!,
+                ),
+              ],
+            ),
+          ),
+          ['lock'],
+        );
+        expect(_rows(lock.out), [
+          ['tabbed', 'Wrote', r'"/con\tsumer/muster_locks/a.lock"'],
+          ['', 'Removed', r'"/consumer/muster_locks/go\u2028ne.lock"'],
+        ]);
+      },
+    );
 
     test('passes the manifests named on to the run, and none where none '
         'is', () async {
