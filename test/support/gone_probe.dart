@@ -1,7 +1,8 @@
-// A program that deletes its own working directory, then runs the verb its
-// first argument names on the manifests the rest name, as the process muster
-// runs in, writing the refusal's type where the run refuses, and the run
-// whole where it does not. Started by `probeGone` alone.
+// A program that writes the script it was started from to its error stream,
+// deletes its own working directory, then runs the verb its first argument
+// names on the manifests the rest name, as the process muster runs in,
+// writing the refusal's type where the run refuses, and the run whole where
+// it does not. Started by `probeGone` alone.
 
 import 'dart:io';
 
@@ -11,6 +12,7 @@ import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/load/process_loads.dart';
 
 Future<void> main(List<String> arguments) async {
+  stderr.writeln(Platform.script);
   Directory.current.deleteSync();
   final List<String> manifests = arguments.skip(1).toList();
   stdout.write(switch (Verb.values.byName(arguments.first)) {
