@@ -1,5 +1,9 @@
 /// What a contender tells its test.
 enum Said {
+  /// The script it was started from, followed by the script's URI, said
+  /// before anything else.
+  script,
+
   /// The claim it holds bare is taken.
   held,
 

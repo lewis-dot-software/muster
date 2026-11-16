@@ -10,7 +10,9 @@ import 'act.dart';
 import 'apart.dart';
 import 'contention.dart';
 import 'keeping.dart';
+import 'kernel_cache.dart';
 import 'loads.dart';
+import 'locker.dart';
 import 'outcome_case.dart';
 import 'pause.dart';
 import 'said.dart';
@@ -100,12 +102,7 @@ class Contender {
     Apart apart,
     Map<String, Object?> brief,
   ) async {
-    final String program = p.join(
-      await musterRoot(),
-      'test',
-      'support',
-      'contender_main.dart',
-    );
+    final String program = await contenderKernel();
     switch (apart) {
       case .isolate:
         final ReceivePort said = .new();
@@ -143,7 +140,7 @@ class Contender {
         return contender;
       case .process:
         final Process process = await .start(Platform.resolvedExecutable, [
-          '--packages=${p.join(await musterRoot(), '.dart_tool', 'package_config.json')}',
+          '--packages=${packagesOf(await musterRoot())}',
           program,
           jsonEncode(brief),
         ]);
@@ -207,6 +204,14 @@ class Contender {
     _waits.add((where, wait));
     return wait.future;
   }
+
+  /// The script the contender was started from, once it has said.
+  Future<Uri> script() async => .parse(
+    _after(
+      await until((String line) => _after(line, Said.script) != null),
+      Said.script,
+    )!,
+  );
 
   /// Waits until the contender says [word] alone.
   Future<void> told(Said word) => until((String line) => line == word.name);
@@ -305,6 +310,55 @@ class Contender {
     _waits.clear();
   }
 }
+
+/// The path of the contender's kernel, compiled where its sources have
+/// changed since the kernel kept.
+Future<String> contenderKernel() async => (await contenderCache()).kernel();
+
+/// The cache of the contender's kernel, compiled by the SDK running the test
+/// from muster's own code, its test support and the packages they resolve
+/// through, and kept beside muster's own checkouts as `contender-<key>.dill`.
+Future<KernelCache> contenderCache() async {
+  final String root = await musterRoot();
+  return .new(
+    checkout: .of(.new(root, .posix), .parse('contender')!),
+    sources: [
+      p.join(root, 'lib'),
+      p.join(root, 'test', 'support'),
+      packagesOf(root),
+    ],
+    sdk: Platform.version,
+    compile: (String output) => compileContender(root, output),
+    claims: .new(testLocker),
+  );
+}
+
+/// Compiles `contender_main.dart` of muster's own package at [root] into the
+/// kernel at [output] by the SDK running the test, writing every file it is
+/// compiled from to [depfile] where one is given.
+///
+/// Throws a [StateError] where the compile fails.
+Future<void> compileContender(
+  String root,
+  String output, [
+  String? depfile,
+]) async {
+  final ProcessResult result = await Process.run(Platform.resolvedExecutable, [
+    'compile',
+    'kernel',
+    '--packages=${packagesOf(root)}',
+    '--output=$output',
+    if (depfile != null) '--depfile=$depfile',
+    p.join(root, 'test', 'support', 'contender_main.dart'),
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError('the contender did not compile: ${result.stderr}');
+  }
+}
+
+/// The package config of muster's own package at [root].
+String packagesOf(String root) =>
+    p.join(root, '.dart_tool', 'package_config.json');
 
 /// Whether [line] said is [said] followed by its detail, and that detail.
 String? _after(String line, Said said) => line.startsWith('${said.name} ')

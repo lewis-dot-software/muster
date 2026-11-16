@@ -31,6 +31,7 @@ import 'word.dart';
 
 Future<void> main(List<String> arguments, [SendPort? port]) async {
   final _Line line = port == null ? _ProcessLine() : _IsolateLine(port);
+  line.say('${Said.script.name} ${Platform.script}');
   final Map<String, Object?> brief =
       jsonDecode(arguments.single) as Map<String, Object?>;
   final String root = brief['root'] as String;
