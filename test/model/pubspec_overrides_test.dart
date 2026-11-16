@@ -1,68 +1,12 @@
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/published_pubspec.dart';
-import 'package:muster/src/model/read_published_pubspec.dart';
 import 'package:muster/src/model/pubspec_overrides.dart';
 import 'package:test/test.dart';
 
 import '../support/hosted.dart';
-import '../support/lines_printed.dart';
 
 void main() {
-  group('readPublishedPubspec', () {
-    test('reads a member for a pubspec of `resolution: workspace` alone', () {
-      expect(
-        readPublishedPubspec('name: a\nresolution: workspace\n').member,
-        isTrue,
-      );
-      expect(
-        readPublishedPubspec('name: a\nresolution: external\n').member,
-        isFalse,
-      );
-      expect(readPublishedPubspec('name: a\n').member, isFalse);
-    });
-
-    test('reads overrides for a pubspec holding `dependency_overrides`, '
-        'empty or not', () {
-      expect(
-        readPublishedPubspec(
-          'name: a\ndependency_overrides:\n  b:\n    path: ../b\n',
-        ).overrides,
-        isTrue,
-      );
-      expect(
-        readPublishedPubspec('name: a\ndependency_overrides:\n').overrides,
-        isTrue,
-      );
-      expect(readPublishedPubspec('name: a\n').overrides, isFalse);
-    });
-
-    test('reads neither from a pubspec that is no YAML map', () {
-      for (final String pubspec in ['name: [a\n', '- workspace\n', '']) {
-        expect(readPublishedPubspec(pubspec), (
-          member: false,
-          overrides: false,
-        ));
-      }
-    });
-
-    test(
-      'reads past a directive the YAML reader warns of, printing nothing',
-      () {
-        late final PublishedPubspec published;
-        expect(
-          linesPrinted(
-            () => published = readPublishedPubspec(
-              '%FOO bar\n---\nname: a\nresolution: workspace\n',
-            ),
-          ),
-          isEmpty,
-        );
-        expect(published.member, isTrue);
-      },
-    );
-  });
-
   group('pubspecOverrides', () {
     /// Every pubspec a package may publish, by what muster reads of it.
     const List<PublishedPubspec> published = [

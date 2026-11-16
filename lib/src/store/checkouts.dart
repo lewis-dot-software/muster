@@ -13,7 +13,7 @@ import '../model/clone_path.dart';
 import '../model/codebase.dart';
 import '../model/consumer_root.dart';
 import '../model/content_hash.dart';
-import '../model/example_path_outside.dart';
+import '../model/choose_hosted_resolve.dart';
 import '../model/fetch_outcome.dart';
 import '../model/git_codebase.dart';
 import '../model/hosted_codebase.dart';
@@ -27,11 +27,11 @@ import '../model/package.dart';
 import '../model/package_path.dart';
 import '../model/parse_stamp.dart';
 import '../model/partial_lock_path.dart';
-import '../model/hosted_resolves.dart';
+import '../model/hosted_resolve.dart';
 import '../model/pubspec_overrides.dart';
 import '../model/pubspec_overrides_path.dart';
 import '../model/pubspec_path.dart';
-import '../model/read_published_pubspec.dart';
+import '../model/published_pubspec.dart';
 import '../model/read_at_commit.dart';
 import '../model/repo_path.dart';
 import '../model/read_status.dart';
@@ -400,10 +400,9 @@ class Checkouts {
   /// in the checkout's top where it resolves as a dependency, each package's
   /// overrides written where it needs them to resolve alone and holds none.
   ///
-  /// Returns what it holds of its packages: the root always, and the example
-  /// where it holds a pubspec of its own and no path dependency of it leaves
-  /// the package, which is then left unresolved, with no overrides written,
-  /// and the dependency returned beside them.
+  /// Returns the packages it resolves, as [chooseHostedResolve] chooses
+  /// them, beside the path dependency that leaves its example unresolved,
+  /// with no overrides written, where one does.
   Future<_Unpacked> _unpack(CheckoutPath at, HostedCodebase codebase) async {
     await removeDirectory(at.path);
     await fileAct(at.path, () => Directory(at.path).create(recursive: true));
@@ -427,39 +426,37 @@ class Checkouts {
         .root => unpackedPackage(at, codebase).pubspec,
         .example => hostedPackage(at, codebase, package).pubspec,
       };
-      final String? text = await _textIfThere(at, pubspec.path);
-      if (!hostedResolves(package, held: text != null)) {
-        continue;
-      }
       final PubspecOverridesPath path = hostedPackage(
         at,
         codebase,
         package,
       ).overrides;
       final String? served = await _textIfThere(at, path.path);
-      if ((package, text) case (.example, final String example)) {
-        unresolved = examplePathOutside(
-          example,
-          served,
-          codebase.package,
-          at.os,
-        );
-        if (unresolved != null) {
-          continue;
-        }
-      }
-      packages.add(package);
-      if (pubspecOverrides(
-            codebase,
-            package,
-            published: readPublishedPubspec(text ?? ''),
-            holding: served != null,
-          )
-          case final String overrides) {
-        await fileAct(
-          path.path,
-          () => File(path.path).writeAsString(overrides),
-        );
+      switch (chooseHostedResolve(
+        package,
+        pubspec: await _textIfThere(at, pubspec.path),
+        served: served,
+        host: codebase.package,
+        os: at.os,
+      )) {
+        case NotHeld():
+          break;
+        case LeftUnresolved(:final OutsidePath outside):
+          unresolved = outside;
+        case Resolves(:final PublishedPubspec published):
+          packages.add(package);
+          if (pubspecOverrides(
+                codebase,
+                package,
+                published: published,
+                holding: served != null,
+              )
+              case final String overrides) {
+            await fileAct(
+              path.path,
+              () => File(path.path).writeAsString(overrides),
+            );
+          }
       }
     }
     return (

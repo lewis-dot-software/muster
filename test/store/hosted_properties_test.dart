@@ -75,6 +75,107 @@ enum _Unresolvable {
   notYaml,
 }
 
+/// Each way pub refuses an example's pubspec or its served overrides, each
+/// beside a path dependency that leaves the package.
+enum _Refusal {
+  /// A pubspec that is no YAML, its served overrides holding the path.
+  notYaml,
+
+  /// A pubspec that is a YAML list, its served overrides holding the path.
+  notMap,
+
+  /// A pubspec with no `name`.
+  noName,
+
+  /// A `dev_dependencies` that is no map.
+  sectionNotMap,
+
+  /// A dependency whose name is no package name.
+  invalidName,
+
+  /// A dependency on the example itself.
+  selfDependency,
+
+  /// A version constraint pub cannot read.
+  badConstraint,
+
+  /// A dependency by two sources.
+  twoSources,
+
+  /// A path that is no string.
+  pathNotString,
+
+  /// Served overrides that are no YAML map.
+  servedNotMap,
+
+  /// Served overrides holding a field pub does not read.
+  servedField,
+
+  /// Served overrides whose entry names no package.
+  servedName,
+}
+
+/// The files of the example of the package `a`, refused by pub for
+/// [refusal], or pub's to resolve where it is null, beside a dependency `c`
+/// at [outside], a path that leaves the package, after the refused entry
+/// where [first] holds and before it else.
+Map<String, String> _refusedExample(
+  _Refusal? refusal,
+  String outside,
+  bool first,
+) {
+  final String leaving = '  c:\n    path: ${jsonEncode(outside)}\n';
+  final String refused = switch (refusal) {
+    .invalidName || .servedName => '  my-b: any\n',
+    .selfDependency => '  a_example:\n    path: .\n',
+    .badConstraint => '  b: notaversion\n',
+    .twoSources =>
+      '  b:\n    path: ../packages/b\n    git: https://example.com/b.git\n',
+    .pathNotString => '  b:\n    path: 3\n',
+    .notYaml ||
+    .notMap ||
+    .noName ||
+    .sectionNotMap ||
+    .servedNotMap ||
+    .servedField ||
+    null => '',
+  };
+  final String entries = first ? '$refused$leaving' : '$leaving$refused';
+  return {
+    'example/pubspec.yaml': switch (refusal) {
+      .notYaml => 'name: [a_example\n',
+      .notMap => '- a_example\n',
+      _ => [
+        if (refusal != .noName) 'name: a_example\n',
+        'environment:\n  sdk: ^3.0.0\n',
+        'dependencies:\n  a:\n    path: ..\n',
+        switch (refusal) {
+          .servedName || .servedNotMap || .servedField => leaving,
+          _ => entries,
+        },
+        if (refusal == .sectionNotMap) 'dev_dependencies: 3\n',
+      ].join(),
+    },
+    if (switch (refusal) {
+          .notYaml ||
+          .notMap => 'dependency_overrides:\n  a:\n    path: ..\n$leaving',
+          .servedNotMap => '- c\n',
+          .servedField => 'foo: 1\n',
+          .servedName => 'dependency_overrides:\n$entries',
+          .noName ||
+          .sectionNotMap ||
+          .invalidName ||
+          .selfDependency ||
+          .badConstraint ||
+          .twoSources ||
+          .pathNotString ||
+          null => null,
+        }
+        case final String served)
+      'example/pubspec_overrides.yaml': served,
+  };
+}
+
 /// What stood in a checkout before it was made afresh.
 enum _Before {
   /// Nothing.
@@ -527,55 +628,64 @@ void main() {
 
   Glados(
     any
-        .combine3(
+        .combine2(
           any.list(any.choose(_extraDependencies)),
           any.bool,
-          any.choose(Resolution.values),
-          (List<_Dependency> extra, bool selfOutside, Resolution resolution) =>
-              (
-                extra: extra.toSet().toList(),
-                selfOutside: selfOutside,
-                resolution: resolution,
-              ),
+          (List<_Dependency> extra, bool selfOutside) =>
+              (extra: extra.toSet().toList(), selfOutside: selfOutside),
         )
         .shrinkingAtMost(gitTries),
-    .new(numRuns: 2),
+    .new(numRuns: 1),
   ).test(
     "A hosted package's example is left unresolved exactly when its pubspec "
     'path-depends outside the package on a package muster does not override '
     "to the package's own path, and `Fetched` says which.",
-    (
-      ({List<_Dependency> extra, bool selfOutside, Resolution resolution})
-      drawn,
-    ) async {
+    (({List<_Dependency> extra, bool selfOutside}) drawn) async {
       // Rows where each kind of dependency set, each value of the package's
       // own path and each membership meets every other in one at least, the
-      // draw's own beside them, so none is left to the draws: an example
-      // with no path but the package's, one inside, the package's own path
-      // above it, and one outside, first or after one inside, and an
-      // overrides file served empty of YAML, which pub reads as none, so the
-      // package's own path and its membership are left out beside it.
+      // draw's own beside them, each under every resolution, so none is left
+      // to the draws: an example with no path but the package's, one inside,
+      // the package's own path above it, and one outside, first or after one
+      // inside, and an overrides file served empty of YAML, which pub reads
+      // as none, so the package's own path and its membership are left out
+      // beside it.
       for (final (
+            Resolution resolution,
             List<_Dependency> extra,
             bool selfOutside,
             bool workspace,
             String? served,
           )
           in [
-            (const <_Dependency>[], false, false, null),
-            (const <_Dependency>[], true, true, null),
-            ([_extraDependencies[0]], false, true, null),
-            ([_extraDependencies[0]], true, false, null),
-            (
-              [_extraDependencies[1], _extraDependencies[0]],
-              false,
-              false,
-              null,
-            ),
-            ([_extraDependencies[0], _extraDependencies[2]], true, true, null),
-            ([_extraDependencies[1]], false, false, ''),
-            ([_extraDependencies[0]], false, false, '# served\n'),
-            (drawn.extra, drawn.selfOutside, false, null),
+            for (final Resolution resolution in Resolution.values)
+              for (final (
+                    List<_Dependency> extra,
+                    bool selfOutside,
+                    bool workspace,
+                    String? served,
+                  )
+                  in [
+                    (const <_Dependency>[], false, false, null),
+                    (const <_Dependency>[], true, true, null),
+                    ([_extraDependencies[0]], false, true, null),
+                    ([_extraDependencies[0]], true, false, null),
+                    (
+                      [_extraDependencies[1], _extraDependencies[0]],
+                      false,
+                      false,
+                      null,
+                    ),
+                    (
+                      [_extraDependencies[0], _extraDependencies[2]],
+                      true,
+                      true,
+                      null,
+                    ),
+                    ([_extraDependencies[1]], false, false, ''),
+                    ([_extraDependencies[0]], false, false, '# served\n'),
+                    (drawn.extra, drawn.selfOutside, false, null),
+                  ])
+                (resolution, extra, selfOutside, workspace, served),
           ]) {
         await _onBench((_Bench bench) async {
           bench.server.serve('a', '1.0.0', {
@@ -597,10 +707,7 @@ void main() {
             ].join('\n'),
             'example/pubspec_overrides.yaml': ?served,
           });
-          final HostedCodebase codebase = hostedOf(
-            'a',
-            resolution: drawn.resolution,
-          );
+          final HostedCodebase codebase = hostedOf('a', resolution: resolution);
           final _Dependency? first = extra
               .where((_Dependency d) => d.outside)
               .firstOrNull;
@@ -696,6 +803,89 @@ void main() {
             ),
           ),
         );
+      });
+    }
+  });
+
+  Glados(
+    any
+        .combine2(
+          any.choose(['../../c', '/c', '../x/../../c']),
+          any.bool,
+          (String outside, bool first) => (outside: outside, first: first),
+        )
+        .shrinkingAtMost(gitTries),
+    .new(numRuns: 1),
+  ).test('An example is left unresolved exactly where a path dependency of it, '
+      'read as pub reads it, leaves the package, and a pubspec or served '
+      'overrides that pub would refuse fails its codebase.', (
+    ({String outside, bool first}) drawn,
+  ) async {
+    // Every refusal, and none, under every resolution, so none is left to
+    // the draws.
+    for (final (_Refusal? refusal, Resolution resolution) in [
+      for (final _Refusal? refusal in [null, ..._Refusal.values])
+        for (final Resolution resolution in Resolution.values)
+          (refusal, resolution),
+    ]) {
+      await _onBench((_Bench bench) async {
+        bench.server.serve('a', '1.0.0', {
+          'pubspec.yaml': hostedPubspec('a', '1.0.0'),
+          'packages/b/pubspec.yaml': pubspecOf('b'),
+          ..._refusedExample(refusal, drawn.outside, drawn.first),
+        });
+        final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+        final PackagePath example = hostedPackage(
+          bench.checkout,
+          codebase,
+          .example,
+        );
+        final Matcher refused = throwsA(
+          isA<StoreFault>().having(
+            (StoreFault f) => f.failure,
+            'failure',
+            isA<CommandFailed>().having(
+              (CommandFailed f) => f.command.arguments,
+              'arguments',
+              containsAll(['pub', 'get', '--directory=${example.path}']),
+            ),
+          ),
+        );
+        final String reason = '$refusal $resolution';
+        switch (refusal) {
+          case null:
+            expect(await bench.checkouts.lock(Hosted(codebase), bench.locks), [
+              keptLockOf(bench.locks, Hosted(codebase), .root),
+            ], reason: reason);
+            expect(
+              (await bench.checkouts.checkout(
+                Hosted(codebase),
+                bench.locks,
+              )).example,
+              ExampleUnresolved((
+                dependency: .parse('c')!,
+                path: drawn.outside,
+              )),
+              reason: reason,
+            );
+          case _Refusal():
+            await expectLater(
+              bench.checkouts.lock(Hosted(codebase), bench.locks),
+              refused,
+              reason: reason,
+            );
+            // A lock of its own for the example, so its checkout reaches
+            // the resolve, which pub refuses.
+            await writeFile(
+              keptLockOf(bench.locks, Hosted(codebase), .example).path,
+              lockText,
+            );
+            await expectLater(
+              bench.checkouts.checkout(Hosted(codebase), bench.locks),
+              refused,
+              reason: reason,
+            );
+        }
       });
     }
   });

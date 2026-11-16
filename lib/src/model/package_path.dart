@@ -72,9 +72,7 @@ PackagePath packageInCheckout(
 };
 
 /// The package [codebase]'s checkout at [checkout] hands a tool: a git
-/// codebase's root, and a hosted one's [unpackedPackage], its lock and
-/// package config those of the package around it where it resolves as a
-/// dependency.
+/// codebase's root, and a hosted one's [unpackedPackage].
 PackagePath handedOut(CheckoutPath checkout, Codebase codebase) =>
     switch (codebase) {
       Git(codebase: final GitCodebase git) => packageIn(
@@ -82,23 +80,27 @@ PackagePath handedOut(CheckoutPath checkout, Codebase codebase) =>
         git.root,
         .root,
       ),
-      Hosted(codebase: final HostedCodebase hosted) => ._((
-        path: unpackedPackage(checkout, hosted).path,
-        resolvedIn: hostedPackage(checkout, hosted, .root).path,
-        os: checkout.os,
-      )),
+      Hosted(codebase: final HostedCodebase hosted) => unpackedPackage(
+        checkout,
+        hosted,
+      ),
     };
 
 /// The directory `dart pub unpack` unpacks [codebase]'s package into, inside
-/// [checkout]: `<package>-<version>`.
-PackagePath unpackedPackage(CheckoutPath checkout, HostedCodebase codebase) =>
-    _resolvingAlone(
-      checkout.os.paths.join(
-        checkout.path,
-        '${codebase.package.name}-${codebase.version.version}',
-      ),
-      checkout.os,
-    );
+/// [checkout], `<package>-<version>`, its lock and package config those of
+/// the package around it in the checkout's top where it resolves as a
+/// dependency of that package.
+PackagePath unpackedPackage(CheckoutPath checkout, HostedCodebase codebase) {
+  final String unpacked = _unpackedIn(checkout, codebase);
+  return ._((
+    path: unpacked,
+    resolvedIn: switch (codebase.resolution) {
+      .alone => unpacked,
+      .asDependency => checkout.path,
+    },
+    os: checkout.os,
+  ));
+}
 
 /// The directory [codebase]'s [package] resolves in, inside [checkout]: for
 /// the root, the checkout's top where it resolves as a dependency of the
@@ -108,17 +110,22 @@ PackagePath hostedPackage(
   CheckoutPath checkout,
   HostedCodebase codebase,
   Package package,
-) {
-  final PackagePath unpacked = unpackedPackage(checkout, codebase);
-  return switch ((package, codebase.resolution)) {
-    (.root, .alone) => unpacked,
-    (.root, .asDependency) => _resolvingAlone(checkout.path, checkout.os),
-    (.example, _) => _resolvingAlone(
-      checkout.os.paths.join(unpacked.path, 'example'),
-      checkout.os,
-    ),
-  };
-}
+) => switch ((package, codebase.resolution)) {
+  (.root, .alone) => unpackedPackage(checkout, codebase),
+  (.root, .asDependency) => _resolvingAlone(checkout.path, checkout.os),
+  (.example, _) => _resolvingAlone(
+    checkout.os.paths.join(_unpackedIn(checkout, codebase), 'example'),
+    checkout.os,
+  ),
+};
+
+/// The path of the directory `dart pub unpack` unpacks [codebase]'s package
+/// into, inside [checkout].
+String _unpackedIn(CheckoutPath checkout, HostedCodebase codebase) =>
+    checkout.os.paths.join(
+      checkout.path,
+      '${codebase.package.name}-${codebase.version.version}',
+    );
 
 /// The package at [root], the codebase's root, inside [scratch].
 PackagePath packageInScratch(ScratchPath scratch, RepoRoot root) =>

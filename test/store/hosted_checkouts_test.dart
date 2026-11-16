@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:muster/src/model/around_pubspec.dart';
 import 'package:muster/src/model/checkout.dart';
+import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/example.dart';
 import 'package:muster/src/model/executable.dart';
@@ -9,8 +10,10 @@ import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/locks_directory.dart';
+import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/package_path.dart';
 import 'package:muster/src/model/parse_stamp.dart';
+import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/checkouts.dart';
@@ -23,6 +26,7 @@ import '../support/loads.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
 import '../support/spy_runner.dart';
+import '../support/write_file.dart';
 
 void main() {
   late Directory temp;
@@ -242,11 +246,61 @@ void main() {
         ),
       ),
     );
+    // A lock of its own for the root, so its checkout reaches the resolve,
+    // which fails on the pubspec it lacks.
+    await writeFile(keptLockOf(locks, Hosted(codebase), .root).path, lockText);
     await expectLater(
       checkouts.checkout(Hosted(codebase), locks),
-      throwsA(storeFault(isA<Unlocked>())),
+      throwsA(
+        storeFault(
+          isA<CommandFailed>().having(
+            (CommandFailed f) => f.command.arguments.take(2),
+            'arguments',
+            ['pub', 'get'],
+          ),
+        ),
+      ),
     );
   });
+
+  for (final Resolution resolution in Resolution.values) {
+    test('every package path a hosted checkout resolved '
+        '`${resolution.word}` builds names the lock and package config its '
+        'resolve wrote, never a lock the package is served with', () async {
+      serveLeaf(
+        server,
+        'a',
+        '1.0.0',
+        example: true,
+        files: {'pubspec.lock': '# served\n$lockText'},
+      );
+      final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+      final Checkout checkout = await lockedCheckout(
+        checkouts,
+        locks,
+        codebase,
+      );
+      final CheckoutPath at = appCheckout(checkouts);
+      for (final (String name, PackagePath path, Package package) in [
+        ('unpacked', unpackedPackage(at, codebase), .root),
+        ('handed out', checkout.package, .root),
+        ('root', hostedPackage(at, codebase, .root), .root),
+        ('example', hostedPackage(at, codebase, .example), .example),
+      ]) {
+        expect(
+          await File(path.lock.path).readAsString(),
+          await File(keptLockOf(locks, Hosted(codebase), package).path)
+              .readAsString(),
+          reason: name,
+        );
+        expect(
+          await File(path.packageConfig.path).exists(),
+          isTrue,
+          reason: name,
+        );
+      }
+    });
+  }
 
   test(
     'a lock resolves afresh, never from a lock the package is served',
