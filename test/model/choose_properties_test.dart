@@ -1,4 +1,4 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/at_commit.dart';
 import 'package:muster/src/model/at_commit_files.dart';
 import 'package:muster/src/model/choose_locks.dart';
@@ -9,53 +9,48 @@ import 'package:muster/src/model/package_file.dart';
 import 'package:muster/src/model/read_at_commit.dart';
 import 'package:muster/src/model/repo_path.dart';
 import 'package:muster/src/model/repo_root.dart';
+import 'package:test/test.dart';
 
 import '../support/manifests.dart';
 
-/// A codebase's root, which of the files [atCommitFiles] names its commit
-/// lists, by index, other files it lists beside them, and which packages
-/// have a kept lock.
-typedef _Draw = ({
-  RepoRoot root,
-  Set<int> listed,
-  List<String> others,
-  Set<Package> kept,
-});
-
-final Generator<_Draw> _draw = any.combine4(
-  any.normalRoot,
-  any.set(any.intInRange(0, 3)),
-  any.list(any.choose(['README.md', 'example/README.md', 'lib/pubspec.lock'])),
-  any.set(any.choose(Package.values)),
-  (String root, Set<int> listed, List<String> others, Set<Package> kept) =>
-      (root: .parse(root)!, listed: listed, others: others, kept: kept),
-);
-
 void main() {
-  Glados(_draw, .new(numRuns: 300)).test(
+  property(
     'Each package a git codebase resolves, its `root` and an `example/` with '
     'a pubspec of its own, takes the `pubspec.lock` its commit holds there, '
     'else its kept lock, and with neither the codebase returns `Unlocked`.',
-    (_Draw draw) {
-      final List<RepoPath> files = atCommitFiles(draw.root);
+    (Draw draw) {
+      final RepoRoot root = .parse(draw(anyNormalRoot, label: 'root'))!;
+      final Set<int> indices = draw(
+        .set(.integer(min: 0, max: 2)),
+        label: 'indices',
+      );
+      final List<String> others = draw(
+        .list(.element(['README.md', 'example/README.md', 'lib/pubspec.lock'])),
+        label: 'others',
+      );
+      final Set<Package> kept = draw(
+        .set(.element(Package.values)),
+        label: 'kept',
+      );
+      final List<RepoPath> files = atCommitFiles(root);
       final Set<RepoPath> listed = {
-        for (final int i in draw.listed) files[i],
-        for (final String other in draw.others)
-          Package.root.inRepo(draw.root).join(other),
+        for (final int i in indices) files[i],
+        for (final String other in others)
+          Package.root.inRepo(root).join(other),
       };
       bool lists(Package package, PackageFile file) =>
-          listed.contains(package.fileInRepo(draw.root, file));
+          listed.contains(package.fileInRepo(root, file));
       final List<Package> packages = [
         .root,
         if (lists(.example, .pubspec)) .example,
       ];
-      final AtCommit atCommit = readAtCommit(draw.root, listed);
+      final AtCommit atCommit = readAtCommit(root, listed);
       expect(atCommit.packages, packages.toSet());
       final List<Package> lacking = [
         for (final Package package in packages)
-          if (!lists(package, .lock) && !draw.kept.contains(package)) package,
+          if (!lists(package, .lock) && !kept.contains(package)) package,
       ];
-      final LockChoice choice = chooseLocks(atCommit, draw.kept);
+      final LockChoice choice = chooseLocks(atCommit, kept);
       switch (choice) {
         case LocksChosen(:final Map<Package, LockSource> locks):
           expect(lacking, isEmpty);
@@ -70,5 +65,6 @@ void main() {
           expect(package, lacking.first);
       }
     },
+    settings: .new(runs: 300),
   );
 }

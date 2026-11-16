@@ -1,12 +1,14 @@
 import 'dart:io';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/git_shrinks.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/manifests.dart';
@@ -14,7 +16,6 @@ import '../support/origin.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
-import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 import '../support/tree_under.dart';
 import '../support/write_file.dart';
@@ -39,29 +40,6 @@ enum _Dirt {
   /// A file the `.gitignore` ignores written.
   addIgnored,
 }
-
-/// The commits of a history, each the files of [_pool] it holds, the index
-/// of the pin among them, and each move: the index of its commit and what
-/// the consumer does to the scratch before it.
-typedef _Draw = ({List<Set<int>> history, int pin, List<(int, _Dirt)> moves});
-
-final Generator<_Draw> _draw = any
-    .combine3(
-      any.listWithLengthInRange(2, 5, any.set(any.intInRange(0, _pool.length))),
-      any.intInRange(0, 5),
-      any.listWithLengthInRange(
-        1,
-        5,
-        any.combine2(
-          any.intInRange(0, 5),
-          any.choose(_Dirt.values),
-          (int at, _Dirt dirt) => (at, dirt),
-        ),
-      ),
-      (List<Set<int>> history, int pin, List<(int, _Dirt)> moves) =>
-          (history: history, pin: pin, moves: moves),
-    )
-    .shrinkingAtMost(gitTries);
 
 /// The files of the commit at [index] of a history, holding the package
 /// `app`, the `.gitignore` and the files of [_pool] at [pool].
@@ -93,24 +71,45 @@ enum _Fault {
 }
 
 void main() {
-  Glados(_draw, .new(numRuns: 10)).test(
+  property(
     'A scratch worktree moves to any commit in its clone without touching '
     "any consumer's checkout, and is gone once it is disposed of.",
-    (_Draw draw) async {
+    (Draw draw) async {
+      final List<Set<int>> history = draw(
+        .list(
+          .set(.integer(min: 0, max: _pool.length - 1)),
+          minLength: 2,
+          maxLength: 4,
+        ),
+        label: 'history',
+      );
+      final int pin = draw(
+        .integer(min: 0, max: history.length - 1),
+        label: 'pin',
+      );
+      final List<(int commit, _Dirt dirt)> moves = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              draw(.integer(min: 0, max: history.length - 1)),
+              draw(.element(_Dirt.values)),
+            ),
+          ),
+          minLength: 1,
+          maxLength: 4,
+        ),
+        label: 'moves',
+      );
       await inTemp((Directory temp) async {
         final SpyRunner runner = .new(hermetic(temp));
         final Origin origin = await .make(temp, runner);
         final List<Commit> commits = [];
         Commit? parent;
-        for (int i = 0; i < draw.history.length; i++) {
-          parent = await origin.commit(
-            parent,
-            _commitFiles(i, draw.history[i]),
-          );
+        for (int i = 0; i < history.length; i++) {
+          parent = await origin.commit(parent, _commitFiles(i, history[i]));
           commits.add(parent);
         }
         await origin.ref('refs/heads/main', commits.last);
-        final int pin = draw.pin % commits.length;
         final GitCodebase app = codebaseOf(origin, commits[pin]);
         final String manifest = atRoot(temp);
         await writeManifest(manifest, [app]);
@@ -135,7 +134,7 @@ void main() {
           NotNamed() || NotGit() || ScratchFailed() => fail('$made'),
         };
         final String at = scratch.package.path;
-        for (final (int index, _Dirt dirt) in draw.moves) {
+        for (final (int to, _Dirt dirt) in moves) {
           switch (dirt) {
             case .none:
               break;
@@ -146,10 +145,9 @@ void main() {
             case .addIgnored:
               await writeFile(p.join(at, 'ignored', 'a.txt'), 'ignored');
           }
-          final int to = index % commits.length;
           expect(await scratch.move(commits[to]), isA<Moved>());
           expect(await headOf(at, runner), commits[to].hash);
-          expect(await filesUnder(at), _commitFiles(to, draw.history[to]));
+          expect(await filesUnder(at), _commitFiles(to, history[to]));
           for (final String root in roots) {
             expect(await treeUnder(root), before[root], reason: root);
           }
@@ -174,14 +172,16 @@ void main() {
         }
       });
     },
+    settings: .new(runs: 10, shrinkSteps: gitShrinks),
   );
 
-  Glados2(
-    any.choose(_Fault.values).shrinkingAtMost(gitTries),
-    any.lowercaseLetters.shrinkingAtMost(gitTries),
-    .new(numRuns: 18),
-  ).test('A scratch that cannot be made comes back as an outcome, never a '
-      'throw.', (_Fault fault, String letters) async {
+  property('A scratch that cannot be made comes back as an outcome, never a '
+      'throw.', (Draw draw) async {
+    final _Fault fault = draw(.element(_Fault.values), label: 'fault');
+    final String letters = draw(
+      .string(alphabet: .lowerCase),
+      label: 'letters',
+    );
     await inTemp((Directory temp) async {
       final SpyRunner runner = .new(hermetic(temp));
       final Origin origin = await .make(temp, runner);
@@ -276,14 +276,18 @@ void main() {
           expect(await scratchesLeft(temp), isEmpty);
       }
     });
-  });
+  }, settings: .new(runs: 18, shrinkSteps: gitShrinks));
 
-  Glados2(
-    any.nonEmptyList(any.bool).shrinkingAtMost(gitTries),
-    any.nonEmptyList(any.intInRange(0, 6)).shrinkingAtMost(gitTries),
-    .new(numRuns: 10),
-  ).test('A scratch asked of a hosted codebase gives `NotGit` and starts no '
-      'process.', (List<bool> hosted, List<int> asks) async {
+  property('A scratch asked of a hosted codebase gives `NotGit` and starts no '
+      'process.', (Draw draw) async {
+    final List<bool> hosted = draw(
+      .list(.boolean(), minLength: 1),
+      label: 'hosted',
+    );
+    final List<int> asks = draw(
+      .list(.integer(min: 0, max: 5), minLength: 1),
+      label: 'asks',
+    );
     await inTemp((Directory temp) async {
       // A server serving nothing, so no unpack reaches pub.dev.
       final PackageServer server = await .start();
@@ -324,7 +328,7 @@ void main() {
         await server.close();
       }
     });
-  });
+  }, settings: .new(runs: 10, shrinkSteps: gitShrinks));
 }
 
 /// Matches a scratch that failed for a failure [failure] matches.

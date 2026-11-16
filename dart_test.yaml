@@ -1,4 +1,4 @@
 # No test's own clock bounds it, so the Mac's load never fails a run that
 # would pass, and a hang falls to the check's bound. A property whose every
-# try runs git or a toolchain bounds its own shrink by a count of tries.
+# case runs git or a toolchain bounds its shrinking by a count of cases.
 timeout: none

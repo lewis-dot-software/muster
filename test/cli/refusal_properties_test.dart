@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/cli/refusal_text.dart';
 import 'package:muster/src/model/cache_directory.dart';
+import 'package:test/test.dart';
 
 import '../support/git.dart';
+import '../support/git_shrinks.dart';
 import '../support/loads.dart';
-import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 
 final String _sha1 = 'ab' * 20;
@@ -117,38 +118,35 @@ String _codebase(String key, String field, String value) {
 /// A manifest of one codebase whose fault sits at one place alone: a value
 /// drawn for a key it knows, half the draws, else a key drawn for the
 /// codebase or for one of its fields.
-final Generator<String> _codebaseFault = any.either(
-  any.combine2(
-    any.choose(['commit', 'root', 'toolchain']),
-    any.choose(_values),
-    (String field, String value) => _codebase('app', field, value),
+final Gen<String> _codebaseFault = .oneOf([
+  .build(
+    (Draw draw) => _codebase(
+      'app',
+      draw(.element(['commit', 'root', 'toolchain'])),
+      draw(.element(_values)),
+    ),
   ),
-  any.either(
-    any
-        .choose(_codebaseKeys)
-        .map((String key) => _codebase(key, 'toolchain', 'dart')),
-    any
-        .choose(_fieldKeys)
-        .map((String field) => _codebase('app', field, 'dart')),
-  ),
-);
+  .oneOf([
+    .element(
+      _codebaseKeys,
+    ).map((String key) => _codebase(key, 'toolchain', 'dart')),
+    .element(_fieldKeys).map((String field) => _codebase('app', field, 'dart')),
+  ]),
+]);
 
 /// A manifest's bytes: a codebase with one fault drawn, or lines drawn from
 /// [_lines] and from [_characters], with a byte no UTF-8 holds after them
 /// where one is drawn.
-final Generator<List<int>> _manifest = any
-    .either(
-      _codebaseFault.map(utf8.encode),
-      any.combine2(
-        any.list(any.either(any.choose(_lines), any.stringOf(_characters))),
-        any.bool,
-        (List<String> lines, bool notUtf8) => [
-          ...utf8.encode(lines.join('\n')),
-          if (notUtf8) 0xff,
-        ],
-      ),
-    )
-    .shrinkingAtMost(gitTries);
+final Gen<List<int>> _manifest = .oneOf([
+  _codebaseFault.map(utf8.encode),
+  .build((Draw draw) {
+    final List<String> lines = draw(
+      .list(.oneOf([.element(_lines), .string(alphabet: .of(_characters))])),
+    );
+    final bool notUtf8 = draw(.boolean());
+    return [...utf8.encode(lines.join('\n')), if (notUtf8) 0xff];
+  }),
+]);
 
 /// The lines [text] runs over, broken at every line break Unicode names.
 List<String> _linesOf(String text) => text.split(_lineBreak);
@@ -162,10 +160,10 @@ String _absolute(Os os) => switch (os) {
 };
 
 /// A variable the cache could be taken from, or a name of another.
-final Generator<String> _variable = any.either(
-  any.choose([...cacheVariables]),
-  any.nonEmptyUppercaseLetters,
-);
+final Gen<String> _variable = .oneOf([
+  .element([...cacheVariables]),
+  .string(alphabet: .upperCase, minLength: 1),
+]);
 
 /// Whether [os] weighs [variable]: whether it alone, set to an absolute
 /// path, gives a cache.
@@ -179,8 +177,10 @@ Set<String> _variablesIn(String text) => {
 };
 
 void main() {
-  Glados(_manifest).test("Every refusal's text is one line, whatever the "
-      'manifest holds.', (List<int> bytes) async {
+  property("Every refusal's text is one line, whatever the manifest holds.", (
+    Draw draw,
+  ) async {
+    final List<int> bytes = draw(_manifest, label: 'bytes');
     await inTemp((Directory temp) async {
       final String manifest = atRoot(temp);
       await File(manifest).create(recursive: true);
@@ -197,16 +197,15 @@ void main() {
           fail('a load with no cache loaded');
       }
     });
-  });
+  }, settings: .new(shrinkSteps: gitShrinks));
 
-  Glados2(any.choose(Os.values), any.list(_variable)).test(
-    'The `NoCache` text names exactly the variables the running system '
-    'weighs.',
-    (Os os, List<String> others) {
-      expect(_variablesIn(refusalText(NoCache(os))), {
-        for (final String variable in [...cacheVariables, ...others])
-          if (_weighs(os, variable)) variable,
-      });
-    },
-  );
+  property('The `NoCache` text names exactly the variables the running system '
+      'weighs.', (Draw draw) {
+    final Os os = draw(.element(Os.values), label: 'os');
+    final List<String> others = draw(.list(_variable), label: 'others');
+    expect(_variablesIn(refusalText(NoCache(os))), {
+      for (final String variable in [...cacheVariables, ...others])
+        if (_weighs(os, variable)) variable,
+    });
+  });
 }

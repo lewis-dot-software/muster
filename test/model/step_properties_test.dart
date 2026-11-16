@@ -1,39 +1,34 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/checkout_found.dart';
 import 'package:muster/src/model/checkout_step.dart';
 import 'package:muster/src/model/choose_checkout_step.dart';
 import 'package:muster/src/model/choose_clone_step.dart';
 import 'package:muster/src/model/clone_state.dart';
 import 'package:muster/src/model/clone_step.dart';
+import 'package:test/test.dart';
 
-/// A clone as the cache first reads it, and whether a clone afresh and a
-/// fetch would each leave it holding the pin's commit.
-typedef _Clone = ({CloneState first, bool cloneHolds, bool fetchHolds});
-
-final Generator<_Clone> _clone = any.combine3(
-  any.choose(CloneState.values),
-  any.bool,
-  any.bool,
-  (CloneState first, bool cloneHolds, bool fetchHolds) =>
-      (first: first, cloneHolds: cloneHolds, fetchHolds: fetchHolds),
-);
-
-/// The acts [chooseCloneStep] takes on [clone], in order, read again after
-/// each act as the cache reads it, through its last, [CloneStep.use] or
+/// The acts [chooseCloneStep] takes on a clone the cache first reads as
+/// [first], in order, read again after each act as the cache reads it,
+/// holding the pin's commit after a clone afresh where [cloneHolds] and
+/// after a fetch where [fetchHolds], through its last, [CloneStep.use] or
 /// [CloneStep.pinMissing].
-List<CloneStep> _steps(_Clone clone) {
+List<CloneStep> _steps(
+  CloneState first, {
+  required bool cloneHolds,
+  required bool fetchHolds,
+}) {
   final List<CloneStep> steps = [];
-  CloneState state = clone.first;
+  CloneState state = first;
   bool fetched = false;
   while (steps.length < 4) {
     final CloneStep step = chooseCloneStep(state, fetched: fetched);
     steps.add(step);
     switch (step) {
       case .clone:
-        state = clone.cloneHolds ? .holding : .lacking;
+        state = cloneHolds ? .holding : .lacking;
       case .fetch:
         fetched = true;
-        state = clone.fetchHolds ? .holding : .lacking;
+        state = fetchHolds ? .holding : .lacking;
       case .use || .pinMissing:
         return steps;
     }
@@ -42,12 +37,22 @@ List<CloneStep> _steps(_Clone clone) {
 }
 
 void main() {
-  Glados(_clone, .new(numRuns: 100)).test(
+  property(
     'A clone that is missing is cloned, one that lacks the pin\'s commit is '
     'fetched, and one that holds it is left untouched.',
-    (_Clone clone) {
-      final List<CloneStep> steps = _steps(clone);
-      expect(steps.first, switch (clone.first) {
+    (Draw draw) {
+      final CloneState first = draw(
+        .element(CloneState.values),
+        label: 'first',
+      );
+      final bool cloneHolds = draw(.boolean(), label: 'cloneHolds');
+      final bool fetchHolds = draw(.boolean(), label: 'fetchHolds');
+      final List<CloneStep> steps = _steps(
+        first,
+        cloneHolds: cloneHolds,
+        fetchHolds: fetchHolds,
+      );
+      expect(steps.first, switch (first) {
         .missing => CloneStep.clone,
         .lacking => CloneStep.fetch,
         .holding => CloneStep.use,
@@ -56,8 +61,8 @@ void main() {
       expect(steps.where((CloneStep s) => s == .fetch).length, lessThan(2));
       final bool holds = switch (steps.reversed.skip(1).firstOrNull) {
         null => true,
-        .clone => clone.cloneHolds,
-        .fetch => clone.fetchHolds,
+        .clone => cloneHolds,
+        .fetch => fetchHolds,
         .use || .pinMissing => fail('a step after the last in $steps'),
       };
       expect(steps.last, holds ? CloneStep.use : CloneStep.pinMissing);
@@ -66,12 +71,17 @@ void main() {
         steps.contains(CloneStep.fetch) && !holds,
       );
     },
+    settings: .new(runs: 100),
   );
 
-  Glados(any.choose(CheckoutFound.values)).test(
+  property(
     'A checkout that is a worktree of its URL\'s clone is moved to its pin, '
     'and any other is removed and added afresh.',
-    (CheckoutFound found) {
+    (Draw draw) {
+      final CheckoutFound found = draw(
+        .element(CheckoutFound.values),
+        label: 'found',
+      );
       expect(
         chooseCheckoutStep(found),
         found == .worktreeOfClone ? CheckoutStep.move : CheckoutStep.replace,

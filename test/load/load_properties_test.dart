@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/load/locking.dart';
@@ -16,15 +16,16 @@ import 'package:muster/src/model/toolchain.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:muster/src/store/store_fault.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import '../support/git.dart';
+import '../support/git_shrinks.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
-import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 import '../support/tree_under.dart';
 import '../support/write_file.dart';
@@ -38,7 +39,7 @@ enum _By {
   variable,
 }
 
-/// A bench for one draw: two origins, a runner that keeps what it ran, and
+/// A bench for one run: two origins, a runner that keeps what it ran, and
 /// the manifests a load is given.
 class _Bench {
   _Bench._(this.temp, this.runner, this.origins);
@@ -121,21 +122,13 @@ const List<String> _notYaml = [
 ];
 
 /// A file name whose ending is no `.yaml`.
-final Generator<String> _notYamlName = any
-    .combine2(
-      any.nonEmptyLetters,
-      any.choose([
-        '',
-        '.yml',
-        '.YAML',
-        '.yaml.bak',
-        '.json',
-        '_yaml',
-        '.yaml~',
-      ]),
-      (String stem, String ending) => '$stem$ending',
-    )
-    .shrinkingAtMost(gitTries);
+final Gen<String> _notYamlName = .build((Draw draw) {
+  final String stem = draw(.string(alphabet: .letters, minLength: 1));
+  final String ending = draw(
+    .element(['', '.yml', '.YAML', '.yaml.bak', '.json', '_yaml', '.yaml~']),
+  );
+  return '$stem$ending';
+});
 
 /// A fault a named manifest can meet.
 enum _ManifestFault { missing, unreadable, notYaml }
@@ -204,31 +197,30 @@ String _versionText(Toolchain toolchain) => switch (toolchain) {
 };
 
 void main() {
-  Glados2(
-    any
-        .nonEmptyList(
-          any.combine2(
-            any.choose(Toolchain.values),
-            any.bool,
-            (Toolchain toolchain, bool reached) =>
-                (toolchain: toolchain, reached: reached),
-          ),
-        )
-        .shrinkingAtMost(gitTries),
-    any
-        .listWithLength(
-          Toolchain.values.length,
-          any.choose(_VersionRead.values),
-        )
-        .shrinkingAtMost(gitTries),
-    .new(numRuns: 20),
-  ).test(
+  property(
     'A load reads each toolchain\'s SDK version at most once, however many '
     'codebases it names.',
-    (
-      List<({Toolchain toolchain, bool reached})> drawn,
-      List<_VersionRead> reads,
-    ) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<({Toolchain toolchain, bool reached})> drawn = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              toolchain: draw(.element(Toolchain.values)),
+              reached: draw(.boolean()),
+            ),
+          ),
+          minLength: 1,
+        ),
+        label: 'drawn',
+      );
+      final List<_VersionRead> reads = draw(
+        .list(
+          .element(_VersionRead.values),
+          minLength: Toolchain.values.length,
+          maxLength: Toolchain.values.length,
+        ),
+        label: 'reads',
+      );
       final _Bench bench = await .make(temp);
       bench.runner.before = (Command command) async {
         if (_versionOf(command) case final Toolchain toolchain) {
@@ -320,121 +312,116 @@ void main() {
         }
       }
     }),
+    settings: .new(runs: 20, shrinkSteps: gitShrinks),
   );
 
-  Glados3(
-    _notYamlName,
-    any.choose(_By.values).shrinkingAtMost(gitTries),
-    any.intInRange(0, 3).shrinkingAtMost(gitTries),
-    .new(numRuns: 40),
-  ).test('A manifest whose file name does not end `.yaml` refuses the load.', (
-    String name,
-    _By by,
-    int before,
-  ) async {
-    expect(name, isNot(endsWith('.yaml')));
-    await inTemp((Directory temp) async {
-      final _Bench bench = await .make(temp);
-      for (int i = 0; i < before; i++) {
-        await bench.manifest('good$i', [], by);
-      }
-      final String path = p.join(temp.path, name);
-      await writeManifest(path, []);
-      bench.give(path, by);
-      expect(
-        await bench.load(),
-        refusedFor(
-          isA<NotManifestName>().having(
-            (NotManifestName n) => n.path,
-            'path',
-            path,
+  property(
+    'A manifest whose file name does not end `.yaml` refuses the load.',
+    (Draw draw) async {
+      final String name = draw(_notYamlName, label: 'name');
+      final _By by = draw(.element(_By.values), label: 'by');
+      final int before = draw(.integer(min: 0, max: 2), label: 'before');
+      expect(name, isNot(endsWith('.yaml')));
+      await inTemp((Directory temp) async {
+        final _Bench bench = await .make(temp);
+        for (int i = 0; i < before; i++) {
+          await bench.manifest('good$i', [], by);
+        }
+        final String path = p.join(temp.path, name);
+        await writeManifest(path, []);
+        bench.give(path, by);
+        expect(
+          await bench.load(),
+          refusedFor(
+            isA<NotManifestName>().having(
+              (NotManifestName n) => n.path,
+              'path',
+              path,
+            ),
           ),
-        ),
-      );
-    });
-  });
+        );
+      });
+    },
+    settings: .new(runs: 40, shrinkSteps: gitShrinks),
+  );
 
-  Glados3(
-    any.choose(_ManifestFault.values).shrinkingAtMost(gitTries),
-    any.choose(_By.values).shrinkingAtMost(gitTries),
-    any
-        .combine2(
-          any.intInRange(0, 3),
-          any.choose(_notYaml),
-          (int before, String text) => (before, text),
-        )
-        .shrinkingAtMost(gitTries),
-    .new(numRuns: 40),
-  ).test('A named manifest that is missing, unreadable or not YAML refuses the '
-      'load, naming the file and why.', (
-    _ManifestFault fault,
-    _By by,
-    (int, String) draw,
-  ) async {
-    final (int before, String text) = draw;
-    await inTemp((Directory temp) async {
-      final _Bench bench = await .make(temp);
-      for (int i = 0; i < before; i++) {
-        await bench.manifest('good$i', [], by);
-      }
-      final String path = p.join(temp.path, 'faulty.yaml');
-      bench.give(path, by);
-      switch (fault) {
-        case .missing:
-          break;
-        case .unreadable:
-          await Directory(path).create();
-        case .notYaml:
-          await File(path).writeAsString(text);
-      }
-      expect(
-        await bench.load(),
-        refusedFor(switch (fault) {
-          .missing => isA<ManifestMissing>().having(
-            (ManifestMissing m) => m.manifest.path,
-            'manifest',
-            path,
-          ),
-          .unreadable =>
-            isA<ManifestUnreadable>()
-                .having(
-                  (ManifestUnreadable u) => u.manifest.path,
-                  'manifest',
-                  path,
-                )
-                .having(
-                  (ManifestUnreadable u) => u.reason,
-                  'reason',
-                  isNotEmpty,
-                ),
-          .notYaml =>
-            isA<ManifestInvalid>()
-                .having(
-                  (ManifestInvalid i) => i.manifest.path,
-                  'manifest',
-                  path,
-                )
-                .having(
-                  (ManifestInvalid i) => i.refusal,
-                  'refusal',
-                  isA<NotYaml>().having(
-                    (NotYaml n) => n.reason,
+  property(
+    'A named manifest that is missing, unreadable or not YAML refuses the '
+    'load, naming the file and why.',
+    (Draw draw) async {
+      final _ManifestFault fault = draw(
+        .element(_ManifestFault.values),
+        label: 'fault',
+      );
+      final _By by = draw(.element(_By.values), label: 'by');
+      final int before = draw(.integer(min: 0, max: 2), label: 'before');
+      final String text = draw(.element(_notYaml), label: 'text');
+      await inTemp((Directory temp) async {
+        final _Bench bench = await .make(temp);
+        for (int i = 0; i < before; i++) {
+          await bench.manifest('good$i', [], by);
+        }
+        final String path = p.join(temp.path, 'faulty.yaml');
+        bench.give(path, by);
+        switch (fault) {
+          case .missing:
+            break;
+          case .unreadable:
+            await Directory(path).create();
+          case .notYaml:
+            await File(path).writeAsString(text);
+        }
+        expect(
+          await bench.load(),
+          refusedFor(switch (fault) {
+            .missing => isA<ManifestMissing>().having(
+              (ManifestMissing m) => m.manifest.path,
+              'manifest',
+              path,
+            ),
+            .unreadable =>
+              isA<ManifestUnreadable>()
+                  .having(
+                    (ManifestUnreadable u) => u.manifest.path,
+                    'manifest',
+                    path,
+                  )
+                  .having(
+                    (ManifestUnreadable u) => u.reason,
                     'reason',
                     isNotEmpty,
                   ),
-                ),
-        }),
-      );
-    });
-  });
+            .notYaml =>
+              isA<ManifestInvalid>()
+                  .having(
+                    (ManifestInvalid i) => i.manifest.path,
+                    'manifest',
+                    path,
+                  )
+                  .having(
+                    (ManifestInvalid i) => i.refusal,
+                    'refusal',
+                    isA<NotYaml>().having(
+                      (NotYaml n) => n.reason,
+                      'reason',
+                      isNotEmpty,
+                    ),
+                  ),
+          }),
+        );
+      });
+    },
+    settings: .new(runs: 40, shrinkSteps: gitShrinks),
+  );
 
-  Glados(
-    any.choose([null, '', ':', '::']).shrinkingAtMost(gitTries),
-    .new(numRuns: 8),
-  ).test(
+  property(
     'A load with no manifest at all refuses: no `muster.yaml` at the root and '
     'nothing in `MUSTER_MANIFESTS`.',
-    (String? listed) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final String? listed = draw(
+        .element(<String?>[null, '', ':', '::']),
+        label: 'listed',
+      );
       expect(
         await loaderIn(
           temp,
@@ -444,29 +431,29 @@ void main() {
         refusedFor(isA<NoManifest>()),
       );
     }),
+    settings: .new(runs: 8, shrinkSteps: gitShrinks),
   );
 
-  Glados2(
-    any
-        .nonEmptyList(
-          any.list(
-            any.combine3(
-              any.intInRange(0, 6),
-              any.bool,
-              any.choose(_Kind.values),
-              (int n, bool good, _Kind kind) => (n, good, kind),
-            ),
-          ),
-        )
-        .shrinkingAtMost(gitTries),
-    any.bool.shrinkingAtMost(gitTries),
-    .new(numRuns: 10),
-  ).test(
+  property(
     'A load naming git and hosted codebases gives one outcome per codebase, in '
     "the manifests' order, whatever its kind.",
-    (List<List<(int, bool, _Kind)>> manifests, bool rootFirst) => inTemp((
-      Directory temp,
-    ) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<List<(int, bool, _Kind)>> manifests = draw(
+        .list(
+          .list(
+            .build(
+              (Draw draw) => (
+                draw(.integer(min: 0, max: 5)),
+                draw(.boolean()),
+                draw(.element(_Kind.values)),
+              ),
+            ),
+          ),
+          minLength: 1,
+        ),
+        label: 'manifests',
+      );
+      final bool rootFirst = draw(.boolean(), label: 'rootFirst');
       final _Bench bench = await .make(temp);
       final PackageServer server = await .start();
       try {
@@ -535,12 +522,14 @@ void main() {
         await server.close();
       }
     }),
+    settings: .new(runs: 10, shrinkSteps: gitShrinks),
   );
 
-  Glados(any.bool.shrinkingAtMost(gitTries), .new(numRuns: 3)).test(
+  property(
     'The package config a `Fetched` names is the one its codebase\'s '
     'resolve wrote, whatever its resolution.',
-    (bool example) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final bool example = draw(.boolean(), label: 'example');
       final _Bench bench = await .make(temp);
       final PackageServer server = await .start();
       try {
@@ -600,16 +589,14 @@ void main() {
         await server.close();
       }
     }),
+    settings: .new(runs: 3, shrinkSteps: gitShrinks),
   );
 
-  Glados2(
-    any.choose(_Refusal.values).shrinkingAtMost(gitTries),
-    any.intInRange(0, 3).shrinkingAtMost(gitTries),
-    .new(numRuns: 24),
-  ).test('A refused load starts no process and writes no file.', (
-    _Refusal refusal,
-    int before,
+  property('A refused load starts no process and writes no file.', (
+    Draw draw,
   ) async {
+    final _Refusal refusal = draw(.element(_Refusal.values), label: 'refusal');
+    final int before = draw(.integer(min: 0, max: 2), label: 'before');
     await inTemp((Directory temp) async {
       final _Bench bench = await .make(temp);
       // A load with no manifest at all is given none, good or faulty.
@@ -686,52 +673,47 @@ void main() {
       expect(bench.runner.given, isEmpty);
       expect(await treeUnder(temp.path), tree);
     });
-  });
+  }, settings: .new(runs: 24, shrinkSteps: gitShrinks));
 
-  Glados(
-    any
-        .nonEmptyList(
-          any.combine4(
-            any.bool,
-            any.bool,
-            any.bool,
-            any.bool,
-            (bool nested, bool example, bool committed, bool listed) => (
-              nested: nested,
-              example: example,
-              committed: committed,
-              listed: listed,
-            ),
-          ),
-        )
-        .shrinkingAtMost(gitTries),
-    .new(numRuns: 10),
-  ).test(
+  property(
     'A load right after another load hands out the same paths, and clones, '
     'checks out and resolves nothing.',
-    (
-      List<({bool nested, bool example, bool committed, bool listed})> draws,
-    ) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<({bool nested, bool example, bool committed, bool listed})>
+      draws = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              nested: draw(.boolean()),
+              example: draw(.boolean()),
+              committed: draw(.boolean()),
+              listed: draw(.boolean()),
+            ),
+          ),
+          minLength: 1,
+        ),
+        label: 'draws',
+      );
       final _Bench bench = await .make(temp);
       final List<GitCodebase> atRootManifest = [];
       final List<GitCodebase> inListed = [];
       final String listed = p.join(temp.path, 'listed.yaml');
-      for (final (int i, draw) in draws.take(3).indexed) {
-        final String at = draw.nested ? 'pkg' : '.';
+      for (final (int i, drawn) in draws.take(3).indexed) {
+        final String at = drawn.nested ? 'pkg' : '.';
         final GitCodebase codebase = await bench.codebase('c$i', {
-          ...packageFiles('c$i', at: at, locked: draw.committed),
-          if (draw.example)
+          ...packageFiles('c$i', at: at, locked: drawn.committed),
+          if (drawn.example)
             ...packageFiles(
               'c${i}_example',
               at: '$at/example',
-              locked: draw.committed,
+              locked: drawn.committed,
             ),
         }, root: at);
-        (draw.listed ? inListed : atRootManifest).add(codebase);
-        if (!draw.committed) {
-          for (final Package package in [.root, if (draw.example) .example]) {
+        (drawn.listed ? inListed : atRootManifest).add(codebase);
+        if (!drawn.committed) {
+          for (final Package package in [.root, if (drawn.example) .example]) {
             final KeptLockPath kept = keptLockOf(
-              locksBeside(draw.listed ? listed : atRoot(temp)),
+              locksBeside(drawn.listed ? listed : atRoot(temp)),
               Git(codebase),
               package,
             );
@@ -761,16 +743,21 @@ void main() {
         everyElement(anyOf(endsWith(' --version'), contains(' status '))),
       );
     }),
+    settings: .new(runs: 10, shrinkSteps: gitShrinks),
   );
 
-  Glados2(
-    any.nonEmptyList(any.choose(_Fault.values)).shrinkingAtMost(gitTries),
-    any.intInRange(0, 4).map((int n) => n == 0).shrinkingAtMost(gitTries),
-    .new(numRuns: 12),
-  ).test(
+  property(
     'Every failure a codebase meets comes back as an outcome other than '
     '`Fetched`, and nothing throws out of `Muster.load` but a bug.',
-    (List<_Fault> faults, bool unstartable) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<_Fault> faults = draw(
+        .list(.element(_Fault.values), minLength: 1),
+        label: 'faults',
+      );
+      final bool unstartable = draw(
+        .integer(min: 0, max: 3).map((int n) => n == 0),
+        label: 'unstartable',
+      );
       final _Bench bench = await .make(temp);
       final List<GitCodebase> codebases = [];
       final Map<String, Matcher> expected = {};
@@ -848,59 +835,70 @@ void main() {
         }
       }
     }),
+    settings: .new(runs: 12, shrinkSteps: gitShrinks),
   );
 
-  Glados3(
-    any.nonEmptyList(any.bool).shrinkingAtMost(gitTries),
-    any.set(any.intInRange(0, 3)).shrinkingAtMost(gitTries),
-    any.set(any.intInRange(0, 2)).shrinkingAtMost(gitTries),
-    .new(numRuns: 10),
-  ).test('A checkout or a clone deleted by hand comes back on the next load.', (
-    List<bool> fromSecond,
-    Set<int> checkouts,
-    Set<int> clones,
-  ) async {
-    await inTemp((Directory temp) async {
-      final _Bench bench = await .make(temp);
-      final List<GitCodebase> codebases = [
-        for (final (int i, bool second) in fromSecond.take(3).indexed)
-          await bench.codebase(
-            'c$i',
-            packageFiles('c$i'),
-            origin: second ? 1 : 0,
-          ),
-      ];
-      await writeManifest(atRoot(temp), codebases);
-      final Map<String, Matcher> handed = {
-        for (final GitCodebase codebase in codebases)
-          codebase.name.name: fetchedAt(bench.checkoutOf(codebase)),
-      };
-      expect(await bench.load(), loadedWith(handed));
-      for (final (int i, GitCodebase codebase) in codebases.indexed) {
-        if (checkouts.contains(i)) {
-          await Directory(bench.checkoutOf(codebase)).delete(recursive: true);
+  property(
+    'A checkout or a clone deleted by hand comes back on the next load.',
+    (Draw draw) async {
+      final List<bool> fromSecond = draw(
+        .list(.boolean(), minLength: 1),
+        label: 'fromSecond',
+      );
+      final Set<int> checkouts = draw(
+        .set(.integer(min: 0, max: 2)),
+        label: 'checkouts',
+      );
+      final Set<int> clones = draw(
+        .set(.integer(min: 0, max: 1)),
+        label: 'clones',
+      );
+      await inTemp((Directory temp) async {
+        final _Bench bench = await .make(temp);
+        final List<GitCodebase> codebases = [
+          for (final (int i, bool second) in fromSecond.take(3).indexed)
+            await bench.codebase(
+              'c$i',
+              packageFiles('c$i'),
+              origin: second ? 1 : 0,
+            ),
+        ];
+        await writeManifest(atRoot(temp), codebases);
+        final Map<String, Matcher> handed = {
+          for (final GitCodebase codebase in codebases)
+            codebase.name.name: fetchedAt(bench.checkoutOf(codebase)),
+        };
+        expect(await bench.load(), loadedWith(handed));
+        for (final (int i, GitCodebase codebase) in codebases.indexed) {
+          if (checkouts.contains(i)) {
+            await Directory(bench.checkoutOf(codebase)).delete(recursive: true);
+          }
         }
-      }
-      for (final int origin in clones) {
-        final Directory clone = .new(
-          cloneOf(
-            temp,
-            codebaseOf(bench.origins[origin], codebases.first.commit),
-          ).path,
-        );
-        if (await clone.exists()) {
-          await clone.delete(recursive: true);
+        for (final int origin in clones) {
+          final Directory clone = .new(
+            cloneOf(
+              temp,
+              codebaseOf(bench.origins[origin], codebases.first.commit),
+            ).path,
+          );
+          if (await clone.exists()) {
+            await clone.delete(recursive: true);
+          }
         }
-      }
-      expect(await bench.load(), loadedWith(handed));
-      for (final GitCodebase codebase in codebases) {
-        expect(
-          await File(p.join(bench.checkoutOf(codebase), 'pubspec.yaml'))
-              .readAsString(),
-          pubspecOf(codebase.name.name),
-        );
-        expect(await Directory(cloneOf(temp, codebase).path).exists(), isTrue);
-      }
-    });
-  });
+        expect(await bench.load(), loadedWith(handed));
+        for (final GitCodebase codebase in codebases) {
+          expect(
+            await File(p.join(bench.checkoutOf(codebase), 'pubspec.yaml'))
+                .readAsString(),
+            pubspecOf(codebase.name.name),
+          );
+          expect(
+            await Directory(cloneOf(temp, codebase).path).exists(),
+            isTrue,
+          );
+        }
+      });
+    },
+    settings: .new(runs: 10, shrinkSteps: gitShrinks),
+  );
 }

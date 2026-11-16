@@ -130,6 +130,27 @@ codebases:
     }
   });
 
+  test('a tag whose escape does not decode, and a `%YAML` version past an '
+      "integer's range, refuse", () {
+    for (final String text in [
+      '!!%a',
+      '!!%ab',
+      '%YAML 1.99999999999999999999\n---\ncodebases: {}',
+    ]) {
+      expect(
+        parseManifest(text),
+        refused(
+          isA<NotYaml>().having(
+            (r) => r.reason,
+            'reason',
+            contains('does not read'),
+          ),
+        ),
+        reason: text,
+      );
+    }
+  });
+
   group('a key muster does not know refuses, named by its path:', () {
     test('at the top', () {
       expect(

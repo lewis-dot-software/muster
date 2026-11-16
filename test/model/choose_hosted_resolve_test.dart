@@ -76,7 +76,14 @@ void main() {
     });
 
     test('reads neither from a pubspec that is no YAML map', () {
-      for (final String pubspec in ['name: [a\n', '- workspace\n', '']) {
+      for (final String pubspec in [
+        'name: [a\n',
+        '- workspace\n',
+        '',
+        '!!%a',
+        '!!%ab',
+        '%YAML 1.99999999999999999999\n---\nname: a\n',
+      ]) {
         expect(choose(.root, pubspec), plain, reason: pubspec);
       }
     });

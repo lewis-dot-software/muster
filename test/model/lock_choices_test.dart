@@ -1,4 +1,4 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/choose_unnamed.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -9,6 +9,7 @@ import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/partial_lock_path.dart';
 import 'package:muster/src/model/unnamed_lock.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import '../support/manifests.dart';
 
@@ -22,17 +23,15 @@ List<String> _namedFiles(List<GitCodebase> codebases) => [
 ];
 
 void main() {
-  Glados3(
-    any.gitCodebases(),
-    any.gitCodebases(),
-    any.list(any.choose(['a.lock', 'b.example.lock', 'README.md', '.lock'])),
-  ).test('Of the files a locks directory lists, every kept lock and partial no '
-      'codebase names is chosen for removal, in their file names\' order, and '
-      'nothing else is.', (
-    List<GitCodebase> named,
-    List<GitCodebase> others,
-    List<String> strays,
-  ) {
+  property('Of the files a locks directory lists, every kept lock and partial '
+      'no codebase names is chosen for removal, in their file names\' order, '
+      'and nothing else is.', (Draw draw) {
+    final List<GitCodebase> named = draw(anyGitCodebases(), label: 'named');
+    final List<GitCodebase> others = draw(anyGitCodebases(), label: 'others');
+    final List<String> strays = draw(
+      .list(.element(['a.lock', 'b.example.lock', 'README.md', '.lock'])),
+      label: 'strays',
+    );
     final List<String> listed = [
       for (final String name in [
         ..._namedFiles(named),

@@ -1,9 +1,10 @@
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import 'git.dart';
 import 'kernel_cache.dart';
@@ -149,14 +150,15 @@ void main() {
     expect(await File(kernel).readAsString(), 'kernel 2');
   });
 
-  Glados(
-    any.listWithLengthInRange(1, 12, any.choose(_Step.values)),
-    .new(numRuns: 20),
-  ).test(
+  property(
     'Over any run of asks and changes to the sources, a kernel is compiled '
     'at an ask alone where the sources have changed since the kernel kept, '
     'and every ask names a kernel of the sources as they stand.',
-    (List<_Step> steps) async {
+    (Draw draw) async {
+      final List<_Step> steps = draw(
+        .list(.element(_Step.values), minLength: 1, maxLength: 11),
+        label: 'steps',
+      );
       await inTemp((Directory temp) async {
         final _Bench bench = .new(temp);
         final String source = p.join(bench.directory, 'a.dart');
@@ -199,5 +201,6 @@ void main() {
         }
       });
     },
+    settings: .new(runs: 20),
   );
 }

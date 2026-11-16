@@ -1,8 +1,9 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/cache_directory.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import '../support/manifests.dart';
 
@@ -10,25 +11,6 @@ final CacheDirectory _cache = .of((
   variables: {'MUSTER_CACHE': '/cache'},
   os: .posix,
 ))!;
-
-/// Two codebases, the second's URL the first's where [same] holds.
-final Generator<(GitCodebase, GitCodebase)> _pair = any.combine3(
-  any.gitCodebase(),
-  any.gitCodebase(),
-  any.bool,
-  (GitCodebase a, GitCodebase b, bool same) => (
-    a,
-    same
-        ? (
-            name: b.name,
-            url: a.url,
-            commit: b.commit,
-            root: b.root,
-            toolchain: b.toolchain,
-          )
-        : b,
-  ),
-);
 
 void main() {
   test('a clone stands in the cache, named by a SHA-256 in hexadecimal', () {
@@ -87,9 +69,10 @@ void main() {
     );
   });
 
-  Glados(any.gitCodebase()).test(
+  property(
     'A temporary clone\'s name is read back as the clone it is made for.',
-    (GitCodebase codebase) {
+    (Draw draw) {
+      final GitCodebase codebase = draw(anyGitCodebase(), label: 'codebase');
       final ClonePath clone = .of(_cache, codebase.url);
       expect(
         ClonePath.ofTemporary(_cache, p.basename(clone.temporary.path)),
@@ -98,10 +81,21 @@ void main() {
     },
   );
 
-  Glados(_pair).test(
+  property(
     'Two codebases share a clone exactly when their URLs are the same string.',
-    (input) {
-      final (GitCodebase a, GitCodebase b) = input;
+    (Draw draw) {
+      final GitCodebase a = draw(anyGitCodebase(), label: 'a');
+      final GitCodebase other = draw(anyGitCodebase(), label: 'other');
+      final bool same = draw(.boolean(), label: 'same');
+      final GitCodebase b = same
+          ? (
+              name: other.name,
+              url: a.url,
+              commit: other.commit,
+              root: other.root,
+              toolchain: other.toolchain,
+            )
+          : other;
       expect(
         ClonePath.of(_cache, a.url) == .of(_cache, b.url),
         a.url.url == b.url.url,

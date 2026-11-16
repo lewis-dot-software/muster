@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/cli/cli.dart';
 import 'package:muster/src/cli/exit_code.dart';
@@ -9,10 +9,11 @@ import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/lock_removal.dart';
 import 'package:muster/src/model/quoted.dart';
+import 'package:test/test.dart';
 
 import '../support/fixed_loads.dart';
 import '../support/lines_of.dart';
-import '../support/outcome_anys.dart';
+import '../support/outcomes.dart';
 import '../support/refusal_case.dart';
 
 /// The detail an outcome's row carries, read off the outcome by its case.
@@ -62,14 +63,22 @@ Future<String> _rowsOf(FixedLoads loads, String verb) async {
 }
 
 void main() {
-  Glados2(
-    any.list(any.outcome),
-    any.intInRange(-RefusalCase.every.length, RefusalCase.every.length),
-  ).test(
+  property(
     '`muster fetch` prints one row for each codebase, its name, its outcome '
     "and that outcome's own detail, and exits non-zero when any outcome is "
     'not `Fetched` or the load is refused.',
-    (List<(GitCodebase, FetchOutcome)> drawn, int refusal) async {
+    (Draw draw) async {
+      final List<(GitCodebase, FetchOutcome)> drawn = draw(
+        .list(anyOutcome),
+        label: 'drawn',
+      );
+      final int refusal = draw(
+        .integer(
+          min: -RefusalCase.every.length,
+          max: RefusalCase.every.length - 1,
+        ),
+        label: 'refusal',
+      );
       final Map<CodebaseName, FetchOutcome> outcomes = {
         for (final (GitCodebase codebase, FetchOutcome outcome) in drawn)
           codebase.name: outcome,
@@ -120,41 +129,48 @@ void main() {
     },
   );
 
-  Glados3(
-    any.list(any.outcome),
-    any.list(any.lockOutcome),
-    any.list(any.removal),
-  ).test("Every row `muster fetch` and `muster lock` print holds its header's "
-      'cells, each one line with no tab, whatever a URL, a path or a command '
-      'carries.', (
-    List<(GitCodebase, FetchOutcome)> fetchedDrawn,
-    List<(GitCodebase, LockOutcome)> lockedDrawn,
-    List<LockRemoval> removals,
-  ) async {
-    final Map<CodebaseName, FetchOutcome> fetched = {
-      for (final (GitCodebase codebase, FetchOutcome outcome) in fetchedDrawn)
-        codebase.name: outcome,
-    };
-    final Map<CodebaseName, LockOutcome> locked = {
-      for (final (GitCodebase codebase, LockOutcome outcome) in lockedDrawn)
-        codebase.name: outcome,
-    };
-    for (final (String verb, FixedLoads loads, int rows) in [
-      ('fetch', FixedLoads.loading(fetched), fetched.length),
-      (
-        'lock',
-        FixedLoads(locks: Locked(locked, removals)),
-        _lockRows(locked.values, removals),
-      ),
-    ]) {
-      final List<List<String>> lines = linesOf(await _rowsOf(loads, verb));
-      expect(lines, hasLength(rows + 1), reason: verb);
-      for (final List<String> cells in lines) {
-        expect(cells, hasLength(3), reason: verb);
-        for (final String cell in cells) {
-          expect(cell, isNot(contains(_control)), reason: verb);
+  property(
+    "Every row `muster fetch` and `muster lock` print holds its header's "
+    'cells, each one line with no tab, whatever a URL, a path or a command '
+    'carries.',
+    (Draw draw) async {
+      final List<(GitCodebase, FetchOutcome)> fetchedDrawn = draw(
+        .list(anyOutcome),
+        label: 'fetchedDrawn',
+      );
+      final List<(GitCodebase, LockOutcome)> lockedDrawn = draw(
+        .list(anyLockOutcome),
+        label: 'lockedDrawn',
+      );
+      final List<LockRemoval> removals = draw(
+        .list(anyRemoval),
+        label: 'removals',
+      );
+      final Map<CodebaseName, FetchOutcome> fetched = {
+        for (final (GitCodebase codebase, FetchOutcome outcome) in fetchedDrawn)
+          codebase.name: outcome,
+      };
+      final Map<CodebaseName, LockOutcome> locked = {
+        for (final (GitCodebase codebase, LockOutcome outcome) in lockedDrawn)
+          codebase.name: outcome,
+      };
+      for (final (String verb, FixedLoads loads, int rows) in [
+        ('fetch', FixedLoads.loading(fetched), fetched.length),
+        (
+          'lock',
+          FixedLoads(locks: Locked(locked, removals)),
+          _lockRows(locked.values, removals),
+        ),
+      ]) {
+        final List<List<String>> lines = linesOf(await _rowsOf(loads, verb));
+        expect(lines, hasLength(rows + 1), reason: verb);
+        for (final List<String> cells in lines) {
+          expect(cells, hasLength(3), reason: verb);
+          for (final String cell in cells) {
+            expect(cell, isNot(contains(_control)), reason: verb);
+          }
         }
       }
-    }
-  });
+    },
+  );
 }

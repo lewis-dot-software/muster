@@ -1,4 +1,4 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/codebase_name.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -188,148 +188,151 @@ const Set<String> pubLetStand = {
   'when',
 };
 
-/// The generators the manifest's property tests draw from.
-extension ManifestAnys on Any {
-  /// A codebase's name.
-  Generator<String> get codebaseName => combine2(
-    choose(_lowercase.split('')),
-    stringOf('${_lowercase}0123456789_'),
-    (String head, String tail) => '$head$tail',
-  );
+/// A codebase's name.
+final Gen<String> anyCodebaseName = .build(
+  (Draw draw) =>
+      draw(.element(_lowercase.split(''))) +
+      draw(.string(alphabet: .of('${_lowercase}0123456789_'))),
+);
 
-  /// A pub package's name, as `dart pub get` takes one: a Dart identifier,
-  /// or identifiers joined by `.`, given a `_` where the whole is a word pub
-  /// reserves.
-  Generator<String> get packageName => combine2(
-    _identifier,
-    listWithLengthInRange(0, 3, _identifier),
-    (String head, List<String> tail) {
-      final String name = [head, ...tail].join('.');
-      return pubReserved.contains(name.toLowerCase()) ? '${name}_' : name;
-    },
-  );
+/// A Dart identifier: one drawn letter by letter, one opening on `_` as
+/// pub.dev's `_fe_analyzer_shared` does, or a word pub lets stand, in its
+/// own case or capitalised.
+final Gen<String> _identifier = .oneOf([
+  .build(
+    (Draw draw) =>
+        draw(.element('${_letters}_'.split(''))) +
+        draw(.string(alphabet: .of('${_letters}0123456789_'))),
+  ),
+  .element([
+    '_fe_analyzer_shared',
+    '_discoveryapis_commons',
+    for (final String word in pubLetStand) ...[
+      word,
+      '${word[0].toUpperCase()}${word.substring(1)}',
+    ],
+  ]),
+]);
 
-  /// A Dart identifier: one drawn letter by letter, one opening on `_` as
-  /// pub.dev's `_fe_analyzer_shared` does, or a word pub lets stand, in its
-  /// own case or capitalised.
-  Generator<String> get _identifier => either(
-    combine2(
-      choose('${_letters}_'.split('')),
-      stringOf('${_letters}0123456789_'),
-      (String head, String tail) => '$head$tail',
+/// A pub package's name, as `dart pub get` takes one: a Dart identifier,
+/// or identifiers joined by `.`, given a `_` where the whole is a word pub
+/// reserves.
+final Gen<String> anyPackageName = .build((Draw draw) {
+  final String name = [
+    draw(_identifier),
+    ...draw(.list(_identifier, maxLength: 2)),
+  ].join('.');
+  return pubReserved.contains(name.toLowerCase()) ? '${name}_' : name;
+});
+
+/// [length] lowercase hexadecimal digits.
+Gen<String> hexOfLength(int length) =>
+    .string(alphabet: .of(_hex), minLength: length, maxLength: length);
+
+/// A full hash, SHA-1's or SHA-256's.
+final Gen<String> anyFullHash = .build(
+  (Draw draw) => draw(hexOfLength(draw(.element([40, 64])))),
+);
+
+/// A root inside its repo, in its normal spelling.
+final Gen<String> anyNormalRoot = .list(
+  .element(['pkgs', 'app', 'b_c', 'tool']),
+).map((List<String> parts) => parts.isEmpty ? '.' : parts.join('/'));
+
+/// A git URL.
+final Gen<String> anyGitUrl = .build(
+  (Draw draw) =>
+      '${draw(.element(['https://example.com/', '/srv/', 'git@example.com:', 'file:///']))}'
+      '${draw(.string(alphabet: .letters, minLength: 1))}.git',
+);
+
+/// A codebase, its parts drawn from [names], [urls], [commits] and [roots].
+Gen<GitCodebase> anyGitCodebase({
+  Gen<String>? names,
+  Gen<String>? urls,
+  Gen<String>? commits,
+  Gen<String>? roots,
+}) => .build(
+  (Draw draw) => codebase(
+    draw(names ?? anyCodebaseName),
+    draw(urls ?? anyGitUrl),
+    draw(commits ?? anyFullHash),
+    draw(roots ?? anyNormalRoot),
+    draw(.element(Toolchain.values)),
+  ),
+);
+
+/// A manifest's codebases, each name once.
+Gen<List<GitCodebase>> anyGitCodebases({Gen<String>? names}) =>
+    .list(anyGitCodebase(names: names)).map(_uniqueGit);
+
+/// A manifest's codebases, each name once, at least one of them.
+final Gen<List<GitCodebase>> someGitCodebases = .list(
+  anyGitCodebase(),
+  minLength: 1,
+).map(_uniqueGit);
+
+/// Up to three dot-joined identifiers, each digits with no leading nought
+/// or letters and `-`, or none.
+final Gen<String> _identifiers = .list(
+  Gen.oneOf([
+    .integer(min: 0, max: 999).map((int n) => '$n'),
+    .build(
+      (Draw draw) =>
+          draw(.element(_lowercase.split(''))) +
+          draw(.string(alphabet: .of('$_lowercase-'))),
     ),
-    choose([
-      '_fe_analyzer_shared',
-      '_discoveryapis_commons',
-      for (final String word in pubLetStand) ...[
-        word,
-        '${word[0].toUpperCase()}${word.substring(1)}',
-      ],
-    ]),
-  );
+  ]),
+  maxLength: 3,
+).map((List<String> parts) => parts.join('.'));
 
-  /// [length] lowercase hexadecimal digits.
-  Generator<String> hexOfLength(int length) =>
-      listWithLength(length, choose(_hex.split(''))).map(_joined);
+/// A version pub reads, in its canonical spelling: a `major.minor.patch`,
+/// with a pre-release and a build where they are drawn.
+final Gen<String> anyCanonicalVersion = .build((Draw draw) {
+  final int major = draw(.integer(min: 0, max: 999));
+  final int minor = draw(.integer(min: 0, max: 999));
+  final int patch = draw(.integer(min: 0, max: 999));
+  final String pre = draw(_identifiers);
+  final String build = draw(_identifiers);
+  return [
+    '$major.$minor.$patch',
+    if (pre.isNotEmpty) '-$pre',
+    if (build.isNotEmpty) '+$build',
+  ].join();
+});
 
-  /// A full hash, SHA-1's or SHA-256's.
-  Generator<String> get fullHash => choose([40, 64]).bind(hexOfLength);
+/// A hosted codebase, its parts drawn from [names], [packages] and
+/// [versions].
+Gen<HostedCodebase> anyHostedCodebase({
+  Gen<String>? names,
+  Gen<String>? packages,
+  Gen<String>? versions,
+}) => .build(
+  (Draw draw) => hosted(
+    draw(names ?? anyCodebaseName),
+    draw(packages ?? anyPackageName),
+    draw(versions ?? anyCanonicalVersion),
+    draw(.element(Resolution.values)),
+    draw(.element(Toolchain.values)),
+  ),
+);
 
-  /// A root inside its repo, in its normal spelling.
-  Generator<String> get normalRoot =>
-      list(choose(['pkgs', 'app', 'b_c', 'tool']))
-          .map((List<String> parts) => parts.isEmpty ? '.' : parts.join('/'));
+/// A codebase of either kind, its name drawn from [names].
+Gen<Codebase> anyCodebase({Gen<String>? names}) => .oneOf([
+  anyGitCodebase(names: names).map(Git.new),
+  anyHostedCodebase(names: names).map(Hosted.new),
+]);
 
-  /// A git URL.
-  Generator<String> get gitUrl => combine2(
-    choose(['https://example.com/', '/srv/', 'git@example.com:', 'file:///']),
-    nonEmptyLetters,
-    (String scheme, String name) => '$scheme$name.git',
-  );
+/// A manifest's codebases of either kind, each name once.
+Gen<List<Codebase>> anyCodebases({Gen<String>? names}) =>
+    .list(anyCodebase(names: names)).map(_uniqueCodebases);
 
-  /// A codebase, its parts drawn from [names], [urls], [commits] and [roots].
-  Generator<GitCodebase> gitCodebase({
-    Generator<String>? names,
-    Generator<String>? urls,
-    Generator<String>? commits,
-    Generator<String>? roots,
-  }) => combine5(
-    names ?? codebaseName,
-    urls ?? gitUrl,
-    commits ?? fullHash,
-    roots ?? normalRoot,
-    choose(Toolchain.values),
-    codebase,
-  );
-
-  /// A manifest's codebases, each name once.
-  Generator<List<GitCodebase>> gitCodebases({Generator<String>? names}) =>
-      list(gitCodebase(names: names)).map(_uniqueGit);
-
-  /// A manifest's codebases, each name once, at least one of them.
-  Generator<List<GitCodebase>> someGitCodebases() =>
-      nonEmptyList(gitCodebase()).map(_uniqueGit);
-
-  /// A version pub reads, in its canonical spelling: a `major.minor.patch`,
-  /// with a pre-release and a build where they are drawn.
-  Generator<String> get canonicalVersion => combine5(
-    intInRange(0, 1000),
-    intInRange(0, 1000),
-    intInRange(0, 1000),
-    _identifiers,
-    _identifiers,
-    (int major, int minor, int patch, String pre, String build) => [
-      '$major.$minor.$patch',
-      if (pre.isNotEmpty) '-$pre',
-      if (build.isNotEmpty) '+$build',
-    ].join(),
-  );
-
-  /// Up to three dot-joined identifiers, each digits with no leading nought
-  /// or letters and `-`, or none.
-  Generator<String> get _identifiers => listWithLengthInRange(
-    0,
-    4,
-    either(
-      intInRange(0, 1000).map((int n) => '$n'),
-      combine2(
-        choose(_lowercase.split('')),
-        stringOf('$_lowercase-'),
-        (String head, String tail) => '$head$tail',
-      ),
-    ),
-  ).map((List<String> parts) => parts.join('.'));
-
-  /// A hosted codebase, its parts drawn from [names], [packages] and
-  /// [versions].
-  Generator<HostedCodebase> hostedCodebase({
-    Generator<String>? names,
-    Generator<String>? packages,
-    Generator<String>? versions,
-  }) => combine5(
-    names ?? codebaseName,
-    packages ?? packageName,
-    versions ?? canonicalVersion,
-    choose(Resolution.values),
-    choose(Toolchain.values),
-    hosted,
-  );
-
-  /// A codebase of either kind, its name drawn from [names].
-  Generator<Codebase> anyCodebase({Generator<String>? names}) => either(
-    gitCodebase(names: names).map(Git.new),
-    hostedCodebase(names: names).map(Hosted.new),
-  );
-
-  /// A manifest's codebases of either kind, each name once.
-  Generator<List<Codebase>> codebases({Generator<String>? names}) =>
-      list(anyCodebase(names: names)).map(_uniqueCodebases);
-
-  /// A manifest's codebases of either kind, each name once, at least one of
-  /// them.
-  Generator<List<Codebase>> someCodebases() =>
-      nonEmptyList(anyCodebase()).map(_uniqueCodebases);
-}
+/// A manifest's codebases of either kind, each name once, at least one of
+/// them.
+final Gen<List<Codebase>> someCodebases = .list(
+  anyCodebase(),
+  minLength: 1,
+).map(_uniqueCodebases);
 
 /// [codebases] with every codebase after the first whose [name] is its
 /// dropped.
@@ -346,5 +349,3 @@ List<GitCodebase> _uniqueGit(List<GitCodebase> codebases) =>
 
 List<Codebase> _uniqueCodebases(List<Codebase> codebases) =>
     _uniqueBy(codebases, (Codebase codebase) => codebase.name);
-
-String _joined(List<String> parts) => parts.join();

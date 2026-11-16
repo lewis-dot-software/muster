@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/model/codebase.dart';
@@ -11,9 +11,11 @@ import 'package:muster/src/model/lock_outcome.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/resolution.dart';
 import 'package:path/path.dart' as p;
+import 'package:test/test.dart';
 
 import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/git_shrinks.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
@@ -21,7 +23,6 @@ import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
-import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 import '../support/write_file.dart';
 
@@ -31,13 +32,14 @@ import '../support/write_file.dart';
 /// lists in place of the root's.
 typedef _Codebase = ({bool example, bool committed, bool kept, bool listed});
 
-final Generator<_Codebase> _codebase = any.combine4(
-  any.bool,
-  any.bool,
-  any.bool,
-  any.bool,
-  (bool example, bool committed, bool kept, bool listed) =>
-      (example: example, committed: committed, kept: kept, listed: listed),
+/// A codebase of a draw, its flags drawn in turn.
+final Gen<_Codebase> _codebase = .build(
+  (Draw draw) => (
+    example: draw(.boolean()),
+    committed: draw(.boolean()),
+    kept: draw(.boolean()),
+    listed: draw(.boolean()),
+  ),
 );
 
 /// The text a kept lock standing before a lock holds, which no resolve
@@ -69,18 +71,27 @@ final List<_Hosted> _hostedCases = [
         (resolution: resolution, example: example, standing: standing),
 ];
 
+/// An order of [length] items, each index below [length] once, drawn as a
+/// shuffle that takes each next item from those left.
+Gen<List<int>> _orderOf(int length) => .build((Draw draw) {
+  final List<int> left = [for (int i = 0; i < length; i++) i];
+  return [
+    for (int n = length; n > 0; n--)
+      left.removeAt(draw(.integer(min: 0, max: n - 1))),
+  ];
+});
+
 void main() {
-  Glados2(
-    any.nonEmptyList(_codebase).shrinkingAtMost(gitTries),
-    any.list(any.codebaseName).shrinkingAtMost(gitTries),
-    .new(numRuns: 10),
-  ).test(
+  property(
     '`muster lock` writes a kept lock for each codebase that needs one and '
     'has none, leaves every existing lock untouched, and removes every lock '
     'its manifest no longer names, so a second run changes nothing.',
-    (List<_Codebase> draws, List<String> strays) => inTemp((
-      Directory temp,
-    ) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<_Codebase> draws = draw(
+        .list(_codebase, minLength: 1),
+        label: 'draws',
+      );
+      final List<String> strays = draw(.list(anyCodebaseName), label: 'strays');
       final SpyRunner runner = .new(hermetic(temp));
       final Origin origin = await .make(temp, runner);
       final String listed = p.join(temp.path, 'elsewhere', 'listed.yaml');
@@ -88,24 +99,24 @@ void main() {
       final List<GitCodebase> inListed = [];
       final Map<KeptLockPath, bool> needed = {};
       final Set<KeptLockPath> standing = {};
-      for (final (int i, _Codebase draw) in draws.take(3).indexed) {
+      for (final (int i, _Codebase drawn) in draws.take(3).indexed) {
         final Commit pin = await origin.commit(null, {
-          ...packageFiles('c$i', locked: draw.committed),
-          if (draw.example)
+          ...packageFiles('c$i', locked: drawn.committed),
+          if (drawn.example)
             ...packageFiles(
               'c${i}_example',
               at: 'example',
-              locked: draw.committed,
+              locked: drawn.committed,
             ),
         });
         await origin.ref('refs/heads/c$i', pin);
         final GitCodebase codebase = codebaseOf(origin, pin, name: 'c$i');
-        final String manifest = draw.listed ? listed : atRoot(temp);
-        (draw.listed ? inListed : atRootManifest).add(codebase);
-        for (final Package package in [.root, if (draw.example) .example]) {
+        final String manifest = drawn.listed ? listed : atRoot(temp);
+        (drawn.listed ? inListed : atRootManifest).add(codebase);
+        for (final Package package in [.root, if (drawn.example) .example]) {
           final KeptLockPath kept = keptOf(manifest, codebase, package);
-          needed[kept] = !draw.committed;
-          if (draw.kept) {
+          needed[kept] = !drawn.committed;
+          if (drawn.kept) {
             await writeFile(kept.path, _standing);
             standing.add(kept);
           }
@@ -161,12 +172,17 @@ void main() {
       );
       expect(await locks(), written);
     }),
+    settings: .new(runs: 10, shrinkSteps: gitShrinks),
   );
 
-  Glados(any.int.shrinkingAtMost(gitTries), .new(numRuns: 1)).test(
+  property(
     '`muster lock` writes the kept locks a hosted package and its example '
     'lack, and a load after it gives `Fetched`.',
-    (int seed) => inTemp((Directory temp) async {
+    (Draw draw) => inTemp((Directory temp) async {
+      final List<int> order = draw(
+        _orderOf(_hostedCases.length),
+        label: 'order',
+      );
       final PackageServer server = await .start();
       try {
         final SpyRunner runner = .new({
@@ -174,22 +190,23 @@ void main() {
           ...pubVariables(temp, server),
         });
         // Every closed case at once, in an order of the draw's.
-        final List<(int, _Hosted)> cases = [..._hostedCases.indexed]
-          ..shuffle(.new(seed));
-        final List<HostedCodebase> codebases = [
-          for (final (int i, _Hosted draw) in cases)
-            hostedOf('p$i', name: 'c$i', resolution: draw.resolution),
+        final List<(int, _Hosted)> cases = [
+          for (final int i in order) (i, _hostedCases[i]),
         ];
-        for (final (int i, _Hosted draw) in cases) {
-          serveLeaf(server, 'p$i', '1.0.0', example: draw.example);
+        final List<HostedCodebase> codebases = [
+          for (final (int i, _Hosted drawn) in cases)
+            hostedOf('p$i', name: 'c$i', resolution: drawn.resolution),
+        ];
+        for (final (int i, _Hosted drawn) in cases) {
+          serveLeaf(server, 'p$i', '1.0.0', example: drawn.example);
         }
         await writeFile(
           atRoot(temp),
           renderManifest(codebases.map(hostedEntryOf).toList()),
         );
-        Set<Package> packagesOf(_Hosted draw) => {
+        Set<Package> packagesOf(_Hosted drawn) => {
           .root,
-          if (draw.example) .example,
+          if (drawn.example) .example,
         };
         List<KeptLockPath> keptLocks(
           HostedCodebase codebase,
@@ -203,23 +220,23 @@ void main() {
         expect(
           await loaderIn(temp, runner).lock(),
           lockedWith({
-            for (final (int at, (_, _Hosted draw)) in cases.indexed)
+            for (final (int at, (_, _Hosted drawn)) in cases.indexed)
               codebases[at].name.name: wrote(
-                keptLocks(codebases[at], packagesOf(draw)),
+                keptLocks(codebases[at], packagesOf(drawn)),
               ),
           }),
         );
         final Map<KeptLockPath, String> kept = {};
-        for (final (int at, (_, _Hosted draw)) in cases.indexed) {
+        for (final (int at, (_, _Hosted drawn)) in cases.indexed) {
           for (final KeptLockPath lock in keptLocks(
             codebases[at],
-            packagesOf(draw),
+            packagesOf(drawn),
           )) {
             kept[lock] = await File(lock.path).readAsString();
           }
           for (final KeptLockPath lock in keptLocks(
             codebases[at],
-            packagesOf(draw).difference(draw.standing),
+            packagesOf(drawn).difference(drawn.standing),
           )) {
             await File(lock.path).delete();
           }
@@ -228,11 +245,11 @@ void main() {
         expect(
           await loaderIn(temp, runner).lock(),
           lockedWith({
-            for (final (int at, (_, _Hosted draw)) in cases.indexed)
+            for (final (int at, (_, _Hosted drawn)) in cases.indexed)
               codebases[at].name.name: wrote(
                 keptLocks(
                   codebases[at],
-                  packagesOf(draw).difference(draw.standing),
+                  packagesOf(drawn).difference(drawn.standing),
                 ),
               ),
           }),
@@ -255,5 +272,6 @@ void main() {
         await server.close();
       }
     }),
+    settings: .new(runs: 1, shrinkSteps: gitShrinks),
   );
 }

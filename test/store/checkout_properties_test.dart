@@ -1,19 +1,20 @@
 import 'dart:io';
 
-import 'package:glados/glados.dart';
-import 'package:muster/src/model/codebase.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/checkout_path.dart';
+import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/store/checkouts.dart';
+import 'package:test/test.dart';
 
 import '../support/files_under.dart';
 import '../support/git.dart';
+import '../support/git_shrinks.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
-import '../support/shrinking_at_most.dart';
 import '../support/spy_runner.dart';
 import '../support/write_file.dart';
 
@@ -61,65 +62,12 @@ const Set<_Act> _forcing = {
   .deleteStamp,
 };
 
-/// Which of [_pool] the pin holds, a seed for their contents, one act that
-/// forces the checkout to be made again, whether the first load is at
-/// another commit, and further acts, each with an index it lands on.
-typedef _Draw = ({
-  Set<int> pool,
-  int seed,
-  _Act forcing,
-  bool elsewhere,
-  List<(_Act, int)> acts,
-});
-
-final Generator<_Draw> _draw = any
-    .combine5(
-      any.set(any.intInRange(0, _pool.length)),
-      any.intInRange(0, 1000),
-      any.choose(_forcing.toList()),
-      any.bool,
-      any.listWithLengthInRange(
-        0,
-        4,
-        any.combine2(
-          any.choose(_Act.values),
-          any.intInRange(0, 20),
-          (_Act act, int at) => (act, at),
-        ),
-      ),
-      (
-        Set<int> pool,
-        int seed,
-        _Act forcing,
-        bool elsewhere,
-        List<(_Act, int)> acts,
-      ) => (
-        pool: pool,
-        seed: seed,
-        forcing: forcing,
-        elsewhere: elsewhere,
-        acts: acts,
-      ),
-    )
-    .shrinkingAtMost(gitTries);
-
 /// What a tool writes beside a checkout's tracked files.
 enum _Kind { untracked, ignored, inDartTool }
 
 /// Files a tool writes, each its kind, an index that names it, and its
 /// contents.
 typedef _Writes = List<(_Kind, int, String)>;
-
-final Generator<_Writes> _writes = any
-    .nonEmptyList(
-      any.combine3(
-        any.choose(_Kind.values),
-        any.intInRange(0, 10),
-        any.letterOrDigits,
-        (_Kind kind, int at, String contents) => (kind, at, contents),
-      ),
-    )
-    .shrinkingAtMost(gitTries);
 
 /// The path, from the checkout's top in `/` separators, of the file of
 /// [kind] that [at] names.
@@ -137,7 +85,7 @@ Map<String, String> _pinFiles(Set<int> pool, int seed) => {
   for (final int i in pool) _pool[i]: 'file $i of $seed\n',
 };
 
-/// A bench for one draw: an origin, its checkouts, and what a test reads of
+/// A bench for one run: an origin, its checkouts, and what a test reads of
 /// them.
 class _Bench {
   _Bench._(this.temp, this.runner, this.origin, this.checkouts, this.locks);
@@ -168,102 +116,138 @@ class _Bench {
 }
 
 void main() {
-  Glados(_draw, .new(numRuns: 15)).test(
+  property(
     'A checkout made again holds exactly the pin\'s tracked files: every edit '
     'is reverted and every file the pin lacks is removed.',
-    (_Draw draw) => inTemp((Directory temp) async {
-      final _Bench bench = await _Bench.make(temp);
-      final Map<String, String> files = _pinFiles(draw.pool, draw.seed);
-      final Commit pin = await bench.origin.commit(null, files);
-      await bench.origin.ref('refs/heads/main', pin);
-      final Commit other = await bench.origin.commit(null, {
-        ...packageFiles('app'),
-        'lib/elsewhere.dart': 'elsewhere\n',
-      });
-      await bench.origin.ref('refs/heads/side', other);
-      final GitCodebase codebase = codebaseOf(bench.origin, pin);
-      if (draw.elsewhere) {
-        await bench.checkouts.checkout(
-          Git(codebaseOf(bench.origin, other)),
-          bench.locks,
-        );
-      }
-      await bench.checkouts.checkout(Git(codebase), bench.locks);
-      final List<String> tracked = files.keys.toList();
-      for (final (_Act act, int at) in [(draw.forcing, 0), ...draw.acts]) {
-        final String file = tracked[at % tracked.length];
-        switch (act) {
-          case .editTracked:
-            await bench.write(file, 'edited $at\n');
-          case .deleteTracked:
-            if (await File(bench.inCheckout(file)).exists()) {
-              await File(bench.inCheckout(file)).delete();
-            }
-          case .addUntracked:
-            await bench.write(_written(.untracked, at), 'untracked');
-          case .addIgnored:
-            await bench.write(_written(.ignored, at), 'ignored');
-          case .addInDartTool:
-            await bench.write(_written(.inDartTool, at), 'tool');
-          case .moveHead:
-            await bench.runner.run((
-              executable: .git,
-              arguments: [
-                '-C',
-                bench.checkout.path,
-                'commit',
-                '--quiet',
-                '--allow-empty',
-                '--message=off $at',
-              ],
-            ));
-          case .deleteStamp:
-            if (await File(bench.checkout.stamp.path).exists()) {
-              await File(bench.checkout.stamp.path).delete();
-            }
-        }
-      }
-      await bench.checkouts.checkout(Git(codebase), bench.locks);
-      expect(
-        await filesUnder(bench.checkout.path, less: ['.git', '.dart_tool']),
-        files,
+    (Draw draw) async {
+      final Set<int> pool = draw(
+        .set(.integer(min: 0, max: _pool.length - 1)),
+        label: 'pool',
       );
-      for (int at = 0; at < 20; at++) {
+      final int seed = draw(.integer(min: 0, max: 999), label: 'seed');
+      final _Act forcing = draw(.element(_forcing.toList()), label: 'forcing');
+      final bool elsewhere = draw(.boolean(), label: 'elsewhere');
+      final List<(_Act act, int at)> acts = draw(
+        .list(
+          .build(
+            (Draw draw) =>
+                (draw(.element(_Act.values)), draw(.integer(min: 0, max: 19))),
+          ),
+          maxLength: 3,
+        ),
+        label: 'acts',
+      );
+      await inTemp((Directory temp) async {
+        final _Bench bench = await _Bench.make(temp);
+        final Map<String, String> files = _pinFiles(pool, seed);
+        final Commit pin = await bench.origin.commit(null, files);
+        await bench.origin.ref('refs/heads/main', pin);
+        final Commit other = await bench.origin.commit(null, {
+          ...packageFiles('app'),
+          'lib/elsewhere.dart': 'elsewhere\n',
+        });
+        await bench.origin.ref('refs/heads/side', other);
+        final GitCodebase codebase = codebaseOf(bench.origin, pin);
+        if (elsewhere) {
+          await bench.checkouts.checkout(
+            Git(codebaseOf(bench.origin, other)),
+            bench.locks,
+          );
+        }
+        await bench.checkouts.checkout(Git(codebase), bench.locks);
+        final List<String> tracked = files.keys.toList();
+        for (final (_Act act, int at) in [(forcing, 0), ...acts]) {
+          final String file = tracked[at % tracked.length];
+          switch (act) {
+            case .editTracked:
+              await bench.write(file, 'edited $at\n');
+            case .deleteTracked:
+              if (await File(bench.inCheckout(file)).exists()) {
+                await File(bench.inCheckout(file)).delete();
+              }
+            case .addUntracked:
+              await bench.write(_written(.untracked, at), 'untracked');
+            case .addIgnored:
+              await bench.write(_written(.ignored, at), 'ignored');
+            case .addInDartTool:
+              await bench.write(_written(.inDartTool, at), 'tool');
+            case .moveHead:
+              await bench.runner.run((
+                executable: .git,
+                arguments: [
+                  '-C',
+                  bench.checkout.path,
+                  'commit',
+                  '--quiet',
+                  '--allow-empty',
+                  '--message=off $at',
+                ],
+              ));
+            case .deleteStamp:
+              if (await File(bench.checkout.stamp.path).exists()) {
+                await File(bench.checkout.stamp.path).delete();
+              }
+          }
+        }
+        await bench.checkouts.checkout(Git(codebase), bench.locks);
         expect(
-          await File(bench.inCheckout(_written(.inDartTool, at))).exists(),
-          isFalse,
+          await filesUnder(bench.checkout.path, less: ['.git', '.dart_tool']),
+          files,
         );
-      }
-    }),
+        for (int at = 0; at < 20; at++) {
+          expect(
+            await File(bench.inCheckout(_written(.inDartTool, at))).exists(),
+            isFalse,
+          );
+        }
+      });
+    },
+    settings: .new(runs: 15, shrinkSteps: gitShrinks),
   );
 
-  Glados(_writes, .new(numRuns: 15)).test(
+  property(
     'A standing checkout keeps everything a tool wrote beside its tracked '
     'files, ignored or untracked.',
-    (_Writes writes) => inTemp((Directory temp) async {
-      final _Bench bench = await _Bench.make(temp);
-      final Commit pin = await bench.origin.commit(null, _pinFiles({0}, 0));
-      await bench.origin.ref('refs/heads/main', pin);
-      final GitCodebase codebase = codebaseOf(bench.origin, pin);
-      await bench.checkouts.checkout(Git(codebase), bench.locks);
-      final Map<String, String> wrote = {
-        for (final (_Kind kind, int at, String contents) in writes)
-          _written(kind, at): contents,
-      };
-      for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
-        await bench.write(key, value);
-      }
-      bench.runner.commands.clear();
-      // A new load's, since a load reads each SDK version once.
-      await checkoutsIn(
-        temp,
-        bench.runner,
-      ).checkout(Git(codebase), bench.locks);
-      expect(bench.runner.given, hasLength(2));
-      expect(bench.runner.given.last, contains(' status '));
-      for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
-        expect(await File(bench.inCheckout(key)).readAsString(), value);
-      }
-    }),
+    (Draw draw) async {
+      final _Writes writes = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              draw(.element(_Kind.values)),
+              draw(.integer(min: 0, max: 9)),
+              draw(.string(alphabet: .lettersAndDigits)),
+            ),
+          ),
+          minLength: 1,
+        ),
+        label: 'writes',
+      );
+      await inTemp((Directory temp) async {
+        final _Bench bench = await _Bench.make(temp);
+        final Commit pin = await bench.origin.commit(null, _pinFiles({0}, 0));
+        await bench.origin.ref('refs/heads/main', pin);
+        final GitCodebase codebase = codebaseOf(bench.origin, pin);
+        await bench.checkouts.checkout(Git(codebase), bench.locks);
+        final Map<String, String> wrote = {
+          for (final (_Kind kind, int at, String contents) in writes)
+            _written(kind, at): contents,
+        };
+        for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
+          await bench.write(key, value);
+        }
+        bench.runner.commands.clear();
+        // A new load's, since a load reads each SDK version once.
+        await checkoutsIn(
+          temp,
+          bench.runner,
+        ).checkout(Git(codebase), bench.locks);
+        expect(bench.runner.given, hasLength(2));
+        expect(bench.runner.given.last, contains(' status '));
+        for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
+          expect(await File(bench.inCheckout(key)).readAsString(), value);
+        }
+      });
+    },
+    settings: .new(runs: 15, shrinkSteps: gitShrinks),
   );
 }

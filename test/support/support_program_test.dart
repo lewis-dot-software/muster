@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 import 'kernel_cache.dart';
 import 'loads.dart';
@@ -28,14 +29,14 @@ void main() {
         p.join(temp.path, '${program.name}.dill'),
         depfile,
       );
-      final List<String> hosted = cache.sources.contains(packagesOf(root))
-          ? await _hostedRoots(packagesOf(root))
+      final List<String> pinned = cache.sources.contains(packagesOf(root))
+          ? await _pinnedRoots(packagesOf(root), p.join(root, 'pubspec.lock'))
           : const [];
       bool keyed(String file) =>
           cache.sources.any(
             (String source) => file == source || p.isWithin(source, file),
           ) ||
-          hosted.any((String package) => p.isWithin(package, file));
+          pinned.any((String package) => p.isWithin(package, file));
       expect(cache.sdk, Platform.version);
       expect([
         for (final String file in await _dependencies(depfile))
@@ -58,16 +59,25 @@ Future<List<String>> _dependencies(String depfile) async {
 /// A space a depfile separates its files by, never one it escapes.
 final RegExp _unescaped = .new(r'(?<!\\) +');
 
-/// The root of each hosted package the package config at [config] names,
-/// whose files the version it names fixes.
-Future<List<String>> _hostedRoots(String config) async => [
-  for (final Object? package
-      in (jsonDecode(await File(config).readAsString())
-              as Map<String, Object?>)['packages']!
-          as List<Object?>)
-    if (Uri.file(config)
-            .resolve((package! as Map<String, Object?>)['rootUri']! as String)
-            .toFilePath()
-        case final String root when p.split(root).contains('hosted'))
-      root,
-];
+/// The root, by the package config at [config], of each package the lock
+/// at [lock] names from pub.dev or a git repo, whose files the version or
+/// the commit the lock names fixes.
+Future<List<String>> _pinnedRoots(String config, String lock) async {
+  final YamlMap locked =
+      (loadYaml(await File(lock).readAsString()) as YamlMap)['packages']
+          as YamlMap;
+  final Set<String> pinned = {
+    for (final MapEntry<Object?, Object?>(:key, :value) in locked.entries)
+      if ((value! as YamlMap)['source'] case 'hosted' || 'git') key! as String,
+  };
+  return [
+    for (final Object? package
+        in (jsonDecode(await File(config).readAsString())
+                as Map<String, Object?>)['packages']!
+            as List<Object?>)
+      if (package! as Map<String, Object?>
+          case {'name': final String name, 'rootUri': final String rootUri}
+          when pinned.contains(name))
+        Uri.file(config).resolve(rootUri).toFilePath(),
+  ];
+}

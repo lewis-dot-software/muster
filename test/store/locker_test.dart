@@ -1,8 +1,9 @@
 import 'dart:io';
 
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/store/kernel.dart';
 import 'package:muster/src/store/locker.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('a kernel is named by the system dart:io names, macos and linux '
@@ -22,12 +23,15 @@ void main() {
     }
   });
 
-  Glados(any.letterOrDigits)
-      .test('no system but macos and linux names a kernel', (String system) {
-        if (system != 'macos' && system != 'linux') {
-          expect(Kernel.named(system), isNull);
-        }
-      });
+  property('no system but macos and linux names a kernel', (Draw draw) {
+    final String system = draw(
+      .string(alphabet: .lettersAndDigits),
+      label: 'system',
+    );
+    if (system != 'macos' && system != 'linux') {
+      expect(Kernel.named(system), isNull);
+    }
+  });
 
   test('a POSIX system muster knows no C library of has no locker', () {
     expect(Locker.of(.posix, 'freebsd'), isNull);

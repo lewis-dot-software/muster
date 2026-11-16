@@ -1,6 +1,7 @@
-import 'package:glados/glados.dart';
+import 'package:grit/grit.dart';
 import 'package:muster/src/model/cache_directory.dart';
 import 'package:muster/src/model/os.dart';
+import 'package:test/test.dart';
 
 /// The cache [variables] name on [os].
 String? _cache(Map<String, String> variables, {Os os = .posix}) =>
@@ -68,19 +69,19 @@ void main() {
     );
   });
 
-  Glados(
-    any.combine4(
-      any.nonEmptyLetters,
-      any.list(any.choose(['XDG_CACHE_HOME', 'HOME', 'LOCALAPPDATA', 'PATH'])),
-      any.letters,
-      any.choose(Os.values),
-      (String cache, List<String> others, String value, Os os) =>
-          (cache, others, value, os),
-    ),
-  ).test('MUSTER_CACHE is the cache wherever it is set, whatever else is', (
-    input,
+  property('MUSTER_CACHE is the cache wherever it is set, whatever else is', (
+    Draw draw,
   ) {
-    final (String cache, List<String> others, String value, Os os) = input;
+    final String cache = draw(
+      .string(alphabet: .letters, minLength: 1),
+      label: 'cache',
+    );
+    final List<String> others = draw(
+      .list(.element(['XDG_CACHE_HOME', 'HOME', 'LOCALAPPDATA', 'PATH'])),
+      label: 'others',
+    );
+    final String value = draw(.string(alphabet: .letters), label: 'value');
+    final Os os = draw(.element(Os.values), label: 'os');
     expect(
       _cache({
         for (final String name in others) name: '/$value',
