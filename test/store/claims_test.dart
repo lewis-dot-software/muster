@@ -5,6 +5,7 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/claim_path.dart';
 import 'package:muster/src/store/claims.dart';
+import 'package:muster/src/store/hold.dart';
 import 'package:muster/src/store/libc.dart';
 import 'package:muster/src/store/locker.dart';
 import 'package:test/test.dart';
@@ -12,7 +13,8 @@ import 'package:test/test.dart';
 import '../support/act.dart';
 import '../support/apart.dart';
 import '../support/contender.dart';
-import '../support/failing_flock.dart';
+import '../support/failing.dart';
+import '../support/failing_libc.dart';
 import '../support/faults.dart';
 import '../support/keeping.dart';
 import '../support/locker.dart';
@@ -87,13 +89,82 @@ void main() {
     expect(acts, ['first', 'first done', 'second']);
   });
 
+  /// The locker whose C library's `open` fails as [open] fails and whose
+  /// `flock` fails as [flock] fails, where each is given.
+  FlockLocker failingLocker({Failing? open, Failing? flock}) => .new(
+    FailingLibc((testLocker as FlockLocker).libc, open: open, flock: flock),
+  );
+
   /// Claims whose hold's `flock` fails with [errno], its first [calls] alone
   /// where that is given and else every call, through a C library they are
   /// handed.
   Claims failingWith(int errno, [int? calls]) => .new(
-    FlockLocker(FailingFlock((testLocker as FlockLocker).libc, errno, calls)),
+    failingLocker(flock: .new(errno, calls)),
     () async => fail('a claim no one holds was waited on'),
   );
+
+  /// Claims whose hold's `open` fails with [errno], its first [calls] alone
+  /// where that is given and else every call, through a C library they are
+  /// handed.
+  Claims openFailingWith(int errno, [int? calls]) => .new(
+    failingLocker(open: .new(errno, calls)),
+    () async => fail('a claim no one holds was waited on'),
+  );
+
+  /// `EINVAL`, on every POSIX system, which `open` of a read alone never
+  /// fails with for a path, so it reads as the VM's own.
+  const int invalid = 22;
+
+  test("a hold whose open of the claim's file fails, though the errno read "
+      'after it names another failure, fails as a StoreFailed naming the '
+      'file and the reason the open failed with', () async {
+    final ClaimPath claim = claimOf('app');
+    final Libc libc = (testLocker as FlockLocker).libc;
+    const int noEntry = 2;
+    await expectLater(
+      Hold.take(claim, failingLocker(open: .new(invalid))),
+      throwsA(
+        storeFault(
+          isA<StoreFailed>()
+              .having((StoreFailed f) => f.path, 'path', claim.path)
+              .having(
+                (StoreFailed f) => f.reason,
+                'reason',
+                libc.message(noEntry),
+              ),
+        ),
+      ),
+    );
+  });
+
+  test("a hold whose open of the claim's file fails on its first try, though "
+      'the file opens, takes the claim', () async {
+    final ClaimPath claim = claimOf('app');
+    expect(await openFailingWith(invalid, 1).holding(claim, () async => 7), 7);
+    expect(await letGoApart('app', .once, .returns), isTrue);
+  });
+
+  test("a hold whose open of the claim's file fails every try, though the "
+      "file opens, fails as a StoreFailed naming the file and the errno's "
+      'reason', () async {
+    final ClaimPath claim = claimOf('app');
+    final Libc libc = (testLocker as FlockLocker).libc;
+    await expectLater(
+      openFailingWith(invalid).holding(claim, () async => fail('the act ran')),
+      throwsA(
+        storeFault(
+          isA<StoreFailed>()
+              .having((StoreFailed f) => f.path, 'path', claim.path)
+              .having(
+                (StoreFailed f) => f.reason,
+                'reason',
+                libc.message(invalid),
+              ),
+        ),
+      ),
+    );
+    expect(await letGoApart('app', .once, .returns), isTrue);
+  });
 
   test('a hold takes its lock through the C library its claims are given, '
       'so one whose flock finds the lock held finds the claim held, though '

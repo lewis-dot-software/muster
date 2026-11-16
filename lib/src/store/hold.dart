@@ -22,14 +22,14 @@ import 'store_fault.dart';
 sealed class Hold {
   const Hold();
 
-  /// The claim at [claim] held by [locker], or null where another open of its file holds
-  /// it. The file must be there.
+  /// The claim at [claim] held by [locker], or null where another open of its
+  /// file holds it. The file is opened, never made.
   ///
-  /// Throws a [StoreFault] of [StoreFailed] where the file cannot be opened
-  /// or locked.
+  /// Throws a [StoreFault] of [StoreFailed] where the file cannot be opened,
+  /// one not there among them, or locked.
   static Future<Hold?> take(ClaimPath claim, Locker locker) async =>
       switch (locker) {
-        FlockLocker(:final Libc libc) => _Flock.take(claim, libc),
+        FlockLocker(:final Libc libc) => await _Flock.take(claim, libc),
         LockFileExLocker() => await _LockFileEx.take(claim),
       };
 
@@ -68,14 +68,8 @@ final class _Flock extends Hold implements Finalizable {
 
   final int _descriptor;
 
-  static Hold? take(ClaimPath claim, Libc libc) {
-    final Pointer<Utf8> path = claim.path.toNativeUtf8();
-    final int descriptor = libc.open(path, libc.readOnlyCloseOnExec);
-    final int opening = libc.errno;
-    malloc.free(path);
-    if (descriptor < 0) {
-      throw StoreFault(StoreFailed(claim.path, libc.message(opening)));
-    }
+  static Future<Hold?> take(ClaimPath claim, Libc libc) async {
+    final int descriptor = await _opened(claim, libc);
     final _Flock hold = ._(libc, descriptor);
     // A failure is the call's own, but the `errno` read after it may not be:
     // the VM can run work of its own between the call and the read, which
@@ -95,6 +89,37 @@ final class _Flock extends Hold implements Finalizable {
         hold._close();
         throw StoreFault(StoreFailed(claim.path, libc.message(locking)));
       }
+    }
+  }
+
+  /// A descriptor of the claim's file, opened through [libc].
+  ///
+  /// Throws a [StoreFault] of [StoreFailed] where the file cannot be opened.
+  static Future<int> _opened(ClaimPath claim, Libc libc) async {
+    final Pointer<Utf8> path = claim.path.toNativeUtf8();
+    try {
+      for (int tried = 1; ; tried++) {
+        final int descriptor = libc.open(path, libc.readOnlyCloseOnExec);
+        if (descriptor >= 0) {
+          return descriptor;
+        }
+        final int opening = libc.errno;
+        // The `errno` read after the call may be the VM's own, as with
+        // `flock`, so the failure's reason is the same open's made through
+        // `dart:io`, which reads `errno` inside the call. Where that open
+        // succeeds, the failure has passed, and the open is tried again, the
+        // last try's read standing alone where every try so passes.
+        final RandomAccessFile file = await fileAct(
+          claim.path,
+          () => File(claim.path).open(),
+        );
+        await fileAct(claim.path, file.close);
+        if (tried == _tries) {
+          throw StoreFault(StoreFailed(claim.path, libc.message(opening)));
+        }
+      }
+    } finally {
+      malloc.free(path);
     }
   }
 
@@ -138,8 +163,9 @@ final class _LockFileEx extends Hold {
   Future<void> release() => fileAct(_file.path, _file.close);
 }
 
-/// How many times a hold tries `flock` before a failure other than the lock
-/// held stands.
+/// How many times a hold tries `open` before a failure the same open through
+/// `dart:io` does not meet stands, and `flock` before a failure other than
+/// the lock held stands.
 const int _tries = 3;
 
 /// `LOCK_EX`, on every POSIX system.
