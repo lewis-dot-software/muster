@@ -46,8 +46,7 @@ interface class Libc {
   /// `O_RDONLY | O_CLOEXEC`.
   final int readOnlyCloseOnExec;
 
-  /// `open`, a leaf call, so no VM work runs between it and the read of
-  /// `errno` after it, as with [flock].
+  /// `open`, a leaf call, so no VM work runs inside it, as with [flock].
   final int Function(Pointer<Utf8>, int) open;
 
   /// `flock`, a leaf call.
@@ -60,7 +59,8 @@ interface class Libc {
 
   final Pointer<Utf8> Function(int) _strerror;
 
-  /// What the last call on this thread left in `errno`.
+  /// What the last call on this thread left in `errno`, which the VM's own
+  /// work on the thread since that call may have overwritten.
   int get errno => _errnoAt().value;
 
   /// What the system says of [errno].

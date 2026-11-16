@@ -87,10 +87,11 @@ void main() {
     expect(acts, ['first', 'first done', 'second']);
   });
 
-  /// Claims whose hold's `flock` fails every call with [errno], through a
-  /// C library they are handed.
-  Claims failingWith(int errno) => .new(
-    FlockLocker(FailingFlock((testLocker as FlockLocker).libc, errno)),
+  /// Claims whose hold's `flock` fails with [errno], its first [calls] alone
+  /// where that is given and else every call, through a C library they are
+  /// handed.
+  Claims failingWith(int errno, [int? calls]) => .new(
+    FlockLocker(FailingFlock((testLocker as FlockLocker).libc, errno, calls)),
     () async => fail('a claim no one holds was waited on'),
   );
 
@@ -108,8 +109,9 @@ void main() {
     expect(await letGoApart('app', .once, .returns), isTrue);
   });
 
-  test("a hold whose C library's flock fails for any other reason fails as a "
-      "StoreFailed naming the claim's file and the system's reason", () async {
+  test("a hold whose C library's flock fails every try for any other reason "
+      "fails as a StoreFailed naming the claim's file and the system's "
+      'reason', () async {
     final ClaimPath claim = claimOf('app');
     final Libc libc = (testLocker as FlockLocker).libc;
     const int badDescriptor = 9;
@@ -127,6 +129,33 @@ void main() {
               ),
         ),
       ),
+    );
+    expect(await letGoApart('app', .once, .returns), isTrue);
+  });
+
+  test("a hold whose flock finds the lock held, though the errno read after "
+      'its first try names another failure, finds the claim held', () async {
+    final ClaimPath claim = claimOf('app');
+    const int badDescriptor = 9;
+    await Claims(testLocker).holding(claim, () async {
+      expect(
+        await failingWith(
+          badDescriptor,
+          1,
+        ).holdingIfFree(claim, () async => fail('the act ran')),
+        isFalse,
+      );
+    });
+    expect(await letGoApart('app', .once, .returns), isTrue);
+  });
+
+  test("a hold of a claim no other hold has, though the errno read after its "
+      "flock's first try names another failure, takes it", () async {
+    final ClaimPath claim = claimOf('app');
+    const int badDescriptor = 9;
+    expect(
+      await failingWith(badDescriptor, 1).holding(claim, () async => 7),
+      7,
     );
     expect(await letGoApart('app', .once, .returns), isTrue);
   });

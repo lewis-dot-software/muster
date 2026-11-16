@@ -77,15 +77,25 @@ final class _Flock extends Hold implements Finalizable {
       throw StoreFault(StoreFailed(claim.path, libc.message(opening)));
     }
     final _Flock hold = ._(libc, descriptor);
-    if (libc.flock(descriptor, _exclusive | _nonBlocking) == 0) {
-      return hold;
+    // A failure is the call's own, but the `errno` read after it may not be:
+    // the VM can run work of its own between the call and the read, which
+    // leaves its own `errno`. So a failure that reads as anything but the
+    // lock held is tried again, and stands only where every try reads so,
+    // with the last try's reason.
+    for (int tried = 1; ; tried++) {
+      if (libc.flock(descriptor, _exclusive | _nonBlocking) == 0) {
+        return hold;
+      }
+      final int locking = libc.errno;
+      if (locking == libc.wouldBlock) {
+        hold._close();
+        return null;
+      }
+      if (tried == _tries) {
+        hold._close();
+        throw StoreFault(StoreFailed(claim.path, libc.message(locking)));
+      }
     }
-    final int locking = libc.errno;
-    hold._close();
-    if (locking == libc.wouldBlock) {
-      return null;
-    }
-    throw StoreFault(StoreFailed(claim.path, libc.message(locking)));
   }
 
   @override
@@ -127,6 +137,10 @@ final class _LockFileEx extends Hold {
   @override
   Future<void> release() => fileAct(_file.path, _file.close);
 }
+
+/// How many times a hold tries `flock` before a failure other than the lock
+/// held stands.
+const int _tries = 3;
 
 /// `LOCK_EX`, on every POSIX system.
 const int _exclusive = 2;
