@@ -81,7 +81,7 @@ final class Cli {
         return .refused;
       case Loaded(:final Map<CodebaseName, FetchOutcome> outcomes):
         _row('name', 'outcome', 'detail');
-        final List<(CodebaseName, FetchFailure)> failures = [];
+        final List<_Failed> failures = [];
         for (final MapEntry(key: CodebaseName name, value: FetchOutcome outcome)
             in outcomes.entries) {
           switch (outcome) {
@@ -108,7 +108,7 @@ final class Cli {
         :final removals,
       ):
         _row('name', 'outcome', 'detail');
-        final List<(CodebaseName, FetchFailure)> failures = [];
+        final List<_Failed> failures = [];
         for (final MapEntry(key: CodebaseName name, value: LockOutcome outcome)
             in outcomes.entries) {
           switch (outcome) {
@@ -148,7 +148,7 @@ final class Cli {
 
   /// Writes each of [failures]' notes, headed by its codebase's name, in
   /// their rows' order.
-  void _notes(List<(CodebaseName, FetchFailure)> failures) {
+  void _notes(List<_Failed> failures) {
     for (final (CodebaseName name, FetchFailure failure) in failures) {
       if (failureNote(failure) case final String note) {
         _err.writeln('${name.name}: $note');
@@ -156,6 +156,10 @@ final class Cli {
     }
   }
 }
+
+/// A codebase's failure, as a run's notes give it: the `name` of the
+/// codebase, and the `failure` its row shows.
+typedef _Failed = (CodebaseName name, FetchFailure failure);
 
 const String _help = 'help';
 

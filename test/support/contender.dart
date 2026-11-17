@@ -16,6 +16,10 @@ import 'take.dart';
 import 'told.dart';
 import 'word.dart';
 
+/// A wait on what a contender says: `where` the line waited on holds, and
+/// the `wait` that line completes.
+typedef _Wait = (bool Function(String said) where, Completer<String> wait);
+
 /// A load, a claim held bare, a claim taken and tried once more, or claims
 /// never released and tried once they are collected, run apart from its test
 /// as an isolate or a process, which tells the test each step and waits on
@@ -165,7 +169,7 @@ class Contender {
   /// Everything the contender has said, in order.
   final List<String> said = [];
 
-  final List<(bool Function(String said), Completer<String>)> _waits = [];
+  final List<_Wait> _waits = [];
 
   /// What the contender failed with, where it failed: an exit other than
   /// its own or a kill's, or an error its isolate threw.

@@ -55,6 +55,10 @@ typedef _Hosted = ({
   Set<Package> standing,
 });
 
+/// A hosted codebase of a draw: the index `i` that names it, and the case
+/// it is `drawn` as.
+typedef _HostedDrawn = (int i, _Hosted drawn);
+
 /// Every closed case of a hosted codebase, each subset of its packages
 /// standing among them.
 final List<_Hosted> _hostedCases = [
@@ -190,7 +194,7 @@ void main() {
           ...pubVariables(temp, server),
         });
         // Every closed case at once, in an order of the draw's.
-        final List<(int, _Hosted)> cases = [
+        final List<_HostedDrawn> cases = [
           for (final int i in order) (i, _hostedCases[i]),
         ];
         final List<HostedCodebase> codebases = [

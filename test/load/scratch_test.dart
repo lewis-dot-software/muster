@@ -21,6 +21,10 @@ import '../support/skipped_unless_modes_deny.dart';
 import '../support/spy_runner.dart';
 import '../support/waiting_into.dart';
 
+/// A history on `main`: the codebase `app` pinned at its last commit, and
+/// its `commits`, in order.
+typedef _History = (GitCodebase app, List<Commit> commits);
+
 void main() {
   late Directory temp;
   late SpyRunner runner;
@@ -36,7 +40,7 @@ void main() {
 
   /// Three commits on `main`, each holding the package `app` and a file of
   /// its own, the codebase `app` pinned at the last.
-  Future<(GitCodebase, List<Commit>)> history({String root = '.'}) async {
+  Future<_History> history({String root = '.'}) async {
     final List<Commit> commits = [];
     Commit? parent;
     for (int i = 0; i < 3; i++) {

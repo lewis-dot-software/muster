@@ -1,9 +1,13 @@
 import 'package:muster/src/cli/cell.dart';
 import 'package:test/test.dart';
 
+/// A case of a cell: the `text` it is given, and the cell it is `given`
+/// back.
+typedef _Case = (String text, String given);
+
 void main() {
   group('a cell', () {
-    final Map<String, (String, String)> cases = {
+    final Map<String, _Case> cases = {
       'stands where it holds no tab, no line break and no opening quote, a '
           'space and a quote inside it among it': (
         '/a b/c"d',

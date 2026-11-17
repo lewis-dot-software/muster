@@ -65,9 +65,13 @@ const Set<_Act> _forcing = {
 /// What a tool writes beside a checkout's tracked files.
 enum _Kind { untracked, ignored, inDartTool }
 
-/// Files a tool writes, each its kind, an index that names it, and its
-/// contents.
-typedef _Writes = List<(_Kind, int, String)>;
+/// A file a tool writes: its `kind`, the index `at` that names it, and its
+/// `contents`.
+typedef _Write = (_Kind kind, int at, String contents);
+
+/// An act on a checkout: the `act`, and the index `at` of the file it
+/// acts on.
+typedef _Step = (_Act act, int at);
 
 /// The path, from the checkout's top in `/` separators, of the file of
 /// [kind] that [at] names.
@@ -127,7 +131,7 @@ void main() {
       final int seed = draw(.integer(min: 0, max: 999), label: 'seed');
       final _Act forcing = draw(.element(_forcing.toList()), label: 'forcing');
       final bool elsewhere = draw(.boolean(), label: 'elsewhere');
-      final List<(_Act act, int at)> acts = draw(
+      final List<_Step> acts = draw(
         .list(
           .build(
             (Draw draw) =>
@@ -209,7 +213,7 @@ void main() {
     'A standing checkout keeps everything a tool wrote beside its tracked '
     'files, ignored or untracked.',
     (Draw draw) async {
-      final _Writes writes = draw(
+      final List<_Write> writes = draw(
         .list(
           .build(
             (Draw draw) => (

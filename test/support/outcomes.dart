@@ -11,10 +11,16 @@ import 'loads.dart';
 import 'manifests.dart';
 import 'outcome_case.dart';
 
+/// A `codebase` beside the `outcome` a load gave it.
+typedef DrawnOutcome = (GitCodebase codebase, FetchOutcome outcome);
+
+/// A `codebase` beside the `outcome` a lock gave it.
+typedef DrawnLockOutcome = (GitCodebase codebase, LockOutcome outcome);
+
 /// A codebase beside the outcome a load gave it, of any [OutcomeCase] and
 /// any [ExampleCase], its URL, its root and every path it carries drawn
 /// holding a tab, a line break or a quote where it may hold one.
-final Gen<(GitCodebase, FetchOutcome)> anyOutcome = .build((Draw draw) {
+final Gen<DrawnOutcome> anyOutcome = .build((Draw draw) {
   final GitCodebase codebase = draw(
     anyGitCodebase(urls: _awkwardUrl, roots: _awkwardRoot),
   );
@@ -37,8 +43,8 @@ final Gen<(GitCodebase, FetchOutcome)> anyOutcome = .build((Draw draw) {
 /// A codebase beside the outcome a lock gave it: the kept lock an
 /// [Unlocked] outcome lacked written, none for a [Fetched] one, and any
 /// other outcome's failure.
-final Gen<(GitCodebase, LockOutcome)> anyLockOutcome = anyOutcome.map(
-  ((GitCodebase, FetchOutcome) drawn) => (
+final Gen<DrawnLockOutcome> anyLockOutcome = anyOutcome.map(
+  (DrawnOutcome drawn) => (
     drawn.$1,
     switch (drawn.$2) {
       Fetched() => const LocksWritten([]),

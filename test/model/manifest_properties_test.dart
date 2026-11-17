@@ -308,13 +308,13 @@ List<Codebase> _parsed(String text) => switch (parseManifest(text)) {
   ),
 };
 
+/// A codebase placed among others: the `codebases` it stands in, and the
+/// index `at` it stands at.
+typedef _Placed = (List<Codebase> codebases, int at);
+
 /// [codebases] with [codebase] in at a place [draw] draws, in place of any
 /// other of its name, and the index it stands at.
-(List<Codebase>, int) _with(
-  Draw draw,
-  List<Codebase> codebases,
-  Codebase codebase,
-) {
+_Placed _with(Draw draw, List<Codebase> codebases, Codebase codebase) {
   final List<Codebase> others = [
     for (final Codebase other in codebases)
       if (other.name != codebase.name) other,

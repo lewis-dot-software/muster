@@ -63,6 +63,10 @@ String _refusalOf(String text) => switch (parseManifest(text)) {
 
 final String _sha1 = 'ab' * 20;
 
+/// A case of a manifest that refuses: its `text`, and the `line` its
+/// refusal gives after the manifest's path.
+typedef _Case = (String text, String line);
+
 void main() {
   for (final LoadRefusal refusal in RefusalCase.every) {
     final String text = refusalText(refusal);
@@ -76,7 +80,7 @@ void main() {
   }
 
   group('a manifest refuses in one line naming its cause:', () {
-    final Map<String, (String, String)> cases = {
+    final Map<String, _Case> cases = {
       'an empty one': ('', 'an empty value is not a mapping'),
       'one of comments alone': (
         '# none yet\n',

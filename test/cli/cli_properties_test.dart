@@ -68,10 +68,7 @@ void main() {
     "and that outcome's own detail, and exits non-zero when any outcome is "
     'not `Fetched` or the load is refused.',
     (Draw draw) async {
-      final List<(GitCodebase, FetchOutcome)> drawn = draw(
-        .list(anyOutcome),
-        label: 'drawn',
-      );
+      final List<DrawnOutcome> drawn = draw(.list(anyOutcome), label: 'drawn');
       final int refusal = draw(
         .integer(
           min: -RefusalCase.every.length,
@@ -134,11 +131,11 @@ void main() {
     'cells, each one line with no tab, whatever a URL, a path or a command '
     'carries.',
     (Draw draw) async {
-      final List<(GitCodebase, FetchOutcome)> fetchedDrawn = draw(
+      final List<DrawnOutcome> fetchedDrawn = draw(
         .list(anyOutcome),
         label: 'fetchedDrawn',
       );
-      final List<(GitCodebase, LockOutcome)> lockedDrawn = draw(
+      final List<DrawnLockOutcome> lockedDrawn = draw(
         .list(anyLockOutcome),
         label: 'lockedDrawn',
       );

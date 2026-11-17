@@ -131,6 +131,10 @@ enum _ManifestFault { missing, unreadable, notYaml }
 /// A codebase's kind, as its manifest names it.
 enum _Kind { git, hosted }
 
+/// A codebase a manifest of a draw names: the `n` that names it, whether
+/// it is `good`, loading, and its `kind`.
+typedef _Drawn = (int n, bool good, _Kind kind);
+
 /// How a codebase a load hands out resolves.
 enum _Handout {
   /// A git codebase, resolved at its root.
@@ -443,7 +447,7 @@ void main() {
     'A load naming git and hosted codebases gives one outcome per codebase, in '
     "the manifests' order, whatever its kind.",
     (Draw draw) => inTemp((Directory temp) async {
-      final List<List<(int, bool, _Kind)>> manifests = draw(
+      final List<List<_Drawn>> manifests = draw(
         .list(
           .list(
             .build(
@@ -468,8 +472,7 @@ void main() {
         });
         final Set<int> seen = {};
         final Map<String, Matcher> expected = {};
-        for (final (int index, List<(int, bool, _Kind)> codebases)
-            in manifests.indexed) {
+        for (final (int index, List<_Drawn> codebases) in manifests.indexed) {
           final List<Entry> named = [];
           for (final (int n, bool good, _Kind kind) in codebases) {
             if (!seen.add(n)) {

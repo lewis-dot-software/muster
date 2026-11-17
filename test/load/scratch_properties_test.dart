@@ -26,6 +26,10 @@ const List<String> _pool = ['lib/a.dart', 'lib/b/c.dart', 'README.md'];
 /// What every commit's `.gitignore` ignores: `.dart_tool/` and `ignored/`.
 const String _gitignore = '.dart_tool/\nignored/\n';
 
+/// A move of a scratch: the index of the `commit` it moves to, and the
+/// `dirt` the consumer leaves in it before.
+typedef _Move = (int commit, _Dirt dirt);
+
 /// What a consumer does to its scratch before a move.
 enum _Dirt {
   /// Nothing.
@@ -87,7 +91,7 @@ void main() {
         .integer(min: 0, max: history.length - 1),
         label: 'pin',
       );
-      final List<(int commit, _Dirt dirt)> moves = draw(
+      final List<_Move> moves = draw(
         .list(
           .build(
             (Draw draw) => (

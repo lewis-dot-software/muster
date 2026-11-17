@@ -59,10 +59,10 @@ Stamp? parseStamp(String text) {
 /// How many keys a stamp's object holds, of either kind.
 const int _stampKeys = 8;
 
-/// The unresolved example's path dependency a stamp's [json] names, null
-/// within the record where it names none, or null where [json] is neither
-/// null nor an object of exactly its two keys holding a package's name.
-(OutsidePath?,)? _unresolved(Object? json) => switch (json) {
+/// The unresolved example's path dependency a stamp's [json] names, or null
+/// where [json] is neither null nor an object of exactly its two keys
+/// holding a package's name.
+_Unresolved? _unresolved(Object? json) => switch (json) {
   null => (null,),
   {'dependency': final String dependency, 'path': final String path}
       when json.length == 2 =>
@@ -72,6 +72,10 @@ const int _stampKeys = 8;
     },
   _ => null,
 };
+
+/// A stamp's unresolved example: the `outside` path dependency that leaves
+/// its package, null where the stamp names none.
+typedef _Unresolved = (OutsidePath? outside,);
 
 /// How many keys a stamped package's object holds.
 const int _packageKeys = 3;
