@@ -1,10 +1,17 @@
 import 'key_path.dart';
+import 'manifest_refusal_text.dart';
 import 'wanted.dart';
 import 'written.dart';
 
 /// Why a manifest's text refused to parse.
 sealed class ManifestRefusal {
   const ManifestRefusal();
+
+  /// This refusal in one line for a person to act on, naming its case and
+  /// the key it refused at, any text in it holding a control character but a
+  /// tab, or a line break, quoted with each escaped.
+  @override
+  String toString() => manifestRefusalText(this);
 }
 
 /// The text is not one YAML document, or its bytes are not UTF-8, which

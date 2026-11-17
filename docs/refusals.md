@@ -7,6 +7,8 @@ aliases: Refused, LoadRefusal, ManifestRefusal, BadValue, Wanted, Written, KeyPa
 
 A load refuses before it starts any process or writes any file, where it cannot start: its manifests do not hold, or the machine gives it no working directory, no cache or no claim. `Refused.reason` is the `LoadRefusal`, a sealed type with a case for each.
 
+Each refusal reads as the line `muster fetch` prints for it, naming its case and what it carries, so a test's `fail('The load refused: $reason')` says why. A `ManifestRefusal` reads as that line after its manifest's path.
+
 ## A load's refusal
 
 | Case | Carries | Refuses |

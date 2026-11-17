@@ -1,9 +1,9 @@
 import 'package:muster/muster.dart';
-import 'package:muster/src/cli/refusal_text.dart';
 import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/parse_manifest.dart';
 import 'package:test/test.dart';
 
+import '../support/manifest_refusal_case.dart';
 import '../support/refusal_case.dart';
 
 /// What each refusal's line names, so a person can act on it.
@@ -17,16 +17,7 @@ List<Pattern> _named(LoadRefusal refusal) => switch (refusal) {
   ],
   ManifestInvalid(:final manifest, :final refusal) => [
     manifest.path,
-    ...switch (refusal) {
-      NotYaml(:final String reason) => [reason],
-      UnknownKey(:final path) ||
-      MissingKey(:final path) ||
-      MissingKind(:final path) => [path.dotted],
-      BadValue(:final path, :final Written written) => [
-        path.dotted,
-        _writtenNamed(written),
-      ],
-    },
+    ..._manifestNamed(refusal),
   ],
   CodebaseNamedTwice(:final name, :final first, :final second) => [
     name.name,
@@ -44,6 +35,18 @@ List<Pattern> _named(LoadRefusal refusal) => switch (refusal) {
   NoClaim(:final String system) => [system],
 };
 
+/// What a manifest refusal's line names, so a person can act on it.
+List<Pattern> _manifestNamed(ManifestRefusal refusal) => switch (refusal) {
+  NotYaml(:final String reason) => [reason],
+  UnknownKey(:final path) ||
+  MissingKey(:final path) ||
+  MissingKind(:final path) => [path.dotted],
+  BadValue(:final path, :final Written written) => [
+    path.dotted,
+    _writtenNamed(written),
+  ],
+};
+
 /// What a refusal's line calls [written].
 String _writtenNamed(Written written) => switch (written) {
   WrittenText(:final String text) => text,
@@ -55,9 +58,10 @@ String _writtenNamed(Written written) => switch (written) {
 /// The line a manifest at `/consumer/muster.yaml` holding [text] refuses
 /// with.
 String _refusalOf(String text) => switch (parseManifest(text)) {
-  ManifestRefused(:final ManifestRefusal refusal) => refusalText(
-    ManifestInvalid(.parse('/consumer/muster.yaml', .posix)!, refusal),
-  ),
+  ManifestRefused(:final ManifestRefusal refusal) => ManifestInvalid(
+    .parse('/consumer/muster.yaml', .posix)!,
+    refusal,
+  ).toString(),
   ManifestParsed() => fail('$text parsed'),
 };
 
@@ -69,7 +73,7 @@ typedef _Case = (String text, String line);
 
 void main() {
   for (final LoadRefusal refusal in RefusalCase.every) {
-    final String text = refusalText(refusal);
+    final String text = '$refusal';
     test('a refusal of ${refusal.runtimeType}, $text, is one line naming '
         'what to act on', () {
       expect(text, isNot(contains('\n')));
@@ -77,6 +81,19 @@ void main() {
         expect(text, contains(named));
       }
     });
+  }
+
+  for (final ManifestRefusalCase refusalCase in ManifestRefusalCase.values) {
+    for (final ManifestRefusal refusal in refusalCase.samples) {
+      final String text = '$refusal';
+      test('a manifest refusal of ${refusal.runtimeType}, $text, is one line '
+          'naming what to act on', () {
+        expect(text, isNot(contains('\n')));
+        for (final Pattern named in _manifestNamed(refusal)) {
+          expect(text, contains(named));
+        }
+      });
+    }
   }
 
   group('a manifest refuses in one line naming its cause:', () {
@@ -207,15 +224,17 @@ void main() {
     final ManifestPath plain = .parse('/consumer/c.yaml', .posix)!;
     expect(
       [
-        refusalText(const NotManifestName('/consumer/a\nb.yml')),
-        refusalText(ManifestMissing(broken)),
-        refusalText(ManifestUnreadable(plain, 'Permission\ndenied')),
-        refusalText(ManifestInvalid(plain, const NotYaml('line 1\nline 2'))),
-        refusalText(
-          CodebaseNamedTwice(.parse('app')!, first: broken, second: plain),
-        ),
-        refusalText(const NoWorkingDirectory('gone\r')),
-        refusalText(const NoClaim('free\nbsd')),
+        const NotManifestName('/consumer/a\nb.yml').toString(),
+        ManifestMissing(broken).toString(),
+        ManifestUnreadable(plain, 'Permission\ndenied').toString(),
+        ManifestInvalid(plain, const NotYaml('line 1\nline 2')).toString(),
+        CodebaseNamedTwice(
+          .parse('app')!,
+          first: broken,
+          second: plain,
+        ).toString(),
+        const NoWorkingDirectory('gone\r').toString(),
+        const NoClaim('free\nbsd').toString(),
       ],
       [
         r'"/consumer/a\nb.yml": a manifest'
@@ -234,19 +253,19 @@ void main() {
 
   test('no cache names the variables of its system alone', () {
     expect(
-      refusalText(const NoCache(.posix)),
+      const NoCache(.posix).toString(),
       'no cache: none of MUSTER_CACHE, XDG_CACHE_HOME as an absolute path, '
       'or HOME is set',
     );
     expect(
-      refusalText(const NoCache(.windows)),
+      const NoCache(.windows).toString(),
       'no cache: neither MUSTER_CACHE nor LOCALAPPDATA is set',
     );
   });
 
   test('no claim names the system', () {
     expect(
-      refusalText(const NoClaim('freebsd')),
+      const NoClaim('freebsd').toString(),
       'no claim: muster knows no C library to lock a claim with on freebsd',
     );
   });

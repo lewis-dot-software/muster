@@ -14,7 +14,6 @@ import 'cell.dart';
 import 'failure_cells.dart';
 import 'failure_note.dart';
 import 'fetched_detail.dart';
-import 'refusal_text.dart';
 import 'verb.dart';
 
 /// The `muster` command line: `fetch` and `lock` over the manifests named,
@@ -77,7 +76,7 @@ final class Cli {
   ExitCode _fetch(Load load) {
     switch (load) {
       case Refused(:final reason):
-        _err.writeln(refusalText(reason));
+        _err.writeln(reason);
         return .refused;
       case Loaded(:final Map<CodebaseName, FetchOutcome> outcomes):
         _row('name', 'outcome', 'detail');
@@ -101,7 +100,7 @@ final class Cli {
   ExitCode _lock(Locking locking) {
     switch (locking) {
       case LockRefused(:final reason):
-        _err.writeln(refusalText(reason));
+        _err.writeln(reason);
         return .refused;
       case Locked(
         :final Map<CodebaseName, LockOutcome> outcomes,

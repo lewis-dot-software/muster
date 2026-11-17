@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
-import 'package:muster/src/cli/refusal_text.dart';
 import 'package:muster/src/model/cache_directory.dart';
 import 'package:test/test.dart';
 
@@ -192,7 +191,7 @@ void main() {
       ).load();
       switch (load) {
         case Refused(:final LoadRefusal reason):
-          expect(_linesOf(refusalText(reason)), hasLength(1));
+          expect(_linesOf('$reason'), hasLength(1));
         case Loaded():
           fail('a load with no cache loaded');
       }
@@ -203,7 +202,7 @@ void main() {
       'weighs.', (Draw draw) {
     final Os os = draw(.element(Os.values), label: 'os');
     final List<String> others = draw(.list(_variable), label: 'others');
-    expect(_variablesIn(refusalText(NoCache(os))), {
+    expect(_variablesIn('${NoCache(os)}'), {
       for (final String variable in [...cacheVariables, ...others])
         if (_weighs(os, variable)) variable,
     });

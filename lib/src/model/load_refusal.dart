@@ -2,10 +2,17 @@ import 'codebase_name.dart';
 import 'manifest_path.dart';
 import 'manifest_refusal.dart';
 import 'os.dart';
+import 'refusal_text.dart';
 
 /// Why a load refused before any fetch.
 sealed class LoadRefusal {
   const LoadRefusal();
+
+  /// This refusal in one line for a person to act on, naming its case and
+  /// what it carries, any text in it holding a control character but a tab,
+  /// or a line break, quoted with each escaped.
+  @override
+  String toString() => refusalText(this);
 }
 
 /// A load with no manifest: none named, no `muster.yaml` at the root, and

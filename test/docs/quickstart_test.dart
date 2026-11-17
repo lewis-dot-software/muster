@@ -92,7 +92,8 @@ void main() {
     );
 
     test('loads both codebases in a fresh package as it says, writing the '
-        'locks the example keeps.', () async {
+        'locks the example keeps, its test failing on why a load refused '
+        'before its manifest stands.', () async {
       await inTemp((Directory temp) async {
         final String muster = await musterRoot();
         final String package = p.join(temp.path, 'fresh');
@@ -102,10 +103,6 @@ void main() {
           p.join(package, 'pubspec.yaml'),
           'name: fresh\nenvironment:\n  sdk: ^3.13.0\n'
           '${install.replaceFirst(_gitSource, '    path: $muster\n')}',
-        );
-        await writeFile(
-          p.join(package, 'muster.yaml'),
-          _blocks(quickstart, 'yaml')[1],
         );
         await writeFile(
           p.join(package, 'dart_test.yaml'),
@@ -145,6 +142,22 @@ void main() {
 
         final ProcessResult got = await dart(['pub', 'get', '--offline']);
         expect(got.exitCode, 0, reason: '${got.stdout}${got.stderr}');
+
+        final ProcessResult refused = await dart([
+          'test',
+          '--reporter',
+          'json',
+        ]);
+        expect(refused.exitCode, isNot(0));
+        expect(_reported(refused, .error), [
+          'The load refused: no manifest: none named, no muster.yaml in the '
+              'working directory, and none in MUSTER_MANIFESTS',
+        ]);
+
+        await writeFile(
+          p.join(package, 'muster.yaml'),
+          _blocks(quickstart, 'yaml')[1],
+        );
 
         final ProcessResult first = await dart(['test', '--reporter', 'json']);
         expect(first.exitCode, isNot(0));
