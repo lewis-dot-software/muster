@@ -140,7 +140,7 @@ The suite passes on macOS and on Linux. Windows is untested.
 
 ## Docs
 
-- [Architecture](docs/architecture.md) `knowledge` - A load reads a consumer's manifests, brings each codebase to its pin in a checkout of the consumer's own, resolves it with its toolchain, and returns one outcome per codebase.
+- [Architecture](docs/architecture.md) - A load reads a consumer's manifests, brings each codebase to its pin in a checkout of the consumer's own, resolves it with its toolchain, and returns one outcome per codebase.
 
 <!-- /office doc index -->
 
