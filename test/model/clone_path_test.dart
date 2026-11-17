@@ -2,6 +2,7 @@ import 'package:grit/grit.dart';
 import 'package:muster/src/model/cache_directory.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/git_codebase.dart';
+import 'package:muster/src/model/git_url.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -34,9 +35,13 @@ void main() {
     );
   });
 
-  test('a temporary clone stands beside its clone, named `<hash>.partial`', () {
-    final ClonePath clone = .of(_cache, .parse('https://example.com/a.git')!);
-    expect(clone.temporary.path, '${clone.path}.partial');
+  test('a temporary clone\'s name opens with its clone\'s, then '
+      '`.partial.`', () {
+    final GitUrl url = .parse('https://example.com/a.git')!;
+    expect(
+      ClonePath.temporaryPrefix(url),
+      '${p.basename(ClonePath.of(_cache, url).path)}.partial.',
+    );
   });
 
   test('no name but a temporary clone\'s is read as one', () {
@@ -46,7 +51,9 @@ void main() {
     for (final String name in [
       hash,
       '$hash.claim',
-      '$hash.partial.partial',
+      '$hash.partial.',
+      '$hash.partialx',
+      '$hash.left.partial',
       '${hash.toUpperCase()}.partial',
       '${hash.substring(1)}.partial',
       'a$hash.partial',
@@ -57,26 +64,42 @@ void main() {
     }
   });
 
+  test('a temporary clone with no token, `<hash>.partial`, is read as its '
+      'clone\'s', () {
+    final ClonePath clone = .of(_cache, .parse('https://example.com/a.git')!);
+    expect(
+      ClonePath.ofTemporary(_cache, '${p.basename(clone.path)}.partial'),
+      clone,
+    );
+  });
+
   test('a temporary clone is read in its cache\'s own path style', () {
     final CacheDirectory windows = .of((
       variables: {'LOCALAPPDATA': r'C:\l'},
       os: .windows,
     ))!;
-    final ClonePath clone = .of(windows, .parse('https://example.com/a.git')!);
+    final GitUrl url = .parse('https://example.com/a.git')!;
     expect(
-      ClonePath.ofTemporary(windows, p.windows.basename(clone.temporary.path)),
-      clone,
+      ClonePath.ofTemporary(windows, '${ClonePath.temporaryPrefix(url)}a1'),
+      ClonePath.of(windows, url),
     );
   });
 
   property(
-    'A temporary clone\'s name is read back as the clone it is made for.',
+    'A temporary clone\'s name is read back as the clone it is made for, '
+    'whatever letters and digits its token holds.',
     (Draw draw) {
       final GitCodebase codebase = draw(anyGitCodebase(), label: 'codebase');
-      final ClonePath clone = .of(_cache, codebase.url);
+      final String token = draw(
+        .string(alphabet: .lettersAndDigits, minLength: 1),
+        label: 'token',
+      );
       expect(
-        ClonePath.ofTemporary(_cache, p.basename(clone.temporary.path)),
-        clone,
+        ClonePath.ofTemporary(
+          _cache,
+          '${ClonePath.temporaryPrefix(codebase.url)}$token',
+        ),
+        ClonePath.of(_cache, codebase.url),
       );
     },
   );

@@ -16,6 +16,7 @@ import '../support/outcome_case.dart';
 import '../support/pack_stall.dart';
 import '../support/packages.dart';
 import '../support/spy_runner.dart';
+import '../support/temporary_clones.dart';
 import '../support/waiting_into.dart';
 
 void main() {
@@ -105,7 +106,11 @@ void main() {
       );
       await killed.told(.paused);
       await killed.kill();
-      final Directory left = .new(cloneOf(temp, app).temporary.path);
+      final [String path] = await temporaryClonesOf(
+        cacheDirectoryIn(temp),
+        cloneOf(temp, app),
+      );
+      final Directory left = .new(path);
       expect(await left.list().isEmpty, isFalse);
       expect(
         await loaderIn(temp, .new(hermetic(temp))).load(),
@@ -125,6 +130,7 @@ void main() {
       final GitCodebase codebase = codebaseOf(origin, outsized);
       await writeManifest(atRoot(temp), [codebase]);
       final PackStall stall = await .make(temp);
+      addTearDown(stall.release);
       final Contender killed = await .loading(
         apart,
         root: consumerIn(temp).path,
@@ -134,9 +140,12 @@ void main() {
         manifests: [atRoot(temp)],
       );
       await stall.stalled();
-      addTearDown(stall.release);
       await killed.kill();
-      final Directory left = .new(cloneOf(temp, codebase).temporary.path);
+      final [String path] = await temporaryClonesOf(
+        cacheDirectoryIn(temp),
+        cloneOf(temp, codebase),
+      );
+      final Directory left = .new(path);
       expect([
         await for (final FileSystemEntity file in Directory(
           p.join(left.path, 'objects', 'pack'),
@@ -148,6 +157,44 @@ void main() {
         loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
       );
       expect(await left.exists(), isFalse);
+    });
+
+    test('a load killed as its ${apart.name} has git still writing the clone '
+        'leaves that git running, and the next load to make the clone fetches '
+        'its codebase though that git ends as the next load\'s git writes '
+        'the clone', () async {
+      final Commit outsized = await origin.commit(null, {
+        ...packageFiles('app'),
+        'outsized': PackStall.outsized,
+      });
+      await origin.ref('refs/heads/main', outsized);
+      final GitCodebase codebase = codebaseOf(origin, outsized);
+      await writeManifest(atRoot(temp), [codebase]);
+      final PackStall orphaned = await .make(temp, 'orphaned');
+      addTearDown(orphaned.release);
+      final Contender killed = await .loading(
+        apart,
+        root: consumerIn(temp).path,
+        variables: loadEnvironment(temp, {
+          'GIT_CONFIG_GLOBAL': orphaned.config,
+        }).variables,
+        manifests: [atRoot(temp)],
+      );
+      await orphaned.stalled();
+      await killed.kill();
+      final PackStall later = await .make(temp, 'later');
+      addTearDown(later.release);
+      final Future<Load> load = loaderIn(
+        temp,
+        .new({...hermetic(temp), 'GIT_CONFIG_GLOBAL': later.config}),
+      ).load();
+      await later.stalled();
+      await orphaned.release();
+      await later.finish();
+      expect(
+        await load,
+        loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
+      );
     });
 
     test('a temporary clone another ${apart.name} is making is left to it, '
@@ -185,16 +232,16 @@ void main() {
         }),
       );
       expect(
-        await Directory(cloneOf(temp, app).temporary.path).exists(),
-        isTrue,
+        await temporaryClonesOf(cacheDirectoryIn(temp), cloneOf(temp, app)),
+        hasLength(1),
       );
       await making.tell(.go);
       expect(await making.done(), {
         'app': (outcome: OutcomeCase.fetched, path: checkoutAt(temp, 'app')),
       });
       expect(
-        await Directory(cloneOf(temp, app).temporary.path).exists(),
-        isFalse,
+        await temporaryClonesOf(cacheDirectoryIn(temp), cloneOf(temp, app)),
+        isEmpty,
       );
       await making.end();
     });

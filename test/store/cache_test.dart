@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:muster/src/model/clone_path.dart';
+import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/executable.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
@@ -42,12 +43,13 @@ void main() {
       p.basename(entity.path),
   ];
 
-  /// The name of [url]'s temporary clone, left in the cache with a file of
-  /// git's in it, as a make cut short leaves one.
+  /// The name of a temporary clone of [url]'s, left in the cache with a file
+  /// of git's in it, as a make cut short leaves one.
   Future<String> leftFor(GitUrl url) async {
-    final String temporary = ClonePath.of(cache.directory, url).temporary.path;
-    await File(p.join(temporary, 'HEAD')).create(recursive: true);
-    return p.basename(temporary);
+    final String temporary = '${ClonePath.temporaryPrefix(url)}left';
+    await File(p.join(cache.directory.path, temporary, 'HEAD'))
+        .create(recursive: true);
+    return temporary;
   }
 
   /// A commit on `main`, at its tip.
@@ -238,9 +240,10 @@ void main() {
       throwsA(
         storeFault(
           isA<StoreFailed>().having(
-            (StoreFailed f) => f.path,
-            'path',
-            clone.temporary.path,
+            (StoreFailed f) =>
+                ClonePath.ofTemporary(cache.directory, p.basename(f.path)),
+            'clone of the temporary clone at its path',
+            clone,
           ),
         ),
       ),
@@ -255,6 +258,41 @@ void main() {
     final ClonePath clone = await cache.clone(origin.url, pin);
     expect(await holds(clone.path, pin, runner), isTrue);
     expect(await cached(), [p.basename(clone.path)]);
+  });
+
+  test('a temporary clone with no token its own URL\'s make left is removed, '
+      'and the clone made afresh', () async {
+    final Commit pin = await onMain();
+    final ClonePath clone = .of(cache.directory, origin.url);
+    await File(p.join('${clone.path}.partial', 'HEAD')).create(recursive: true);
+    await cache.clone(origin.url, pin);
+    expect(await holds(clone.path, pin, runner), isTrue);
+    expect(await cached(), [p.basename(clone.path)]);
+  });
+
+  test('each make of a clone names a temporary clone of its own', () async {
+    final Directory later = .new(p.join(temp.path, 'later'));
+    final GitUrl url = .parse(p.join(later.path, 'origin'))!;
+    await expectLater(
+      cache.clone(url, .parse('a' * 40)!),
+      throwsA(storeFault(isA<CommandFailed>())),
+    );
+    final Origin made = await .make(await later.create(), runner);
+    final Commit pin = await made.commit();
+    await made.ref('refs/heads/main', pin);
+    final ClonePath clone = await cache.clone(url, pin);
+    final List<String> temporaries = [
+      for (final Command command in runner.commands)
+        if (command.arguments case ['clone', ..., final String into]) into,
+    ];
+    expect(temporaries, hasLength(2));
+    expect(temporaries.toSet(), hasLength(2));
+    for (final String temporary in temporaries) {
+      expect(
+        ClonePath.ofTemporary(cache.directory, p.basename(temporary)),
+        clone,
+      );
+    }
   });
 
   test('a temporary clone another URL\'s make left, its claim held by no '

@@ -7,7 +7,6 @@ import '../model/clone_state.dart';
 import '../model/commit.dart';
 import '../model/fetch_outcome.dart';
 import '../model/git_url.dart';
-import '../model/temporary_clone_path.dart';
 import 'claims.dart';
 import 'file_act.dart';
 import 'git_on.dart';
@@ -36,15 +35,17 @@ class Cache {
   /// URL no longer has pruned, so a branch deleted there never blocks one
   /// named under it. Its caller holds the claim on [url]'s clone.
   ///
-  /// A new clone is made in its temporary clone and moved into place, so a
-  /// clone that fails leaves nothing in the cache, and takes its object
-  /// format from [url]'s repo. A URL that is a path is cloned as any other
-  /// is, so the clone holds what its branches and tags reach alone.
+  /// A new clone is made in a temporary clone its make alone names and moved
+  /// into place, so a clone that fails leaves nothing in the cache, and a
+  /// git that a make cut short left running empties no later make's when it
+  /// ends. It takes its object format from [url]'s repo. A URL that is a
+  /// path is cloned as any other is, so the clone holds what its branches
+  /// and tags reach alone.
   ///
-  /// Every temporary clone in the cache is removed first, [url]'s own and
-  /// each other whose clone's claim no other hold has, so one left by a make
-  /// cut short goes at the next call. One whose claim is held, a make's in
-  /// flight, is left to it, and never waited on.
+  /// Every temporary clone in the cache is removed first, each of [url]'s
+  /// clone and each of another clone whose claim no other hold has, so one
+  /// left by a make cut short goes at the next call. One whose claim is
+  /// held, a make's in flight, is left to it, and never waited on.
   ///
   /// Throws a [StoreFault] of [PinMissing] where the fetch leaves the clone
   /// lacking [pin], of [CommandFailed] or [Unstartable] where git fails, and
@@ -78,9 +79,9 @@ class Cache {
   }
 
   /// Removes every temporary clone in the cache whose clone's claim no other
-  /// hold has, and [own]'s, whose claim the caller holds.
+  /// hold has, and each of [own], whose claim the caller holds.
   Future<void> _sweep(ClonePath own) async {
-    final List<ClonePath> left = await fileAct(directory.path, () async {
+    final List<_Left> left = await fileAct(directory.path, () async {
       final Directory cache = .new(directory.path);
       if (!await cache.exists()) {
         return const [];
@@ -92,27 +93,24 @@ class Cache {
                 directory.os.paths.basename(entity.path),
               )
               case final ClonePath clone)
-            clone,
+            (clone: clone, path: entity.path),
       ];
     });
-    for (final ClonePath clone in left) {
+    for (final (:ClonePath clone, :String path) in left) {
       if (clone == own) {
-        await removeDirectory(clone.temporary.path);
+        await removeDirectory(path);
       } else {
-        await _claims.holdingIfFree(
-          clone.claim,
-          () => removeDirectory(clone.temporary.path),
-        );
+        await _claims.holdingIfFree(clone.claim, () => removeDirectory(path));
       }
     }
   }
 
   Future<void> _make(ClonePath clone, GitUrl url) async {
-    final TemporaryClonePath temporary = clone.temporary;
-    final Directory made = await fileAct(
-      temporary.path,
-      () => Directory(temporary.path).create(recursive: true),
-    );
+    final Directory made = await fileAct(directory.path, () async {
+      final Directory cache = await Directory(directory.path)
+          .create(recursive: true);
+      return cache.createTemp(ClonePath.temporaryPrefix(url));
+    });
     try {
       await _runner.run((
         executable: .git,
@@ -162,3 +160,7 @@ const List<String> _everyBranchAndTag = [
   '+refs/heads/*:refs/heads/*',
   '+refs/tags/*:refs/tags/*',
 ];
+
+/// A temporary clone in the cache: the `clone` it is made for, and its
+/// `path`.
+typedef _Left = ({ClonePath clone, String path});

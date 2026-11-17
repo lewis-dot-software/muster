@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:grit/grit.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/commit.dart';
+import 'package:muster/src/model/git_url.dart';
 import 'package:muster/src/store/cache.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
@@ -153,15 +154,12 @@ void main() {
         final Cache cache = cacheIn(temp, runner);
         final Commit pin = await origin.commit();
         await origin.ref('refs/heads/main', pin);
-        final List<ClonePath> others = [
+        final List<GitUrl> otherUrls = [
           for (int i = 0; i < held.length; i++)
-            .of(cache.directory, .parse('https://example.com/$i.git')!),
+            .parse('https://example.com/$i.git')!,
         ];
-        for (final ClonePath clone in [
-          if (own) .of(cache.directory, origin.url),
-          ...others,
-        ]) {
-          await File(p.join(clone.temporary.path, 'HEAD'))
+        for (final GitUrl url in [if (own) origin.url, ...otherUrls]) {
+          await File(p.join(cache.directory.path, _leftFor(url), 'HEAD'))
               .create(recursive: true);
         }
         final Completer<void> go = .new();
@@ -170,10 +168,13 @@ void main() {
           if (held) {
             final Completer<void> taken = .new();
             holders.add(
-              Claims(testLocker).holding(others[i].claim, () {
-                taken.complete();
-                return go.future;
-              }),
+              Claims(testLocker).holding(
+                ClonePath.of(cache.directory, otherUrls[i]).claim,
+                () {
+                  taken.complete();
+                  return go.future;
+                },
+              ),
             );
             await taken.future;
           }
@@ -183,13 +184,18 @@ void main() {
           await for (final FileSystemEntity entity in Directory(
             cache.directory.path,
           ).list())
-            if (entity.path.endsWith('.partial')) p.basename(entity.path),
+            if (ClonePath.ofTemporary(
+                  cache.directory,
+                  p.basename(entity.path),
+                ) !=
+                null)
+              p.basename(entity.path),
         ];
         expect(
           standing,
           unorderedEquals([
             for (final (int i, bool held) in held.indexed)
-              if (held) p.basename(others[i].temporary.path),
+              if (held) _leftFor(otherUrls[i]),
           ]),
         );
         go.complete();
@@ -199,3 +205,6 @@ void main() {
     settings: .new(runs: 20, shrinkSteps: gitShrinks),
   );
 }
+
+/// The name of a temporary clone of [url]'s, as a make cut short leaves one.
+String _leftFor(GitUrl url) => '${ClonePath.temporaryPrefix(url)}left';
