@@ -48,7 +48,11 @@ class SshServer {
       'AuthorizedKeysFile ${at('authorized_keys')}\n'
       'AuthenticationMethods publickey\n'
       'StrictModes no\n'
-      'PidFile none\n',
+      'PidFile none\n'
+      // An sshd that can read the user's shadow entry, as root can its own
+      // and any user can one the system serves to all, refuses an account
+      // whose password is locked, unless PAM takes the account's check.
+      'UsePAM yes\n',
     );
     return ._(directory, _sshdPath(), (await _ran('id', ['-un'])).trim());
   }

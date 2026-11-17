@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 
 import '../support/chmod.dart';
 import '../support/faults.dart';
+import '../support/skipped_unless_modes_deny.dart';
 
 void main() {
   late Directory temp;
@@ -52,6 +53,9 @@ void main() {
 
   test('a directory that cannot be removed fails as StoreFailed, naming the '
       'path', () async {
+    if (await skippedUnlessModesDeny(temp)) {
+      return;
+    }
     final Directory locked = await Directory(
       p.join(temp.path, 'gone', 'locked'),
     ).create(recursive: true);

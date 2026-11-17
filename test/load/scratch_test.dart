@@ -17,6 +17,7 @@ import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/scratches.dart';
+import '../support/skipped_unless_modes_deny.dart';
 import '../support/spy_runner.dart';
 import '../support/waiting_into.dart';
 
@@ -188,6 +189,9 @@ void main() {
 
   test('a disposal that cannot delete the scratch fails as StoreFailed, and '
       'one that can after is Disposed', () async {
+    if (await skippedUnlessModesDeny(temp)) {
+      return;
+    }
     final (GitCodebase app, _) = await history();
     final Muster muster = await loaded([app]);
     final Scratch scratch = await scratchOf(muster, 'app');

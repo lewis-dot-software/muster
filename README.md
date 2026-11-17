@@ -134,7 +134,7 @@ Where `MUSTER_CACHE` is unset, the cache is `$XDG_CACHE_HOME/muster` where that 
 
 ## Platforms
 
-The suite passes on macOS, and on Linux as a user other than root whose password is not locked. Windows is untested.
+The suite passes on macOS and on Linux. Windows is untested.
 
 <!-- office doc index -->
 

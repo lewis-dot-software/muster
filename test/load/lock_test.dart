@@ -18,6 +18,7 @@ import '../support/locks.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/probe_gone.dart';
+import '../support/skipped_unless_modes_deny.dart';
 import '../support/spy_runner.dart';
 import '../support/waiting_into.dart';
 import '../support/write_file.dart';
@@ -204,6 +205,9 @@ void main() {
 
   test('a removal that fails is a removal of its own, and the lock goes on '
       'to the next', () async {
+    if (await skippedUnlessModesDeny(temp)) {
+      return;
+    }
     final GitCodebase app = await codebaseNamed(
       'app',
       files: packageFiles('app'),
@@ -239,6 +243,9 @@ void main() {
 
   test("a lock's removals come in its locks' file names' order, a partial's "
       'failure among them', () async {
+    if (await skippedUnlessModesDeny(temp)) {
+      return;
+    }
     final GitCodebase app = await codebaseNamed(
       'app',
       files: packageFiles('app'),

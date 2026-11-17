@@ -16,6 +16,7 @@ import '../support/faults.dart';
 import '../support/git.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
+import '../support/skipped_unless_modes_deny.dart';
 import '../support/spy_runner.dart';
 
 void main() {
@@ -314,6 +315,9 @@ void main() {
 
   test('a temporary clone that cannot be removed fails the clone, naming '
       'the path', () async {
+    if (await skippedUnlessModesDeny(temp)) {
+      return;
+    }
     final String left = await leftFor(.parse('https://example.com/left.git')!);
     final Directory locked = await Directory(
       p.join(cache.directory.path, left, 'objects'),
