@@ -2,9 +2,10 @@ import 'breaks_line.dart';
 import 'quoted.dart';
 
 /// Where a key sits in a manifest, each key from the top joined by `.`, as
-/// `codebases.app.root` is. A key that is empty, holds a `.`, opens on `"` or
-/// holds a character that breaks a line is quoted, as `codebases."a.b"` is,
-/// so two paths are the same exactly when their keys are.
+/// `codebases.app.root` is. A key that is empty, holds a `.`, opens on `"`,
+/// or holds a control character but a tab, or Unicode's line or paragraph
+/// separator, is quoted, as `codebases."a.b"` is, so two paths are the same
+/// exactly when their keys are.
 extension type const KeyPath._(String dotted) {
   /// The top of a manifest, above every key.
   static const KeyPath top = ._('');

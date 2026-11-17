@@ -28,7 +28,8 @@ final class UnknownKey extends ManifestRefusal {
   final KeyPath path;
 }
 
-/// A key a codebase must hold, left out.
+/// A key left out that its mapping must hold: the top's `codebases`, or one
+/// a codebase must hold.
 final class MissingKey extends ManifestRefusal {
   /// The refusal of a mapping that lacks the key at [path].
   const MissingKey(this.path);
@@ -46,8 +47,8 @@ final class MissingKind extends ManifestRefusal {
   final KeyPath path;
 }
 
-/// A value its key cannot take, or a codebase's name that is no pub package
-/// name.
+/// A value its key cannot take, or a codebase's key that is no codebase
+/// name, `[a-z][a-z0-9_]*`.
 final class BadValue extends ManifestRefusal {
   /// The refusal of the value at [path], which must be [wanted] and is
   /// [written].

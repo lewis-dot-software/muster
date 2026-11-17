@@ -1,7 +1,7 @@
 import 'fetch_outcome.dart';
 import 'kept_lock_path.dart';
 
-/// What `muster lock` gave a lock no codebase of its manifest names: its
+/// What a lock gave a lock no codebase of its manifest names: its
 /// removal, or why it could not be removed.
 sealed class LockRemoval {
   const LockRemoval();

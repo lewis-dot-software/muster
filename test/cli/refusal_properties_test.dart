@@ -49,9 +49,9 @@ final List<String> _lines = [
 /// among them.
 const String _characters = 'ab:-?|>"\'\n\r\t {}[],#&*!%@`\\.';
 
-/// Names a codebase is keyed by: a pub package's, ones holding a line
-/// break, Unicode's among them, or another control character, a list, and
-/// one no package takes.
+/// Keys a codebase is named by: a codebase name, `[a-z][a-z0-9_]*`, ones
+/// holding a line break, Unicode's among them, or another control
+/// character, a list, and one no codebase name takes.
 const List<String> _codebaseKeys = [
   'app',
   r'"a\nb"',

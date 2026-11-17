@@ -36,7 +36,8 @@ final class NotGit extends Scratching {
   final CodebaseName name;
 }
 
-/// A make that failed, leaving no scratch.
+/// A make that failed, its directory removed, or left in the temporary
+/// directory where that removal fails too.
 final class ScratchFailed extends Scratching {
   /// The make that failed for [failure].
   const ScratchFailed(this.failure);

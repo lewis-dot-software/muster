@@ -7,9 +7,9 @@ import 'hold.dart';
 import 'locker.dart';
 import 'store_fault.dart';
 
-/// The claims a load takes on the clones and checkouts it acts on, each held
-/// while it acts and let go after, so no two loads act on one at once,
-/// whether they are isolates of one process or separate processes.
+/// The claims on clones and checkouts, each held while an act on one runs
+/// and let go after, so no two acts on one run at once, whether in isolates
+/// of one process or in separate processes.
 class Claims {
   /// The claims taken by [_locker], [_waited] run each time a claim is found
   /// held, before it is tried again.

@@ -1,4 +1,4 @@
-/// What stands at a checkout's directory before it is made again.
+/// What stands at a git checkout's directory before it is made again.
 enum CheckoutFound {
   /// No directory.
   nothing,

@@ -11,8 +11,9 @@ extension type const RepoRoot._(String path) {
 
   /// The root [text] names, or null where it leaves its repo: an absolute
   /// path, one that climbs above the top, or one holding `\`, which Windows
-  /// reads as a separator. Null too where it holds a character that breaks a
-  /// line, which names no directory a checkout holds.
+  /// reads as a separator. Null too where it holds a control character but a
+  /// tab, or Unicode's line or paragraph separator, which names no directory
+  /// a checkout holds.
   static RepoRoot? parse(String text) {
     if (breaksLine(text) ||
         text.contains(r'\') ||

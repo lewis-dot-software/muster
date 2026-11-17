@@ -1,7 +1,7 @@
 import 'fetch_outcome.dart';
 import 'kept_lock_path.dart';
 
-/// What `muster lock` gave one codebase: the kept locks it wrote, or why it
+/// What a lock gave one codebase: the kept locks it wrote, or why it
 /// could not write them.
 sealed class LockOutcome {
   const LockOutcome();

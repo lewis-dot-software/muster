@@ -36,7 +36,6 @@ sealed class FetchFailure extends FetchOutcome {
 
 /// A failure of an act on the world outside muster: a command, an
 /// executable's start, a file act, or a fetch that did not bring its commit.
-/// A load meets each as a [FetchFailure], and a scratch meets them alone.
 sealed class ActFailure {}
 
 /// A command that ran and exited with a code it should not have, or wrote

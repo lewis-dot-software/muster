@@ -12,10 +12,9 @@ import 'worktree.dart';
 ///
 /// It stands exactly where its stamp names the codebase as its manifest
 /// does and the SDK on `PATH`, the package it hands out is there, each
-/// package the stamp names holds the lock
-/// and the package config stamped, a kept lock's source beside its manifest
-/// unchanged too, and, for a git codebase, its `HEAD` is the commit with no
-/// tracked file changed.
+/// package the stamp names holds the lock and the package config stamped, a
+/// kept lock's source beside its manifest unchanged too, and, for a git
+/// codebase, its `HEAD` is the commit with no tracked file changed.
 bool stands(Codebase codebase, Survey survey) {
   final Stamp? stamp = survey.stamp;
   if (stamp == null) {

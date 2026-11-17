@@ -40,9 +40,9 @@ import 'loads.dart';
 import 'locking.dart';
 import 'muster.dart';
 
-/// Loads the codebases a consumer's manifests name, in the environment and
-/// working directory it was made with, its processes run by a [Runner] and
-/// its acts on clones and checkouts held under [Claims].
+/// Loads and locks the codebases a consumer's manifests name, in the
+/// environment and working directory it was made with, its processes run by a
+/// [Runner] and its acts on clones and checkouts held under [Claims].
 class Loader implements Loads {
   /// The loader that reads [_environment] and resolves relative paths
   /// against [_workingDirectory], its git and toolchains run by [_runner],
@@ -72,10 +72,10 @@ class Loader implements Loads {
   /// the working directory where it is left out, one after another in the
   /// manifests' order.
   ///
-  /// Refuses, with no process started and no file written, on the first
-  /// fault the manifests meet: a manifest whose file name does not end
-  /// `.yaml`, one named that is missing, unreadable or refuses to parse, a
-  /// load with no manifest at all, a name met twice, or no cache.
+  /// Refuses, with no process started and no file written, on the first fault
+  /// the manifests meet: a manifest whose file name does not end `.yaml`, one
+  /// named that is missing, any that is unreadable or refuses to parse, a load
+  /// with no manifest at all, a name met twice, or no cache.
   ///
   /// Every expected failure a codebase meets is its outcome, and the load
   /// goes on to the next. Another load acting on a codebase's clone or
@@ -118,13 +118,13 @@ class Loader implements Loads {
   /// Reads the manifests as [load] does, the working directory the root,
   /// then writes each kept lock a codebase they name needs and lacks, from a
   /// resolve afresh of its package in its checkout, one codebase after
-  /// another in the
-  /// manifests' order. Every lock that is there is left untouched.
+  /// another in the manifests' order. Every lock that is there is left
+  /// untouched.
   ///
   /// Then removes, from each manifest's locks, every kept lock no codebase
   /// of that manifest names, and every partial of a write cut short that
-  /// none names, so a run right after it writes and removes nothing. A file
-  /// there that is neither is left.
+  /// none names, so a run right after one that met no failure writes and
+  /// removes nothing. A file there that is neither is left.
   ///
   /// Refuses as [load] does, with no process started and no file written.
   ///
@@ -167,7 +167,8 @@ class Loader implements Loads {
 
   /// Removes from [locks] what no codebase of [codebases] names, in its file
   /// names' order, each kept lock's removal given as its own, and a
-  /// partial's only where it fails.
+  /// partial's only where it fails, or the directory's read alone where it
+  /// fails.
   Future<List<LockRemoval>> _removeUnnamed(
     LocksDirectory locks,
     List<Codebase> codebases,

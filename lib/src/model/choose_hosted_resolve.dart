@@ -21,15 +21,15 @@ import 'quiet_yaml_node.dart';
 /// pubspec's order, leaves the package. It resolves else, so pub's own
 /// resolve fails on a pubspec or served overrides that pub refuses.
 ///
-/// Each dependency is read as pub resolves it: its override where one
-/// stands, else its entries in `dependencies` and `dev_dependencies`. The
-/// overrides are those of the served overrides where they hold
-/// `dependency_overrides`, else the pubspec's own, and where none are served
-/// the ones muster writes, overriding [host] to its own path. An override
-/// with no value stands too, as pub reads it: the host's package at any
-/// version. A path leaves the package where, read from `example/` in [os]'s
-/// paths, as pub reads it on the system it runs on, it is absolute or climbs
-/// above the package's top.
+/// Each dependency is read as pub resolves it: its override where one stands,
+/// else its entries in `dependencies` and `dev_dependencies`. The overrides are
+/// those of the served overrides where they hold `dependency_overrides`, else
+/// the pubspec's own, and where none are served the ones muster writes,
+/// overriding [host] to its own path. An override with no value stands too, as
+/// pub reads it: a hosted dependency at any version, which leaves nothing. A
+/// path leaves the package where, read from `example/` in [os]'s paths, as pub
+/// reads it on the system it runs on, it is absolute or climbs above the
+/// package's top.
 ///
 /// Nothing is left unresolved where pub refuses what it reads to find the
 /// example's dependencies, since its own resolve then fails: a pubspec that

@@ -4,12 +4,13 @@ enum ExitCode {
   /// lock no codebase names removed. `--help` exits with it too.
   done(0),
 
-  /// A codebase not fetched, a kept lock not written, or a lock not removed,
-  /// each named in its row.
+  /// A codebase not fetched, a kept lock not written, a lock or a partial
+  /// not removed, or a locks directory not read, each named in its row.
   failed(1),
 
   /// A run refused before any process or file write: a manifest that does
-  /// not hold, none at all, no working directory, no cache or no claim.
+  /// not hold, none at all, a name met in two manifests, no working
+  /// directory, no cache or no claim.
   refused(2),
 
   /// A command line muster does not take, the usage written beside it.

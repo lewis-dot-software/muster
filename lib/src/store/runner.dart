@@ -8,23 +8,23 @@ import 'ran.dart';
 import 'store_fault.dart';
 
 /// Starts every process muster runs, each with the environment the runner was
-/// made with and nothing else.
+/// made with, less and over the variables below.
 ///
-/// No process asks anyone anything: git's terminal prompt is off, unless the
-/// environment sets `GIT_TERMINAL_PROMPT` itself, and no askpass program
-/// runs, git's or ssh's, whatever the environment or git's configuration
-/// names. So where git or the ssh it runs would ask for an HTTP URL's
-/// credentials, a key's passphrase or whether to trust a host, it fails
-/// instead, and stored credentials, an agent's keys and known hosts still
-/// serve.
+/// No process asks anyone anything, but an ssh older than OpenSSH 8.4 where a
+/// terminal stands: git's terminal prompt is off, unless the environment sets
+/// `GIT_TERMINAL_PROMPT` itself, and no askpass program runs, git's or ssh's,
+/// whatever the environment or git's configuration names. So where git or the
+/// ssh it runs would ask for an HTTP URL's credentials, a key's passphrase or
+/// whether to trust a host, it fails instead, and stored credentials, an
+/// agent's keys and known hosts still serve.
 ///
 /// Git starts with none of the variables that point it at a repo of its
 /// caller's, such as the `GIT_DIR` a hook exports, so it acts on the repo
 /// muster names alone, and keeps those that carry its caller's
 /// configuration, as git itself does on moving to another repo.
 class Runner {
-  /// The runner that starts each process with [environment], the whole of
-  /// what it reads.
+  /// The runner that starts each process with [environment], less and over
+  /// the variables the class names.
   Runner(Map<String, String> environment)
     : _environment = .unmodifiable(environment);
 

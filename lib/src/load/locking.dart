@@ -20,7 +20,9 @@ final class Locked extends Locking {
   final Map<CodebaseName, LockOutcome> outcomes;
 
   /// Each kept lock no codebase of its manifest names, removed or failing
-  /// to be, each manifest's in its file names' order.
+  /// to be, each partial of a write cut short that failed to be removed,
+  /// and each locks directory that could not be read, in the manifests'
+  /// order, each manifest's in its file names' order.
   final List<LockRemoval> removals;
 }
 

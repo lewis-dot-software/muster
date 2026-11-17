@@ -11,22 +11,23 @@ import 'locker.dart';
 import 'store_fault.dart';
 
 /// A claim held: the kernel's lock on the claim's file, taken through an open
-/// of the file this hold made, so it shuts out every other open of the file,
-/// an isolate's of the same process as much as another process's.
+/// of it this hold made, so it shuts out every other open of the file, an
+/// isolate's of the same process as much as another process's.
 ///
 /// The kernel lets the lock go when that open closes: at [release], on a
 /// POSIX system once a hold never released is collected, at the end of the
 /// isolate group that took it, or at the end of its process, whether it exits
-/// or is killed. So a hold its holder never releases never
-/// blocks a later one, with no holder named and nothing to take over.
+/// or is killed. So a hold its holder never releases never blocks a later
+/// one, with no holder named and nothing to take over.
 sealed class Hold {
   const Hold();
 
   /// The claim at [claim] held by [locker], or null where another open of its
-  /// file holds it. The file is opened, never made.
+  /// file holds it. On a POSIX system the file is opened, never made, and on
+  /// Windows it is made where none is there.
   ///
   /// Throws a [StoreFault] of [StoreFailed] where the file cannot be opened,
-  /// one not there among them, or locked.
+  /// on a POSIX system one not there among them, or locked.
   static Future<Hold?> take(ClaimPath claim, Locker locker) async =>
       switch (locker) {
         FlockLocker(:final Libc libc) => await _Flock.take(claim, libc),

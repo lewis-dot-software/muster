@@ -1,11 +1,8 @@
-import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
-import 'package:analyzer/dart/analysis/results.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/type.dart';
-import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-import 'support/loads.dart';
+import 'support/surface.dart';
 
 /// The types [type] names, each type argument, parameter, return, field and
 /// alias among them, whatever their library.
@@ -72,18 +69,7 @@ Map<String, Set<Element>> _members(Element element) => switch (element) {
 void main() {
   test('Every type a public member of the library names is exported by '
       '`lib/muster.dart`.', () async {
-    final String library = p.join(await musterRoot(), 'lib', 'muster.dart');
-    final AnalysisContextCollection contexts = .new(
-      includedPaths: [p.normalize(library)],
-    );
-    final SomeResolvedLibraryResult resolved = await contexts
-        .contextFor(library)
-        .currentSession
-        .getResolvedLibrary(p.normalize(library));
-    final LibraryElement surface = switch (resolved) {
-      ResolvedLibraryResult(:final LibraryElement element) => element,
-      _ => fail('lib/muster.dart did not resolve: $resolved'),
-    };
+    final LibraryElement surface = await musterSurface();
     final Set<Element> exported = {
       ...surface.exportNamespace.definedNames2.values,
     };

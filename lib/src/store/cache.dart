@@ -18,7 +18,7 @@ import 'store_fault.dart';
 
 /// The cache's clones, one bare clone per git URL with its whole history,
 /// made and fetched through a [Runner], each temporary clone left by a make cut
-/// short removed once no load holds its clone's claim in [Claims].
+/// short removed once no hold has its clone's claim in [Claims].
 class Cache {
   /// The clones in [directory], their git run by [_runner], and the claims
   /// on them tried in [_claims].

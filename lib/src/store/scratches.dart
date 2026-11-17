@@ -33,8 +33,8 @@ class Scratches {
 
   final TempDirectory _temp;
 
-  /// A new scratch of [codebase] at its pin: a worktree of its clone, which
-  /// is cloned or fetched as a load's is where it lacks the pin, added in a
+  /// A new scratch of [codebase] at its pin: a worktree of its clone, cloned
+  /// where the cache has none and fetched where it lacks the pin, added in a
   /// new directory under the temporary directory.
   ///
   /// The clone's claim is held from before the clone is touched until the

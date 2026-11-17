@@ -65,8 +65,8 @@ import 'store_fault.dart';
 /// unpacked, their processes run by a [Runner] and their acts held under
 /// [Claims].
 class Checkouts {
-  /// The checkouts under [root], cloned into [_cache], their git and
-  /// toolchains run by [_runner], each acted on under its claim in
+  /// The checkouts under [root], a git codebase's cloned into [_cache], their
+  /// git and toolchains run by [_runner], each acted on under its claim in
   /// [_claims], and each toolchain's SDK version read from [_sdks].
   Checkouts(this.root, this._cache, this._runner, this._claims, this._sdks);
 
@@ -90,16 +90,16 @@ class Checkouts {
   /// meanwhile, and a load that waited on one finds the checkout standing. A
   /// hosted codebase's takes no claim but its checkout's, and starts no git.
   ///
-  /// A checkout that stands is handed out with nothing run but the survey:
-  /// a git checkout's status, and the toolchain's version where [_sdks] has
-  /// not read it yet. Any other is made again at the pin. A git checkout has
-  /// every tracked file's edit reverted and every file the pin lacks
-  /// removed, by a checkout and a clean of the worktree where it is one of
-  /// the clone's, or is added afresh where it is not. A hosted one is
-  /// removed and its package unpacked afresh, with the package around it
-  /// written beside it where it resolves as a dependency. Its packages are
-  /// then resolved, each on the lock chosen for it, and its stamp written
-  /// last, so a make that fails leaves no stamp.
+  /// A checkout that stands is handed out with nothing run but the survey: a
+  /// git checkout's status, and the toolchain's version where [_sdks] has not
+  /// read it yet. Any other is made again at the pin. A git checkout has every
+  /// tracked file's edit reverted and every file the pin lacks removed, by a
+  /// checkout and a clean of the worktree where it is one of the clone's, or is
+  /// added afresh where it is not. A hosted one is removed and its package
+  /// unpacked afresh, with the package around it written in the checkout's top
+  /// where it resolves as a dependency. Its packages are then resolved, each on
+  /// the lock chosen for it, and its stamp written last, so a make that fails
+  /// leaves no stamp.
   ///
   /// Throws a [StoreFault] of [Unlocked] where a package has no lock, a git
   /// checkout untouched and a hosted one unpacked, of [PinMissing] where a
@@ -181,16 +181,16 @@ class Checkouts {
   /// The kept locks, in [locks], that [codebase]'s packages lack, each
   /// written from a resolve afresh of its package in the checkout, at the
   /// pin, and moved into place whole, so a write cut short leaves no lock.
-  /// A package whose commit holds its lock, or whose kept lock is there, is
+  /// A package whose pin holds its lock, or whose kept lock is there, is
   /// left as it is, its lock untouched.
   ///
-  /// The claims are a load's: the checkout's held throughout, and a git
-  /// codebase's clone's from before the clone is touched until the last lock
-  /// is written. Where a lock is written the checkout is made again at the
-  /// pin and its stamp deleted first, so the next load makes it again on its
-  /// locks. A hosted codebase's packages are read from its checkout where it
-  /// stands, and else from its package unpacked afresh, its stamp deleted
-  /// first.
+  /// The checkout's claim is held throughout, and a git codebase's clone's
+  /// from before the clone is touched until the last lock is written. Where
+  /// a git codebase's lock is written its checkout is made again at the pin
+  /// and its stamp deleted first, so the next load makes it again on its
+  /// locks. A hosted checkout that stands lacks no lock, and any other is
+  /// unpacked afresh, its stamp deleted first, and its packages read from
+  /// that.
   ///
   /// Returns the kept locks written, in [Package]'s order.
   ///
@@ -345,9 +345,9 @@ class Checkouts {
   };
 
   /// [codebase]'s packages in the checkout at [at], each with the lock
-  /// [chosen] for it in place, resolved by [sdk]'s toolchain, and the stamp
-  /// written last, naming the path dependency that left its example
-  /// [unresolved], where one did. Returns the stamp.
+  /// [chosen] for it in place, resolved by [codebase]'s toolchain, and the
+  /// stamp written last, recording [sdk] and naming the path dependency that
+  /// left its example [unresolved], where one did. Returns the stamp.
   Future<Stamp> _resolveAndStamp(
     Codebase codebase,
     LocksDirectory locks,

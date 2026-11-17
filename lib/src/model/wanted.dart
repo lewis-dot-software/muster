@@ -9,8 +9,8 @@ enum Wanted {
   /// A pub package's name, as `dart pub get` takes one.
   packageName,
 
-  /// A git URL, neither empty, opening on `-` nor holding a character that
-  /// breaks a line.
+  /// A git URL that is not empty, does not open on `-`, and holds no control
+  /// character but a tab, nor Unicode's line or paragraph separator.
   gitUrl,
 
   /// A commit's full hash, 40 or 64 lowercase hexadecimal digits.
@@ -19,8 +19,8 @@ enum Wanted {
   /// A toolchain's name, `dart` or `flutter`.
   toolchain,
 
-  /// A relative path that stays inside its repo and holds no character that
-  /// breaks a line.
+  /// A relative path that stays inside its repo and holds no control
+  /// character but a tab, nor Unicode's line or paragraph separator.
   rootInsideRepo,
 
   /// A version pub reads, as `1.2.3` or `2.0.0-dev.1` is.

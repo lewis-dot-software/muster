@@ -28,28 +28,31 @@ final class Muster {
   ///
   /// The environment, the system, the working directory and the temporary
   /// directory are read once, here, and every process the load and its
-  /// scratches start runs with that environment alone.
+  /// scratches start runs with that environment, git's repo variables left
+  /// out and its prompts turned off.
   ///
-  /// Returns [Refused] where muster takes no claim on the system, the
-  /// manifests refuse the load, the working directory cannot be read or no
-  /// cache is named, before any process
-  /// starts or any file is written, and [Loaded] otherwise, every failure a
-  /// codebase meets carried as its outcome. Nothing throws but a bug.
+  /// Returns [Refused] where muster takes no claim on the system, the manifests
+  /// refuse the load, the working directory cannot be read or no cache is
+  /// named, before any process starts or any file is written, and [Loaded]
+  /// otherwise, every failure a codebase meets carried as its outcome. Nothing
+  /// throws but a bug.
   static Future<Load> load({List<String> manifests = const [], String? root}) =>
       const ProcessLoads().load(named: manifests, root: root);
 
   /// A new scratch of the codebase [name]: a worktree of its clone at its
   /// pin, in a temporary directory of its own, the consumer's to move to
   /// any commit while every checkout stays at its pin, until it is disposed
-  /// of. The clone is cloned or fetched as a load's is where it lacks the
-  /// pin, so a scratch is made whatever the codebase's checkout gave.
+  /// of. The clone is cloned where the cache has none and fetched where it
+  /// lacks the pin, so a scratch is made whatever the codebase's checkout
+  /// gave.
   ///
   /// Another load or scratch acting on the clone is waited on, never acted
   /// beside.
   ///
   /// Returns [Scratched], [NotNamed] where no codebase of the load bears
   /// [name], [NotGit] where a hosted one does, and [ScratchFailed] where
-  /// the scratch cannot be made, its directory removed. Nothing throws but a
+  /// the scratch cannot be made, its directory removed, or left in the
+  /// temporary directory where that removal fails too. Nothing throws but a
   /// bug.
   Future<Scratching> scratch(CodebaseName name) async {
     final GitCodebase codebase;

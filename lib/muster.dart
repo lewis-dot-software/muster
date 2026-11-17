@@ -2,15 +2,20 @@
 /// so a tool's `dart test` loads them with no setup.
 ///
 /// A consumer names its codebases in a `muster.yaml` at its root, each by its
-/// git URL, its commit, its root inside the repo and its toolchain, or by a
-/// package on pub.dev at its version, and further manifests by
-/// `MUSTER_MANIFESTS`. [Muster.load] clones each URL once into a cache every
-/// consumer on the machine shares, checks each git codebase out and unpacks
-/// each hosted one under the consumer's `.dart_tool/muster/`, resolves it on
-/// its lock, and gives each a [FetchOutcome], every failure among them a
-/// value.
-/// [Muster.scratch] gives a consumer that must move a codebase off its pin a
-/// worktree of its own to move, in a temporary directory.
+/// git URL, its commit and its root inside the repo, or by a package on
+/// pub.dev at its version, each with the toolchain that resolves it, and
+/// further manifests by `MUSTER_MANIFESTS`.
+///
+/// [Muster.load] clones each URL once into a cache every consumer on the
+/// machine shares, checks each git codebase out and unpacks each hosted one
+/// under the consumer's `.dart_tool/muster/`, and resolves each on its lock:
+/// the `pubspec.lock` its commit holds, or else a kept lock beside its
+/// manifest, which `dart run muster lock` writes. It gives [Refused] where
+/// the load cannot start, and else [Loaded] with each codebase's
+/// [FetchOutcome], every failure among them a value.
+///
+/// [Loaded.muster] gives a consumer that must move a git codebase off its
+/// pin a [Scratch], a worktree of its own to move, in a temporary directory.
 library;
 
 export 'src/load/load.dart' show Load, Loaded, Refused;

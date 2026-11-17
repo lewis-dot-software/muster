@@ -18,8 +18,8 @@ import 'refusal_text.dart';
 import 'verb.dart';
 
 /// The `muster` command line: `fetch` and `lock` over the manifests named,
-/// each run through [Loads], its rows written to one sink and everything
-/// else for a person to another.
+/// each run through [Loads], its rows and its `--help` usage written to one
+/// sink, and everything else for a person to another.
 final class Cli {
   /// The command line whose runs go through [_loads], its rows written to
   /// [_out] and its refusals, its failures' notes and its usage errors to
@@ -36,9 +36,10 @@ final class Cli {
   ///
   /// `fetch [manifest...]` loads and writes a row per codebase, tab-separated
   /// under a header: its name, its outcome and that outcome's own detail.
-  /// `lock [manifest...]` writes the kept locks the codebases lack and
-  /// removes those no codebase names, writing a row each, a removed lock's
-  /// name cell empty, since no codebase names it. With no manifest named,
+  /// `lock [manifest...]` writes the kept locks the codebases lack and removes
+  /// those no codebase names, writing under the same header a row per lock
+  /// written, per codebase that failed and per removal, a removal's name cell
+  /// empty, since no codebase names what it removes. With no manifest named,
   /// each reads `muster.yaml` in the working directory and every manifest
   /// `MUSTER_MANIFESTS` lists. A refused run writes why and no rows.
   Future<ExitCode> run(List<String> arguments) async {
