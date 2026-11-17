@@ -48,8 +48,7 @@ class Scratches {
   /// [StoreFailed] where a file act does, a claim's among them.
   Future<ScratchPath> make(GitCodebase codebase) async {
     final Directory made = await fileAct(_temp.path, () async {
-      final Directory temp = await Directory(_temp.path)
-          .create(recursive: true);
+      final Directory temp = await .new(_temp.path).create(recursive: true);
       return temp.createTemp('muster-scratch-');
     });
     final ScratchPath at = .new(made.path, _temp.os);

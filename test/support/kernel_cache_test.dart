@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:grit/grit.dart';
-import 'package:muster/src/store/claims.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -44,7 +43,7 @@ final class _Bench {
         throw StateError('the compile failed');
       }
     },
-    claims: Claims(testLocker),
+    claims: .new(testLocker),
   );
 
   /// The names of the files beside the kernel.

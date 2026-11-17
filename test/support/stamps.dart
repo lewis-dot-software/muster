@@ -4,7 +4,6 @@ import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/lock_source.dart';
 import 'package:muster/src/model/outside_path.dart';
 import 'package:muster/src/model/package.dart';
-import 'package:muster/src/model/package_name.dart';
 import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/stamp.dart';
 import 'package:muster/src/model/stamped_package.dart';
@@ -65,10 +64,7 @@ final Gen<Map<Package, StampedPackage>> anyStampedPackages = .build(
 final Gen<OutsidePath> anyOutsidePath = .build((Draw draw) {
   final String dependency = draw(.element(['b', 'freezed_annotation', 'a.b']));
   final String odd = draw(.element(['', '\n', '\t', '"', r'\', '\u2028']));
-  return (
-    dependency: PackageName.parse(dependency)!,
-    path: '../../$dependency$odd',
-  );
+  return (dependency: .parse(dependency)!, path: '../../$dependency$odd');
 });
 
 /// A stamp of any codebase, of either kind, its example left unresolved

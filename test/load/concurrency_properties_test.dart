@@ -37,12 +37,14 @@ enum _Before {
   edited,
 }
 
-/// How a load ends without letting its claims go itself.
+/// How a load ends before it is done.
 enum _Ending {
-  /// Killed, its isolate or its process.
+  /// Killed, its isolate or its process, so it never lets its claims go
+  /// itself.
   crash,
 
-  /// Its paused command failed, its load given that failure.
+  /// Its paused command failed, its load given that failure, so it lets its
+  /// claims go as the failure unwinds it.
   error,
 }
 
@@ -124,7 +126,7 @@ void main() {
       final _Shared shared = draw(.element(_Shared.values), label: 'shared');
       final _Before before = draw(.element(_Before.values), label: 'before');
       await inTemp((Directory temp) async {
-        final _Bench bench = await _Bench.make(temp, before);
+        final _Bench bench = await .make(temp, before);
         final String secondRoot = switch (shared) {
           .checkout => bench.root,
           .clone => bench.otherRoot,
@@ -190,15 +192,16 @@ void main() {
   );
 
   property(
-    'A claim left by a load that ended without releasing it, whether by a '
-    'crash or by an error, never blocks a later load.',
+    'A claim held by a load that crashed, which never released it, or that '
+    'failed, which released it as the failure unwound, never blocks a later '
+    'load.',
     (Draw draw) async {
       final Apart apart = draw(.element(Apart.values), label: 'apart');
       final Pause pause = draw(.element(Pause.values), label: 'pause');
       final _Ending ending = draw(.element(_Ending.values), label: 'ending');
       final _Before before = draw(.element(_Before.values), label: 'before');
       await inTemp((Directory temp) async {
-        final _Bench bench = await _Bench.make(temp, before);
+        final _Bench bench = await .make(temp, before);
         final Contender ended = await bench.contender(
           apart,
           bench.root,

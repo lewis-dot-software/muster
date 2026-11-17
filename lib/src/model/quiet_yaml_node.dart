@@ -41,4 +41,4 @@ YamlNode quietYamlNode(String text) {
 
 /// The refusal of text the reader cannot read, for [reason].
 YamlException _unreadable(String reason) =>
-    YamlException('The text does not read: $reason.', null);
+    .new('The text does not read: $reason.', null);

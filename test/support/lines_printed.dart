@@ -5,9 +5,7 @@ List<String> linesPrinted(void Function() run) {
   final List<String> lines = [];
   runZoned(
     run,
-    zoneSpecification: ZoneSpecification(
-      print: (_, _, _, String line) => lines.add(line),
-    ),
+    zoneSpecification: .new(print: (_, _, _, String line) => lines.add(line)),
   );
   return lines;
 }

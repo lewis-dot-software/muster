@@ -34,8 +34,8 @@ Future<List<String>> worktreesOf(ClonePath clone, Runner runner) async {
   ];
 }
 
-/// The checkout of the codebase [name] in [temp], its symbolic links
-/// resolved, as [worktreesOf] reads it.
+/// The path of the checkout of the codebase [name] in [temp], each symbolic
+/// link along it resolved.
 Future<String> resolvedCheckout(Directory temp, String name) =>
     Directory(checkoutAt(temp, name)).resolveSymbolicLinks();
 

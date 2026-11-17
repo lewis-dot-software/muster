@@ -48,14 +48,12 @@ void main() {
   });
 
   test('each value the resolve turns on moves the key', () {
-    final LockKey base = LockKey.of(
-      _git('app', '/srv/app.git', hash, '.', .dart),
-    );
+    final LockKey base = .of(_git('app', '/srv/app.git', hash, '.', .dart));
     for (final LockKey moved in [
-      LockKey.of(_git('app', '/srv/app2.git', hash, '.', .dart)),
-      LockKey.of(_git('app', '/srv/app.git', 'cd' * 20, '.', .dart)),
-      LockKey.of(_git('app', '/srv/app.git', hash, 'pkgs', .dart)),
-      LockKey.of(_git('app', '/srv/app.git', hash, '.', .flutter)),
+      .of(_git('app', '/srv/app2.git', hash, '.', .dart)),
+      .of(_git('app', '/srv/app.git', 'cd' * 20, '.', .dart)),
+      .of(_git('app', '/srv/app.git', hash, 'pkgs', .dart)),
+      .of(_git('app', '/srv/app.git', hash, '.', .flutter)),
     ]) {
       expect(moved, isNot(base));
     }
@@ -107,14 +105,14 @@ void main() {
 
   test("each value a hosted codebase's resolve turns on moves its key, and "
       'its name does not', () {
-    final LockKey base = LockKey.of(
+    final LockKey base = .of(
       Hosted(hosted('app', 'args', '2.7.0', .alone, .dart)),
     );
     for (final LockKey moved in [
-      LockKey.of(Hosted(hosted('app', 'path', '2.7.0', .alone, .dart))),
-      LockKey.of(Hosted(hosted('app', 'args', '2.7.1', .alone, .dart))),
-      LockKey.of(Hosted(hosted('app', 'args', '2.7.0', .asDependency, .dart))),
-      LockKey.of(Hosted(hosted('app', 'args', '2.7.0', .alone, .flutter))),
+      .of(Hosted(hosted('app', 'path', '2.7.0', .alone, .dart))),
+      .of(Hosted(hosted('app', 'args', '2.7.1', .alone, .dart))),
+      .of(Hosted(hosted('app', 'args', '2.7.0', .asDependency, .dart))),
+      .of(Hosted(hosted('app', 'args', '2.7.0', .alone, .flutter))),
     ]) {
       expect(moved, isNot(base));
     }

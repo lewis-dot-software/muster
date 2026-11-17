@@ -1,10 +1,14 @@
 import 'package:muster/src/model/command.dart';
+import 'package:muster/src/model/fetch_outcome.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
+import 'package:muster/src/store/store_fault.dart';
 
 /// A runner that keeps every command it is given, in order, awaits [before]
 /// on it, then runs it, or answers it in place of running it where [answer]
 /// gives what it left, then awaits [after] on it.
+///
+/// An answer whose exit code is none of the exits fails as a run's does.
 class SpyRunner extends Runner {
   /// The spy that starts each process with [environment].
   SpyRunner(super.environment);
@@ -17,7 +21,8 @@ class SpyRunner extends Runner {
     for (final Command command in commands) givenOf(command),
   ];
 
-  /// [command] by its executable and its arguments, as [given] lists it.
+  /// [command] as its executable's name and its arguments, each after a
+  /// space.
   static String givenOf(Command command) =>
       '${command.executable.name} ${command.arguments.join(' ')}';
 
@@ -44,6 +49,9 @@ class SpyRunner extends Runner {
     commands.add(command);
     await before(command);
     final Ran ran = switch (answer(command)) {
+      final Ran ran when !exits.contains(ran.exitCode) => throw StoreFault(
+        CommandFailed(command, ran.exitCode, ran.stdout, ran.stderr),
+      ),
       final Ran ran => ran,
       null => await super.run(command, exits: exits),
     };

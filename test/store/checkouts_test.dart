@@ -29,6 +29,11 @@ import '../support/scratches.dart';
 import '../support/spy_runner.dart';
 import '../support/write_file.dart';
 
+/// What a resolve found of a package as it began: whether its lock was
+/// [locked] in place, and whether a `package_config.json` showed it already
+/// [resolved].
+typedef _Found = ({bool locked, bool resolved});
+
 void main() {
   late Directory temp;
   late SpyRunner runner;
@@ -264,7 +269,7 @@ void main() {
       );
       // What each resolve found of the example as it began, by the
       // directory it resolves.
-      final Map<String, ({bool locked, bool resolved})> found = {};
+      final Map<String, _Found> found = {};
       runner.answer = (Command command) {
         if (command.arguments.take(2).join(' ') == 'pub get') {
           found[command.arguments.last] = (

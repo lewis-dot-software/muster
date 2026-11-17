@@ -47,7 +47,7 @@ class Claims {
     Future<void> Function() act,
   ) async {
     await _made(claim);
-    final Hold? hold = await Hold.take(claim, _locker);
+    final Hold? hold = await .take(claim, _locker);
     if (hold == null) {
       return false;
     }
@@ -73,4 +73,4 @@ class Claims {
 }
 
 /// The wait between two tries of a claim another hold has.
-Future<void> _pause() => Future<void>.delayed(const Duration(milliseconds: 50));
+Future<void> _pause() => Future<void>.delayed(const .new(milliseconds: 50));

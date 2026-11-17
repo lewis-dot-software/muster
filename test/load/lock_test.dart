@@ -18,6 +18,7 @@ import '../support/locks.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/probe_gone.dart';
+import '../support/refusal_case.dart';
 import '../support/skipped_unless_modes_deny.dart';
 import '../support/spy_runner.dart';
 import '../support/waiting_into.dart';
@@ -29,7 +30,7 @@ void main() {
   late Origin origin;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
     runner = .new(hermetic(temp));
     origin = await .make(temp, runner);
   });
@@ -43,14 +44,12 @@ void main() {
     String name, {
     Map<String, String>? files,
     String root = '.',
-  }) async {
-    final Commit pin = await origin.commit(
-      null,
-      files ?? packageFiles('app', locked: false),
-    );
-    await origin.ref('refs/heads/$name', pin);
-    return codebaseOf(origin, pin, name: name, root: root);
-  }
+  }) => branchedCodebase(
+    origin,
+    name,
+    files ?? packageFiles('app', locked: false),
+    root: root,
+  );
 
   Future<Locking> lock({List<String> named = const [], Runner? by}) =>
       loaderIn(temp, by ?? runner).lock(named: named);
@@ -382,7 +381,7 @@ void main() {
     (
       "a checkout's",
       (GitCodebase codebase) =>
-          ClaimPath.ofCheckout(.of(consumerIn(temp), codebase.name)),
+          .ofCheckout(.of(consumerIn(temp), codebase.name)),
     ),
     ("a clone's", (GitCodebase codebase) => cloneOf(temp, codebase).claim),
   ]) {
@@ -412,6 +411,10 @@ void main() {
     final String manifest = p.join(temp.path, 'empty.yaml');
     await writeManifest(manifest, []);
     final ProcessResult ran = await probeGone(temp, .lock, manifest);
-    expect(ran.stdout, 'NoWorkingDirectory', reason: '${ran.stderr}');
+    expect(
+      ran.stdout,
+      RefusalCase.noWorkingDirectory.name,
+      reason: '${ran.stderr}',
+    );
   });
 }

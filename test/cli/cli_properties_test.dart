@@ -155,10 +155,10 @@ void main() {
           codebase.name: outcome,
       };
       for (final (String verb, FixedLoads loads, int rows) in [
-        ('fetch', FixedLoads.loading(fetched), fetched.length),
+        ('fetch', .loading(fetched), fetched.length),
         (
           'lock',
-          FixedLoads(locks: Locked(locked, removals)),
+          .new(locks: Locked(locked, removals)),
           _lockRows(locked.values, removals),
         ),
       ]) {

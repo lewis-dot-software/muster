@@ -8,6 +8,7 @@ import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:test/test.dart';
 
+import '../support/chmod.dart';
 import '../support/faults.dart';
 
 /// A git command that prints, through the shell, three variables of its
@@ -93,7 +94,7 @@ void main() {
       'no askpass over it', () async {
     final Directory temp = await .systemTemp.createTemp('muster-');
     addTearDown(() => temp.delete(recursive: true));
-    final File script = await File('${temp.path}/script.dart').writeAsString(
+    final File script = await .new('${temp.path}/script.dart').writeAsString(
       "import 'dart:io';\n"
       'void main() {\n'
       '  for (final MapEntry(:key, :value) in Platform.environment.entries) {\n'
@@ -110,7 +111,7 @@ void main() {
       'else', () async {
     final Directory temp = await .systemTemp.createTemp('muster-');
     addTearDown(() => temp.delete(recursive: true));
-    final File script = await File('${temp.path}/script.dart').writeAsString(
+    final File script = await .new('${temp.path}/script.dart').writeAsString(
       "import 'dart:io';\n"
       "void main() => print(['MUSTER_PROBE', 'HOME', 'GIT_DIR']"
       ".map((String n) => Platform.environment[n] ?? '-').join(','));\n",
@@ -127,7 +128,7 @@ void main() {
       'environment gives, so the git pub runs asks nothing either', () async {
     final Directory temp = await .systemTemp.createTemp('muster-');
     addTearDown(() => temp.delete(recursive: true));
-    final File script = await File('${temp.path}/script.dart').writeAsString(
+    final File script = await .new('${temp.path}/script.dart').writeAsString(
       "import 'dart:io';\n"
       "void main() => print(['GIT_TERMINAL_PROMPT', 'GIT_ASKPASS', "
       "'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']"
@@ -169,25 +170,22 @@ void main() {
       for (final String name in listed)
         if (name != 'GIT_CONFIG_PARAMETERS' && name != 'GIT_CONFIG_COUNT') name,
     ];
-    expect(names, contains('GIT_DIR'));
-    final Ran ran =
-        await Runner({
-          ..._path,
-          for (final String name in names) name: 'muster-probe',
-        }).run((
-          executable: .git,
-          arguments: [
-            '-C',
-            temp.path,
-            '-c',
-            'alias.muster-repo=!printf "%s\\n"${names.map((String n) => ' "\$$n"').join()}',
-            'muster-repo',
-          ],
-        ));
-    expect(
-      ran.stdout.split('\n').take(names.length),
-      everyElement(isNot('muster-probe')),
-    );
+    expect(names, containsAll(['GIT_DIR', 'GIT_PREFIX']));
+    // A command of git's on `PATH` by its name, which git runs as it finds
+    // it, since the shell of an alias reads the `GIT_PREFIX` git sets for it.
+    final File command = await .new('${temp.path}/git-muster-repo')
+        .writeAsString(
+          '#!/bin/sh\n'
+          'printf "%s\\n"${names.map((String n) => ' "\$$n"').join()}\n',
+        );
+    await chmod('+x', command);
+    final Ran ran = await Runner({
+      'PATH': '${temp.path}:${_path['PATH']}',
+      for (final String name in names) name: 'muster-probe',
+    }).run((executable: .git, arguments: ['-C', temp.path, 'muster-repo']));
+    expect(ran.stdout.split('\n').take(names.length), [
+      for (final String _ in names) '',
+    ]);
   });
 
   test(

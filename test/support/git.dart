@@ -20,7 +20,8 @@ Future<T> inTemp<T>(Future<T> Function(Directory temp) body) async {
   }
 }
 
-/// The file [hermetic] names as the user's own git configuration in [temp].
+/// The path in [temp] of a file of git configuration, for a test's git to
+/// read as the user's own.
 String gitConfigIn(Directory temp) => p.join(temp.path, 'gitconfig');
 
 /// The environment a test's git runs under, in [temp]: the test process's

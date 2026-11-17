@@ -26,7 +26,7 @@ void main() {
   late Directory temp;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
   });
 
   tearDown(() => temp.delete(recursive: true));
@@ -60,6 +60,13 @@ void main() {
     expect(
       await neverWaiting().holding(claim, () async {
         expect(await File(claim.path).exists(), isTrue);
+        expect(
+          await neverWaiting().holdingIfFree(
+            claim,
+            () async => fail('a claim held by an act was taken beside it'),
+          ),
+          isFalse,
+        );
         return 7;
       }),
       7,

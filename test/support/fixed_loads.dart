@@ -2,10 +2,8 @@ import 'package:muster/muster.dart';
 import 'package:muster/src/load/loads.dart';
 import 'package:muster/src/load/locking.dart';
 import 'package:muster/src/load/muster.dart';
-import 'package:muster/src/store/cache.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/runner.dart';
-import 'package:muster/src/store/scratches.dart';
 
 import 'locker.dart';
 
@@ -44,8 +42,8 @@ class FixedLoads implements Loads {
 /// A muster of no codebase, whose scratches nothing makes.
 final Muster _muster = musterOf(
   const {},
-  Scratches(
-    Cache(
+  .new(
+    .new(
       .of((variables: {'MUSTER_CACHE': '/cache'}, os: .posix))!,
       _none,
       _claims,

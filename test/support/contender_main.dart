@@ -1,8 +1,7 @@
 // A load, a claim held bare, a claim taken and tried once more, or claims
 // never released and tried once they are collected, run apart from the test
 // that starts it, as an isolate or a process, telling the test each step it
-// takes and waiting on the test's word where the test says to pause. Started
-// by `Contender` alone.
+// takes and waiting on the test's word where the test says to pause.
 
 import 'dart:async';
 import 'dart:convert';
@@ -23,6 +22,7 @@ import 'keeping.dart';
 import 'locker.dart';
 import 'outcome_case.dart';
 import 'pause.dart';
+import 'refusal_case.dart';
 import 'said.dart';
 import 'spy_runner.dart';
 import 'take.dart';
@@ -123,16 +123,23 @@ Future<void> main(List<String> arguments, [SendPort? port]) async {
       };
       final Completer<void> waited = .new();
       unawaited(waited.future.then((_) => line.say(Said.waiting.name)));
-      final Load load = await Loader(
-        (variables: variables, os: .posix),
-        .new(root, .posix),
-        _gated(variables, line, switch (brief['pause'] as String?) {
-          final String pause => Pause.values.byName(pause),
-          null => null,
-        }),
-        waitingInto(waited),
-        .new(Directory.systemTemp.path, .posix),
-      ).load(named: [for (final Object? m in brief['manifests'] as List) '$m']);
+      final Load load =
+          await Loader(
+            (variables: variables, os: .posix),
+            .new(root, .posix),
+            _gated(variables, line, switch (brief['pause'] as String?) {
+              final String pause => .values.byName(pause),
+              null => null,
+            }),
+            waitingInto(waited),
+            .new(Directory.systemTemp.path, .posix),
+          ).load(
+            named: [
+              for (final Object? manifest
+                  in brief['manifests'] as List<Object?>)
+                manifest! as String,
+            ],
+          );
       line.say('${Said.done.name} ${jsonEncode(_outcomes(load))}');
   }
   await line.heard(.exit);
@@ -153,9 +160,12 @@ Future<void> _abandon(ClaimPath claim, Claims claims) async {
 }
 
 /// Each codebase's outcome, by its name: its case's name, and the path of
-/// the package it hands out where it is fetched.
+/// the package it hands out where it is fetched, or the case of the refusal
+/// where the load refuses.
 Map<String, Object?> _outcomes(Load load) => switch (load) {
-  Refused(:final LoadRefusal reason) => {'refused': '$reason'},
+  Refused(:final LoadRefusal reason) => {
+    'refused': RefusalCase.of(reason).name,
+  },
   Loaded(:final Map<CodebaseName, FetchOutcome> outcomes) => {
     for (final MapEntry<CodebaseName, FetchOutcome>(:key, :value)
         in outcomes.entries)
@@ -204,7 +214,7 @@ SpyRunner _gated(Map<String, String> variables, _Line line, Pause? pause) {
 
 /// The contender's line to its test: what it says, and the words it hears.
 sealed class _Line {
-  _Line(Stream<String> words) : _words = StreamIterator(words);
+  _Line(Stream<String> words) : _words = .new(words);
 
   final StreamIterator<String> _words;
 
@@ -215,7 +225,7 @@ sealed class _Line {
     if (!await _words.moveNext()) {
       throw StateError('the test closed the line');
     }
-    final Word word = Word.values.byName(_words.current);
+    final Word word = .values.byName(_words.current);
     if (word != expected && word != or) {
       throw StateError('heard $word, expecting $expected');
     }

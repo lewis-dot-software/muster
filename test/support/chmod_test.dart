@@ -9,13 +9,13 @@ void main() {
   late Directory temp;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
   });
 
   tearDown(() => temp.delete(recursive: true));
 
   test('a mode chmod sets is the one the file holds after', () async {
-    final File file = await File(p.join(temp.path, 'file')).writeAsString('');
+    final File file = await .new(p.join(temp.path, 'file')).writeAsString('');
     await chmod('500', file);
     expect((await file.stat()).mode & 511, int.parse('500', radix: 8));
   });

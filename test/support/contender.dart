@@ -9,8 +9,6 @@ import 'act.dart';
 import 'apart.dart';
 import 'contention.dart';
 import 'keeping.dart';
-import 'loads.dart';
-import 'outcome_case.dart';
 import 'pause.dart';
 import 'said.dart';
 import 'support_program.dart';
@@ -100,9 +98,9 @@ class Contender {
     Apart apart,
     Map<String, Object?> brief,
   ) async {
-    final String program = await SupportProgram.contender.kernel();
     switch (apart) {
       case .isolate:
+        final String program = await SupportProgram.contender.kernel();
         final ReceivePort said = .new();
         final ReceivePort exit = .new();
         final ReceivePort errors = .new();
@@ -137,11 +135,10 @@ class Contender {
         );
         return contender;
       case .process:
-        final Process process = await .start(Platform.resolvedExecutable, [
-          '--packages=${packagesOf(await musterRoot())}',
-          program,
-          jsonEncode(brief),
-        ]);
+        final Process process = await .start(
+          Platform.resolvedExecutable,
+          await SupportProgram.contender.started([jsonEncode(brief)]),
+        );
         final StringBuffer stderr = .new();
         process.stderr.transform(utf8.decoder).listen(stderr.write);
         final Contender contender = ._(
@@ -180,7 +177,7 @@ class Contender {
   /// Every command the contender has run so far, in order.
   List<Command> get ran => [
     for (final String line in said)
-      if (_after(line, Said.ran) case final String json)
+      if (_after(line, .ran) case final String json)
         _command(jsonDecode(json) as List<Object?>),
   ];
 
@@ -206,8 +203,8 @@ class Contender {
   /// The script the contender was started from, once it has said.
   Future<Uri> script() async => .parse(
     _after(
-      await until((String line) => _after(line, Said.script) != null),
-      Said.script,
+      await until((String line) => _after(line, .script) != null),
+      .script,
     )!,
   );
 
@@ -226,11 +223,11 @@ class Contender {
   /// tried once its hold was collected, once it has said.
   Future<List<bool>> tried() async {
     final String line = await until(
-      (String line) => _after(line, Said.tried) != null,
+      (String line) => _after(line, .tried) != null,
     );
     return [
       for (final Object? free
-          in jsonDecode(_after(line, Said.tried)!) as List<Object?>)
+          in jsonDecode(_after(line, .tried)!) as List<Object?>)
         free! as bool,
     ];
   }
@@ -238,15 +235,14 @@ class Contender {
   /// Each codebase's outcome, once the load is done.
   Future<Map<String, Told>> done() async {
     final String line = await until(
-      (String line) => _after(line, Said.done) != null,
+      (String line) => _after(line, .done) != null,
     );
     return {
-      for (final MapEntry<String, Object?>(:key, :value) in (jsonDecode(
-        _after(line, Said.done)!,
-      ) as Map<String, Object?>).entries)
+      for (final MapEntry<String, Object?>(:key, :value)
+          in (jsonDecode(_after(line, .done)!) as Map<String, Object?>).entries)
         key: switch (value) {
           {'case': final String outcome, 'path': final String? path} => (
-            outcome: OutcomeCase.values.byName(outcome),
+            outcome: .values.byName(outcome),
             path: path,
           ),
           _ => throw StateError('a refused load: $value'),

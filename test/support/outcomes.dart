@@ -61,7 +61,7 @@ final Gen<LockRemoval> anyRemoval = .build((Draw draw) {
   )!;
   return draw(.boolean())
       ? LockRemoved(lock)
-      : RemovalFailed(StoreFailed(lock.path, 'Permission denied'));
+      : RemovalFailed(.new(lock.path, 'Permission denied'));
 });
 
 /// A git URL, a tab, a space or a quote before it where one is drawn.

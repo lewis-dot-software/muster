@@ -32,10 +32,10 @@ void main() {
   /// The example left unresolved for the path dependency on [name] at
   /// [path].
   LeftUnresolved outside(String name, String path) =>
-      LeftUnresolved((dependency: .parse(name)!, path: path));
+      .new((dependency: .parse(name)!, path: path));
 
   /// An example resolved, its pubspec neither a member nor overriding.
-  const Resolves plain = Resolves((member: false, overrides: false));
+  const Resolves plain = .new((member: false, overrides: false));
 
   group('the root', () {
     test('resolves whether or not it holds its pubspec', () {

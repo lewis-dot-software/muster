@@ -29,23 +29,26 @@ void main() {
   });
 
   test('a file there is removed', () async {
-    final File file = await File(p.join(temp.path, 'file')).create();
+    final File file = await .new(p.join(temp.path, 'file')).create();
     await removeDirectory(file.path);
     expect(await file.exists(), isFalse);
   });
 
   test('a link to nothing there is removed', () async {
-    final Link link = await Link(p.join(temp.path, 'link'))
-        .create(p.join(temp.path, 'nowhere'));
+    final Link link = await .new(
+      p.join(temp.path, 'link'),
+    ).create(p.join(temp.path, 'nowhere'));
     await removeDirectory(link.path);
     expect(await link.exists(), isFalse);
   });
 
   test('a link there is removed, its target left', () async {
-    final File target = await File(p.join(temp.path, 'target', 'kept.txt'))
-        .create(recursive: true);
-    final Link link = await Link(p.join(temp.path, 'link'))
-        .create(p.dirname(target.path));
+    final File target = await .new(
+      p.join(temp.path, 'target', 'kept.txt'),
+    ).create(recursive: true);
+    final Link link = await .new(
+      p.join(temp.path, 'link'),
+    ).create(p.dirname(target.path));
     await removeDirectory(link.path);
     expect(await link.exists(), isFalse);
     expect(await target.exists(), isTrue);
@@ -56,7 +59,7 @@ void main() {
     if (await skippedUnlessModesDeny(temp)) {
       return;
     }
-    final Directory locked = await Directory(
+    final Directory locked = await .new(
       p.join(temp.path, 'gone', 'locked'),
     ).create(recursive: true);
     await File(p.join(locked.path, 'pinned')).create();

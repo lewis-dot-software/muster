@@ -55,6 +55,19 @@ Checkouts checkoutsIn(Directory temp, Runner runner) => .new(
 CheckoutPath appCheckout(Checkouts checkouts) =>
     .of(checkouts.root, .parse('app')!);
 
+/// The codebase [name] of [origin], at a new commit holding [files] and kept
+/// on a branch of its name, its [root] as given.
+Future<GitCodebase> branchedCodebase(
+  Origin origin,
+  String name,
+  Map<String, String> files, {
+  String root = '.',
+}) async {
+  final Commit pin = await origin.commit(null, files);
+  await origin.ref('refs/heads/$name', pin);
+  return codebaseOf(origin, pin, name: name, root: root);
+}
+
 /// The codebase [name] of [origin], pinned at [commit], its [root] and
 /// [toolchain] as given.
 GitCodebase codebaseOf(

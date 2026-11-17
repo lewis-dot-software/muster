@@ -90,7 +90,7 @@ class KernelCache {
               ).list(recursive: true))
                 if (entity is File) entity,
             ]
-          : [File(source)];
+          : [.new(source)];
       files.sort((File a, File b) => a.path.compareTo(b.path));
       for (final File file in files) {
         lines.add(

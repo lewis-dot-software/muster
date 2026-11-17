@@ -80,7 +80,7 @@ OutsidePath? _outside(YamlNode? yaml, String? served, PackageName host, Os os) {
   try {
     final Map<Object?, Object?> fields = _fields(yaml);
     final PackageName self = switch (fields['name']) {
-      final String name => PackageName.parse(name) ?? (throw const _Refused()),
+      final String name => .parse(name) ?? (throw const _Refused()),
       _ => throw const _Refused(),
     };
     final Map<PackageName, String?> overrides = switch (served) {

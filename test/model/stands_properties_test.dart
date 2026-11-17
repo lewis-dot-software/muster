@@ -6,7 +6,6 @@ import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
-import 'package:muster/src/model/lock_source.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/stamp.dart';
@@ -326,7 +325,7 @@ void main() {
             for (final MapEntry<Package, StampedPackage>(:key, :value)
                 in packages.entries)
               key: (
-                source: LockSource.kept,
+                source: .kept,
                 lock: value.lock,
                 packageConfig: value.packageConfig,
               ),
@@ -342,7 +341,7 @@ void main() {
       final Package at = draw(.element(packages.keys.toList()), label: 'at');
       final Worktree? worktree = draw(.boolean(), label: 'there')
           ? (
-              head: Commit.parse(draw(anyFullHash, label: 'head'))!,
+              head: .parse(draw(anyFullHash, label: 'head'))!,
               changed: draw(.boolean(), label: 'changed'),
             )
           : null;

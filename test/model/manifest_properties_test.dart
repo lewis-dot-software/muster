@@ -41,8 +41,8 @@ final Gen<String> _anyKey = .oneOf([
 /// break Unicode names.
 final Gen<String> _breaking = .element([
   for (int code = 0; code < 0x20; code++)
-    if (code != 0x09) String.fromCharCode(code),
-  for (int code = 0x7f; code < 0xa0; code++) String.fromCharCode(code),
+    if (code != 0x09) .fromCharCode(code),
+  for (int code = 0x7f; code < 0xa0; code++) .fromCharCode(code),
   '\u2028',
   '\u2029',
 ]);
@@ -71,7 +71,8 @@ final Gen<String> _warnedDirective = .oneOf([
   .integer(min: 3, max: 99).map((int minor) => '%YAML 1.$minor'),
 ]);
 
-/// A value its key cannot take: the key, and the text that refuses it.
+/// A key of a git codebase's whose value the manifest can refuse, the
+/// codebase's name among them.
 enum _Bad { commit, toolchain, root, name }
 
 /// A git codebase's key whose value no character that breaks a line stands
@@ -724,7 +725,7 @@ void main() {
     );
     final bool reversed = draw(.boolean(), label: 'reversed');
     expect(
-      LockKey.of(Git(a)) == LockKey.of(Git(b)),
+      LockKey.of(Git(a)) == .of(Git(b)),
       a.url == b.url &&
           a.commit == b.commit &&
           a.root == b.root &&
@@ -762,7 +763,7 @@ void main() {
     final int noughts = draw(.integer(min: 0, max: 2), label: 'noughts');
     final bool reversed = draw(.boolean(), label: 'reversed');
     expect(
-      LockKey.of(Hosted(a)) == LockKey.of(Hosted(b)),
+      LockKey.of(Hosted(a)) == .of(Hosted(b)),
       a.package == b.package &&
           a.version == b.version &&
           a.resolution == b.resolution &&

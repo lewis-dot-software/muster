@@ -58,20 +58,14 @@ void main() {
     late Origin origin;
 
     setUp(() async {
-      temp = await Directory.systemTemp.createTemp('muster-');
+      temp = await .systemTemp.createTemp('muster-');
       origin = await .make(temp, .new(hermetic(temp)));
     });
 
     tearDown(() => temp.delete(recursive: true));
 
-    Future<GitCodebase> codebaseNamed(
-      String name,
-      Map<String, String> files,
-    ) async {
-      final Commit pin = await origin.commit(null, files);
-      await origin.ref('refs/heads/$name', pin);
-      return codebaseOf(origin, pin, name: name);
-    }
+    Future<GitCodebase> codebaseNamed(String name, Map<String, String> files) =>
+        branchedCodebase(origin, name, files);
 
     Future<_Run> run(List<String> arguments) =>
         _run(loaderIn(temp, .new(hermetic(temp))), arguments);
@@ -124,8 +118,8 @@ void main() {
         'stream, headed by its codebase', () async {
       await writeManifest(atRoot(temp), [
         codebaseOf(
-          await Origin.make(
-            await Directory(p.join(temp.path, 'other')).create(),
+          await .make(
+            await .new(p.join(temp.path, 'other')).create(),
             .new(hermetic(temp)),
           ),
           await origin.commit(),
@@ -249,7 +243,7 @@ void main() {
       final _Run run = await _run(
         FixedLoads(
           locks: const Locked({}, [
-            RemovalFailed(StoreFailed('/locks/gone.lock', 'Permission denied')),
+            RemovalFailed(.new('/locks/gone.lock', 'Permission denied')),
           ]),
         ),
         ['lock'],
@@ -272,9 +266,7 @@ void main() {
               ),
             },
             const [
-              RemovalFailed(
-                StoreFailed('/locks/gone.lock', 'Permission denied'),
-              ),
+              RemovalFailed(.new('/locks/gone.lock', 'Permission denied')),
             ],
           ),
         ),

@@ -16,10 +16,10 @@ import 'package:muster/src/model/package_path.dart';
 import 'package:muster/src/model/pubspec_overrides.dart';
 import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/store/checkouts.dart';
-import 'package:muster/src/store/store_fault.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/faults.dart';
 import '../support/files_under.dart';
 import '../support/git.dart';
 import '../support/git_shrinks.dart';
@@ -761,13 +761,7 @@ void main() {
         final HostedCodebase codebase = hostedOf('a', resolution: resolution);
         await expectLater(
           bench.checkouts.lock(Hosted(codebase), bench.locks),
-          throwsA(
-            isA<StoreFault>().having(
-              (StoreFault f) => f.failure,
-              'failure',
-              isA<CommandFailed>(),
-            ),
-          ),
+          throwsA(storeFault(isA<CommandFailed>())),
         );
         // A lock of its own for the example, so its checkout reaches the
         // resolve, which holds it to a lock that does not fit.
@@ -777,13 +771,7 @@ void main() {
         );
         await expectLater(
           bench.checkouts.checkout(Hosted(codebase), bench.locks),
-          throwsA(
-            isA<StoreFault>().having(
-              (StoreFault f) => f.failure,
-              'failure',
-              isA<CommandFailed>(),
-            ),
-          ),
+          throwsA(storeFault(isA<CommandFailed>())),
         );
       });
     }
@@ -819,9 +807,7 @@ void main() {
             .example,
           );
           final Matcher refused = throwsA(
-            isA<StoreFault>().having(
-              (StoreFault f) => f.failure,
-              'failure',
+            storeFault(
               isA<CommandFailed>().having(
                 (CommandFailed f) => f.command.arguments,
                 'arguments',
@@ -870,7 +856,9 @@ void main() {
   );
 
   property('A package resolved `as-dependency` resolves where one of its own '
-      'dependencies depends back on it from pub.dev.', (Draw draw) async {
+      'dependencies depends back on it from the host it is served from.', (
+    Draw draw,
+  ) async {
     final int depth = draw(.integer(min: 1, max: 3), label: 'depth');
     // Every constraint, with an example and without, so none is left to
     // the draws.
@@ -1077,9 +1065,7 @@ void main() {
             await expectLater(
               made,
               throwsA(
-                isA<StoreFault>().having(
-                  (StoreFault f) => f.failure,
-                  'failure',
+                storeFault(
                   isA<Unlocked>().having(
                     (Unlocked u) => u.lock,
                     'lock',

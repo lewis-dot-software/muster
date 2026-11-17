@@ -13,12 +13,12 @@ class Askpass {
   /// The program made in `askpass` under [parent].
   static Future<Askpass> make(Directory parent) async {
     final String asked = p.join(parent.path, 'asked');
-    final File program = await File(p.join(parent.path, 'askpass'))
+    final File program = await .new(p.join(parent.path, 'askpass'))
         .writeAsString(
           '#!/bin/sh\nprintf "%s\\n" "\$1" >> ${shellQuoted(asked)}\nexit 1\n',
         );
     await chmod('+x', program);
-    return ._(program.path, File(asked));
+    return ._(program.path, .new(asked));
   }
 
   /// The program's path.

@@ -319,7 +319,7 @@ void main() {
       return;
     }
     final String left = await leftFor(.parse('https://example.com/left.git')!);
-    final Directory locked = await Directory(
+    final Directory locked = await .new(
       p.join(cache.directory.path, left, 'objects'),
     ).create();
     await File(p.join(locked.path, 'pack')).create();

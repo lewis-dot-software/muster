@@ -91,14 +91,16 @@ codebases:
     final String digits = '12' * 20;
     expect(
       parseManifest(
-        'codebases:\n  app:\n    git: /srv/a.git\n    commit: $digits\n'
-        '    root: 1\n    toolchain: dart',
+        'codebases:\n'
+        '  app:\n    git: /srv/a.git\n    commit: $digits\n'
+        '    root: 1\n    toolchain: dart\n'
+        '  bench:\n    git: /srv/b.git\n    commit: $digits\n'
+        '    root: true\n    toolchain: dart',
       ),
-      isA<ManifestParsed>().having(
-        (p) => p.manifest.codebases.single,
-        'codebase',
+      isA<ManifestParsed>().having((p) => p.manifest.codebases, 'codebases', [
         Git(codebase('app', '/srv/a.git', digits, '1', .dart)),
-      ),
+        Git(codebase('bench', '/srv/b.git', digits, 'true', .dart)),
+      ]),
     );
   });
 

@@ -23,7 +23,7 @@ void main() {
   late GitCodebase app;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
     origin = await .make(temp, .new(hermetic(temp)));
     final Commit pin = await origin.commit(null, packageFiles('app'));
     await origin.ref('refs/heads/main', pin);

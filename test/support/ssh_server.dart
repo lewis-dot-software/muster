@@ -16,8 +16,7 @@ class SshServer {
   /// Throws a [StateError] where no `sshd` stands in `/usr/sbin` or on the
   /// test process's `PATH`, since the server needs one.
   static Future<SshServer> make(Directory parent) async {
-    final Directory directory = await Directory(p.join(parent.path, 'ssh'))
-        .create();
+    final Directory directory = await .new(p.join(parent.path, 'ssh')).create();
     String at(String name) => p.join(directory.path, name);
     for (final (String name, String passphrase) in [
       ('host', ''),

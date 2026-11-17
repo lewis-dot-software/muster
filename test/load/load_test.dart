@@ -18,6 +18,7 @@ import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
 import '../support/probe_gone.dart';
+import '../support/refusal_case.dart';
 import '../support/spy_runner.dart';
 import '../support/write_file.dart';
 
@@ -27,7 +28,7 @@ void main() {
   late Origin origin;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
     runner = .new(hermetic(temp));
     origin = await .make(temp, runner);
   });
@@ -39,11 +40,7 @@ void main() {
   Future<GitCodebase> codebaseNamed(
     String name, [
     Map<String, String>? files,
-  ]) async {
-    final Commit pin = await origin.commit(null, files ?? packageFiles('app'));
-    await origin.ref('refs/heads/$name', pin);
-    return codebaseOf(origin, pin, name: name);
-  }
+  ]) => branchedCodebase(origin, name, files ?? packageFiles('app'));
 
   String checkoutOf(String name) => checkoutAt(temp, name);
 
@@ -503,7 +500,11 @@ void main() {
         final String manifest = p.join(temp.path, 'empty.yaml');
         await writeManifest(manifest, []);
         final ProcessResult ran = await probeGone(temp, .fetch, manifest);
-        expect(ran.stdout, 'NoWorkingDirectory', reason: '${ran.stderr}');
+        expect(
+          ran.stdout,
+          RefusalCase.noWorkingDirectory.name,
+          reason: '${ran.stderr}',
+        );
       },
     );
 

@@ -27,7 +27,7 @@ void main() {
   late Origin origin;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('muster-');
+    temp = await .systemTemp.createTemp('muster-');
     runner = .new(hermetic(temp));
     origin = await .make(temp, runner);
   });
@@ -195,7 +195,7 @@ void main() {
     final (GitCodebase app, _) = await history();
     final Muster muster = await loaded([app]);
     final Scratch scratch = await scratchOf(muster, 'app');
-    final Directory locked = await Directory(
+    final Directory locked = await .new(
       p.join(scratch.package.path, 'locked'),
     ).create();
     await File(p.join(locked.path, 'kept.txt')).writeAsString('');

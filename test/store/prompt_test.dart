@@ -46,7 +46,7 @@ void main() {
     String message,
   ) async {
     await expectLater(
-      cacheIn(temp, Runner(environment)).clone(url, _pin),
+      cacheIn(temp, .new(environment)).clone(url, _pin),
       throwsA(
         storeFault(
           isA<CommandFailed>().having(

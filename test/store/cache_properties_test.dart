@@ -158,7 +158,7 @@ void main() {
             .of(cache.directory, .parse('https://example.com/$i.git')!),
         ];
         for (final ClonePath clone in [
-          if (own) ClonePath.of(cache.directory, origin.url),
+          if (own) .of(cache.directory, origin.url),
           ...others,
         ]) {
           await File(p.join(clone.temporary.path, 'HEAD'))

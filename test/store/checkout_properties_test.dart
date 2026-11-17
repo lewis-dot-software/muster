@@ -138,7 +138,7 @@ void main() {
         label: 'acts',
       );
       await inTemp((Directory temp) async {
-        final _Bench bench = await _Bench.make(temp);
+        final _Bench bench = await .make(temp);
         final Map<String, String> files = _pinFiles(pool, seed);
         final Commit pin = await bench.origin.commit(null, files);
         await bench.origin.ref('refs/heads/main', pin);
@@ -223,7 +223,7 @@ void main() {
         label: 'writes',
       );
       await inTemp((Directory temp) async {
-        final _Bench bench = await _Bench.make(temp);
+        final _Bench bench = await .make(temp);
         final Commit pin = await bench.origin.commit(null, _pinFiles({0}, 0));
         await bench.origin.ref('refs/heads/main', pin);
         final GitCodebase codebase = codebaseOf(bench.origin, pin);

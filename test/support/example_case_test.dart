@@ -1,4 +1,3 @@
-import 'package:muster/src/model/consumer_root.dart';
 import 'package:test/test.dart';
 
 import 'example_case.dart';
@@ -10,7 +9,7 @@ void main() {
       expect(
         ExampleCase.of(
           kind.example(
-            ConsumerRoot('/consumer', .posix),
+            .new('/consumer', .posix),
             codebase('app', '/srv/app.git', 'a' * 40, '.', .dart),
             '../outside',
           ),

@@ -48,7 +48,7 @@ class _Bench {
     final SpyRunner runner = .new(hermetic(temp));
     return ._(temp, runner, [
       for (final String name in ['one', 'two'])
-        await .make(await Directory(p.join(temp.path, name)).create(), runner),
+        await .make(await .new(p.join(temp.path, name)).create(), runner),
     ]);
   }
 
@@ -65,12 +65,7 @@ class _Bench {
     Map<String, String> files, {
     int origin = 0,
     String root = '.',
-  }) async {
-    final Origin at = origins[origin];
-    final Commit pin = await at.commit(null, files);
-    await at.ref('refs/heads/$name', pin);
-    return codebaseOf(at, pin, name: name, root: root);
-  }
+  }) => branchedCodebase(origins[origin], name, files, root: root);
 
   /// Writes a manifest [stem]`.yaml` naming [codebases], given to the load
   /// [by] its caller or `MUSTER_MANIFESTS`, and returns its path.
@@ -160,6 +155,16 @@ enum _Refusal {
   noCache,
 }
 
+/// A codebase a load names, drawn: the [toolchain] it resolves with, and
+/// whether its URL [reached] a repo, which it fails to clone where it does
+/// not.
+typedef _Versioned = ({Toolchain toolchain, bool reached});
+
+/// A codebase of a load run twice, drawn: whether its package is [nested]
+/// below the repo's top, holds an [example], has its locks [committed], and
+/// is [listed] in a manifest `MUSTER_MANIFESTS` names, not the root's.
+typedef _Repeated = ({bool nested, bool example, bool committed, bool listed});
+
 /// A fault a codebase can meet.
 enum _Fault { none, pinMissing, noRepo, unlocked, badStamp, unresolvable }
 
@@ -201,7 +206,7 @@ void main() {
     'A load reads each toolchain\'s SDK version at most once, however many '
     'codebases it names.',
     (Draw draw) => inTemp((Directory temp) async {
-      final List<({Toolchain toolchain, bool reached})> drawn = draw(
+      final List<_Versioned> drawn = draw(
         .list(
           .build(
             (Draw draw) => (
@@ -679,8 +684,7 @@ void main() {
     'A load right after another load hands out the same paths, and clones, '
     'checks out and resolves nothing.',
     (Draw draw) => inTemp((Directory temp) async {
-      final List<({bool nested, bool example, bool committed, bool listed})>
-      draws = draw(
+      final List<_Repeated> draws = draw(
         .list(
           .build(
             (Draw draw) => (
@@ -748,7 +752,7 @@ void main() {
 
   property(
     'Every failure a codebase meets comes back as an outcome other than '
-    '`Fetched`, and nothing throws out of `Muster.load` but a bug.',
+    '`Fetched`, and nothing throws out of `Loader.load` but a bug.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Fault> faults = draw(
         .list(.element(_Fault.values), minLength: 1),

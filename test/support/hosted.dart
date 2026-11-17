@@ -93,8 +93,8 @@ void serveLeaf(
   ...files,
 });
 
-/// The hosted codebase `app`, fetching the package [package] at [version],
-/// resolved by [resolution] with `dart`.
+/// The hosted codebase [name], fetching the package [package] at [version],
+/// resolved by [resolution] with [toolchain].
 HostedCodebase hostedOf(
   String package, {
   String name = 'app',

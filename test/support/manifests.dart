@@ -275,7 +275,7 @@ final Gen<List<GitCodebase>> someGitCodebases = .list(
 /// Up to three dot-joined identifiers, each digits with no leading nought
 /// or letters and `-`, or none.
 final Gen<String> _identifiers = .list(
-  Gen.oneOf([
+  .oneOf([
     .integer(min: 0, max: 999).map((int n) => '$n'),
     .build(
       (Draw draw) =>
