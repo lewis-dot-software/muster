@@ -13,6 +13,7 @@ import '../support/loads.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/outcome_case.dart';
+import '../support/pack_stall.dart';
 import '../support/packages.dart';
 import '../support/spy_runner.dart';
 import '../support/waiting_into.dart';
@@ -106,6 +107,42 @@ void main() {
       await killed.kill();
       final Directory left = .new(cloneOf(temp, app).temporary.path);
       expect(await left.list().isEmpty, isFalse);
+      expect(
+        await loaderIn(temp, .new(hermetic(temp))).load(),
+        loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
+      );
+      expect(await left.exists(), isFalse);
+    });
+
+    test('a load killed as its ${apart.name} has git still writing the clone '
+        'leaves a temporary clone holding part of the pack, which the next '
+        'load to make a clone removes as that git runs on', () async {
+      final Commit outsized = await origin.commit(null, {
+        ...packageFiles('app'),
+        'outsized': PackStall.outsized,
+      });
+      await origin.ref('refs/heads/main', outsized);
+      final GitCodebase codebase = codebaseOf(origin, outsized);
+      await writeManifest(atRoot(temp), [codebase]);
+      final PackStall stall = await .make(temp);
+      final Contender killed = await .loading(
+        apart,
+        root: consumerIn(temp).path,
+        variables: loadEnvironment(temp, {
+          'GIT_CONFIG_GLOBAL': stall.config,
+        }).variables,
+        manifests: [atRoot(temp)],
+      );
+      await stall.stalled();
+      addTearDown(stall.release);
+      await killed.kill();
+      final Directory left = .new(cloneOf(temp, codebase).temporary.path);
+      expect([
+        await for (final FileSystemEntity file in Directory(
+          p.join(left.path, 'objects', 'pack'),
+        ).list())
+          if (file is File) await file.length(),
+      ], contains(inExclusiveRange(0, await stall.packed())));
       expect(
         await loaderIn(temp, .new(hermetic(temp))).load(),
         loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
