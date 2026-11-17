@@ -46,6 +46,7 @@ void main() {
         ['pub', 'get', '--offline'],
         workingDirectory: example,
         environment: environment,
+        includeParentEnvironment: false,
       );
       expect(got.exitCode, 0, reason: '${got.stdout}${got.stderr}');
       final ProcessResult tested = await Process.run(
@@ -53,6 +54,7 @@ void main() {
         ['test'],
         workingDirectory: example,
         environment: environment,
+        includeParentEnvironment: false,
       );
       expect(tested.exitCode, 0, reason: '${tested.stdout}${tested.stderr}');
       expect(
