@@ -4,8 +4,8 @@ import 'locks_directory.dart';
 import 'package.dart';
 
 /// The file of a kept lock, a lock muster keeps beside a manifest for a
-/// package that holds none of its own: a git codebase's whose commit holds
-/// none, and every hosted codebase's.
+/// package that takes no lock its pin holds: a git codebase's whose commit
+/// holds none, and every hosted codebase's, whatever pub serves.
 extension type const KeptLockPath._(String path) {}
 
 /// The kept lock of [codebase]'s [package] in [locks]: `<name>-<key>.lock`,

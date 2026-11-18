@@ -181,8 +181,8 @@ class Checkouts {
   /// The kept locks, in [locks], that [codebase]'s packages lack, each
   /// written from a resolve afresh of its package in the checkout, at the
   /// pin, and moved into place whole, so a write cut short leaves no lock.
-  /// A package whose pin holds its lock, or whose kept lock is there, is
-  /// left as it is, its lock untouched.
+  /// A package that takes the lock its pin holds, or whose kept lock is
+  /// there, is left as it is, its lock untouched.
   ///
   /// The checkout's claim is held throughout, and a git codebase's clone's
   /// from before the clone is touched until the last lock is written. Where

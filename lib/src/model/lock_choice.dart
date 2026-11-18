@@ -22,7 +22,7 @@ final class LockLacking extends LockChoice {
   /// The choice that found [package] with no lock.
   const LockLacking(this.package);
 
-  /// The first package, in [Package]'s order, whose pin holds no lock and
-  /// that has no kept lock.
+  /// The first package, in [Package]'s order, that takes no lock its pin
+  /// holds and has no kept lock.
   final Package package;
 }

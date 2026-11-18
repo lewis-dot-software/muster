@@ -100,7 +100,7 @@ timeout: none
 equatable has no lock: run `dart run muster lock` to write <package>/muster_locks/equatable-fffccec6aaf8a61d3e1eb51ce195d7ed9926d71200f7a110d0a6fe8d7b8fdac5.lock
 ```
 
-Every codebase resolves on a lock, so its dependencies hold still as pub.dev publishes. equatable's commit holds no `pubspec.lock`, and no package from pub.dev holds one, so muster keeps a lock for each beside the manifest, and none is there yet.
+Every codebase resolves on a lock, so its dependencies hold still as pub.dev publishes. equatable's commit holds no `pubspec.lock`, and muster never takes a lock pub serves, so it keeps a lock for each beside the manifest, and none is there yet.
 
 ## Write the locks
 
