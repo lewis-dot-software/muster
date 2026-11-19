@@ -13,7 +13,7 @@ Each refusal reads as the line `muster fetch` prints for it, naming its case and
 
 | Case | Carries | Refuses |
 |---|---|---|
-| `NoManifest` | Nothing | A load with no manifest: none named, no `muster.yaml` at the root, and none in `MUSTER_MANIFESTS` |
+| `NoManifest` | `root` | A load with no manifest: none named, no `muster.yaml` at its root, and none in `MUSTER_MANIFESTS` |
 | `NotManifestName` | `path` | A manifest whose file name does not end `.yaml` |
 | `ManifestMissing` | `manifest` | A manifest named that is not there |
 | `ManifestUnreadable` | `manifest`, `reason` | A manifest whose file could not be read, for the reason the system gave |
@@ -23,7 +23,7 @@ Each refusal reads as the line `muster fetch` prints for it, naming its case and
 | `NoCache` | `os` | A machine with none of the variables set that the cache is taken from ([environment](environment.md)) |
 | `NoClaim` | `system` | A POSIX system whose C library muster does not know, so it has no lock to claim a clone or a checkout with |
 
-A `ManifestPath` reads back as its `path`, and its `os`, an `Os`, is `posix` or `windows`, the family of system whose paths it is written in.
+A `ManifestPath` reads back as its `path`, and so does a `ConsumerRoot`, the directory a load seeks its `muster.yaml` at and stands its checkouts under. Each one's `os`, an `Os`, is `posix` or `windows`, the family of system whose paths it is written in.
 
 ## A manifest's refusal
 

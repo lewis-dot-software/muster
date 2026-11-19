@@ -254,7 +254,7 @@ class Loader implements Loads {
       paths.add(manifest);
     }
     if (manifests.isEmpty) {
-      throw const _Refusal(NoManifest());
+      throw _Refusal(NoManifest(consumer));
     }
     final List<NamedCodebase> codebases;
     switch (mergeManifests(manifests)) {

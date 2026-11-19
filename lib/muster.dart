@@ -25,6 +25,7 @@ export 'src/load/scratching.dart'
     show Scratching, Scratched, NotNamed, NotGit, ScratchFailed;
 export 'src/model/codebase_name.dart' show CodebaseName;
 export 'src/model/command.dart' show Command;
+export 'src/model/consumer_root.dart' show ConsumerRoot;
 export 'src/model/disposal.dart' show Disposal, Disposed, DisposalFailed;
 export 'src/model/commit.dart' show Commit;
 export 'src/model/example.dart'

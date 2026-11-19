@@ -1,5 +1,4 @@
 import 'package:muster/muster.dart';
-import 'package:muster/src/model/consumer_root.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/package_path.dart';
 

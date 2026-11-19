@@ -1,6 +1,5 @@
 import 'package:muster/muster.dart';
 import 'package:muster/src/model/codebase.dart';
-import 'package:muster/src/model/consumer_root.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';

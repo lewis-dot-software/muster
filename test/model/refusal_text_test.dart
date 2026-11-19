@@ -8,7 +8,10 @@ import '../support/refusal_case.dart';
 
 /// What each refusal's line names, so a person can act on it.
 List<Pattern> _named(LoadRefusal refusal) => switch (refusal) {
-  NoManifest() => ['muster.yaml', 'MUSTER_MANIFESTS'],
+  NoManifest(:final ConsumerRoot root) => [
+    'muster.yaml at ${root.path},',
+    'MUSTER_MANIFESTS',
+  ],
   NotManifestName(:final String path) => [path, '.yaml'],
   ManifestMissing(:final manifest) => [manifest.path],
   ManifestUnreadable(:final manifest, :final String reason) => [
@@ -224,6 +227,7 @@ void main() {
     final ManifestPath plain = .parse('/consumer/c.yaml', .posix)!;
     expect(
       [
+        NoManifest(.new('/consumer/a\nb', .posix)).toString(),
         const NotManifestName('/consumer/a\nb.yml').toString(),
         ManifestMissing(broken).toString(),
         ManifestUnreadable(plain, 'Permission\ndenied').toString(),
@@ -237,6 +241,8 @@ void main() {
         const NoClaim('free\nbsd').toString(),
       ],
       [
+        r'no manifest: none named, no muster.yaml at "/consumer/a\nb", and '
+            'none in MUSTER_MANIFESTS',
         r'"/consumer/a\nb.yml": a manifest'
             "'"
             r's file name ends .yaml',

@@ -268,13 +268,40 @@ void main() {
       expect(runner.given, isEmpty);
     }
 
-    test('with no manifest at all', () async {
-      await refuses(isA<NoManifest>());
-    });
+    Matcher noManifestAt(String root) => isA<NoManifest>()
+        .having((NoManifest n) => n.root.path, 'root', root)
+        .having(
+          (NoManifest n) => '$n',
+          'text',
+          'no manifest: none named, no muster.yaml at $root, and none in '
+              'MUSTER_MANIFESTS',
+        );
+
+    test(
+      'with no manifest at all, naming the working directory its root',
+      () async {
+        await refuses(noManifestAt(consumerIn(temp).path));
+      },
+    );
 
     test('with no muster.yaml at the root and nothing but separators in '
         'MUSTER_MANIFESTS', () async {
-      await refuses(isA<NoManifest>(), variables: {'MUSTER_MANIFESTS': '::'});
+      await refuses(
+        noManifestAt(consumerIn(temp).path),
+        variables: {'MUSTER_MANIFESTS': '::'},
+      );
+    });
+
+    test('with no muster.yaml at a root given away from the working '
+        'directory, naming that root, though the working directory holds '
+        'one', () async {
+      await writeManifest(atRoot(temp), []);
+      runner.commands.clear();
+      expect(
+        await load(root: 'other'),
+        refusedFor(noManifestAt(p.join(consumerIn(temp).path, 'other'))),
+      );
+      expect(runner.given, isEmpty);
     });
 
     test(

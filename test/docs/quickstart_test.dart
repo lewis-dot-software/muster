@@ -150,8 +150,9 @@ void main() {
         ]);
         expect(refused.exitCode, isNot(0));
         expect(_reported(refused, .error), [
-          'The load refused: no manifest: none named, no muster.yaml in the '
-              'working directory, and none in MUSTER_MANIFESTS',
+          'The load refused: no manifest: none named, no muster.yaml at '
+              '${await Directory(package).resolveSymbolicLinks()}, and none '
+              'in MUSTER_MANIFESTS',
         ]);
 
         await writeFile(

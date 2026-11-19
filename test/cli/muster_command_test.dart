@@ -53,11 +53,17 @@ void main() {
     );
   });
 
-  test('the muster command exits 2 on a refused run, and 64 on a command '
-      'line it does not take', () async {
+  test('the muster command exits 2 on a refused run, naming the working '
+      'directory it sought muster.yaml in, and 64 on a command line it does '
+      'not take', () async {
     final ProcessResult refused = await muster(['fetch']);
     expect(refused.exitCode, 2);
-    expect(refused.stderr, startsWith('no manifest: '));
+    expect(
+      refused.stderr,
+      'no manifest: none named, no muster.yaml at '
+      '${await Directory(consumer).resolveSymbolicLinks()}, and none in '
+      'MUSTER_MANIFESTS\n',
+    );
     expect((await muster(['nope'])).exitCode, 64);
   });
 

@@ -1,4 +1,5 @@
 import 'codebase_name.dart';
+import 'consumer_root.dart';
 import 'manifest_path.dart';
 import 'manifest_refusal.dart';
 import 'os.dart';
@@ -15,11 +16,15 @@ sealed class LoadRefusal {
   String toString() => refusalText(this);
 }
 
-/// A load with no manifest: none named, no `muster.yaml` at the root, and
+/// A load with no manifest: none named, no `muster.yaml` at its [root], and
 /// nothing in `MUSTER_MANIFESTS`.
 final class NoManifest extends LoadRefusal {
-  /// The refusal of a load with no manifest.
-  const NoManifest();
+  /// The refusal of a load at [root] with no manifest.
+  const NoManifest(this.root);
+
+  /// The root the load sought its `muster.yaml` at, its path made absolute
+  /// against the working directory.
+  final ConsumerRoot root;
 }
 
 /// A manifest whose file name does not end `.yaml` after a stem of its own.

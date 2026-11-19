@@ -53,7 +53,7 @@ enum RefusalCase {
 
   /// Refusals of this case.
   List<LoadRefusal> get samples => switch (this) {
-    .noManifest => const [NoManifest()],
+    .noManifest => [NoManifest(.new('/consumer', .posix))],
     .notManifestName => const [NotManifestName('/consumer/muster.yml')],
     .manifestMissing => [ManifestMissing(_manifest('missing'))],
     .manifestUnreadable => [

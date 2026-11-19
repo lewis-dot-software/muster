@@ -1,3 +1,4 @@
+import 'consumer_root.dart';
 import 'load_refusal.dart';
 import 'on_one_line.dart';
 import 'os.dart';
@@ -6,9 +7,10 @@ import 'os.dart';
 /// holding a control character but a tab, or a line break, quoted with each
 /// escaped.
 String refusalText(LoadRefusal refusal) => switch (refusal) {
-  NoManifest() =>
-    'no manifest: none named, no muster.yaml in the working directory, and '
-        'none in MUSTER_MANIFESTS',
+  NoManifest(:final ConsumerRoot root) =>
+    'no manifest: none named, no muster.yaml at ${onOneLine(root.path)}, and '
+        'none '
+        'in MUSTER_MANIFESTS',
   NotManifestName(:final String path) =>
     "${onOneLine(path)}: a manifest's file name ends .yaml",
   ManifestMissing(:final manifest) =>

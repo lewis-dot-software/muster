@@ -437,7 +437,13 @@ void main() {
           .new(hermetic(temp)),
           variables: {'MUSTER_MANIFESTS': ?listed},
         ).load(),
-        refusedFor(isA<NoManifest>()),
+        refusedFor(
+          isA<NoManifest>().having(
+            (NoManifest n) => n.root.path,
+            'root',
+            consumerIn(temp).path,
+          ),
+        ),
       );
     }),
     settings: .new(runs: 8, shrinkSteps: gitShrinks),
