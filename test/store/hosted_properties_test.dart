@@ -433,11 +433,10 @@ enum _Off {
 
 void main() {
   property('A hosted checkout made afresh holds every file pub serves for the '
-      'package at its version, unchanged but for a `pubspec.lock` its resolve '
-      'replaces, and nothing beside them but what the resolve, the package '
-      "around it and each package's `pubspec_overrides.yaml` write.", (
-    Draw draw,
-  ) async {
+      'package at its version, unchanged but for the `pubspec.lock` of a '
+      'package that resolves in place, which its resolve replaces, and nothing '
+      'beside them but what the resolve, the package around it and each '
+      "package's `pubspec_overrides.yaml` write.", (Draw draw) async {
     final _Open open = draw(_open, label: 'open');
     for (final (_Shape shape, _Before before) in [
       for (final _Shape shape in _shapesOf(open))
