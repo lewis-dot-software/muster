@@ -16,7 +16,7 @@ dev_dependencies:
   muster:
     git:
       url: https://github.com/lewis-dot-software/muster
-      ref: v0.2.1
+      ref: v0.3.0
   test: ^1.33.0
 ```
 

@@ -36,11 +36,12 @@ class Cache {
   /// named under it. Its caller holds the claim on [url]'s clone.
   ///
   /// A new clone is made in a temporary clone its make alone names and moved
-  /// into place, so a clone that fails leaves nothing in the cache, and a
-  /// git that a make cut short left running empties no later make's when it
-  /// ends. It takes its object format from [url]'s repo. A URL that is a
-  /// path is cloned as any other is, so the clone holds what its branches
-  /// and tags reach alone.
+  /// into place, and a git that a make cut short left running empties no
+  /// later make's when it ends. A clone that fails removes its temporary
+  /// clone, and where that removal fails too, the temporary clone stays
+  /// until a later call removes it. It takes its object format from [url]'s
+  /// repo. A URL that is a path is cloned as any other is, so the clone holds
+  /// what its branches and tags reach alone.
   ///
   /// Every temporary clone in the cache is removed first, each of [url]'s
   /// clone and each of another clone whose claim no other hold has, so one
@@ -107,8 +108,9 @@ class Cache {
 
   Future<void> _make(ClonePath clone, GitUrl url) async {
     final Directory made = await fileAct(directory.path, () async {
-      final Directory cache = await Directory(directory.path)
-          .create(recursive: true);
+      final Directory cache = await .new(
+        directory.path,
+      ).create(recursive: true);
       return cache.createTemp(ClonePath.temporaryPrefix(url));
     });
     try {

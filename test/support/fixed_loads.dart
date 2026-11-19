@@ -5,6 +5,7 @@ import 'package:muster/src/load/muster.dart';
 import 'package:muster/src/store/claims.dart';
 import 'package:muster/src/store/runner.dart';
 
+import 'host.dart';
 import 'locker.dart';
 
 /// Runs that give what they were made with, starting no process and
@@ -54,6 +55,6 @@ final Muster _muster = musterOf(
   ),
 );
 
-final Runner _none = .new(const {});
+final Runner _none = .new(const {}, host);
 
 final Claims _claims = .new(testLocker);

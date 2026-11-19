@@ -15,6 +15,7 @@ import 'package:test/test.dart';
 import '../support/chmod.dart';
 import '../support/faults.dart';
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
 import '../support/skipped_unless_modes_deny.dart';
@@ -435,7 +436,7 @@ void main() {
           ...hermetic(temp),
           'GIT_DIR': other.directory.path,
           'GIT_OBJECT_DIRECTORY': p.join(other.directory.path, 'objects'),
-        }),
+        }, host),
       ).clone(origin.url, pin);
       expect(await holds(clone.path, pin, runner), isTrue);
       expect(await other.resolve('refs/heads/main'), own.hash);
@@ -451,7 +452,7 @@ void main() {
       final Commit pin = await onMain();
       final ClonePath clone = await cacheIn(
         temp,
-        .new(environment),
+        .new(environment, host),
       ).clone(origin.url, pin);
       expect(await holds(clone.path, pin, runner), isTrue);
     },

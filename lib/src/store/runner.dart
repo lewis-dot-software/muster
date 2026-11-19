@@ -4,6 +4,7 @@ import 'dart:io';
 import '../model/command.dart';
 import '../model/executable.dart';
 import '../model/fetch_outcome.dart';
+import '../model/os.dart';
 import 'ran.dart';
 import 'store_fault.dart';
 
@@ -22,13 +23,21 @@ import 'store_fault.dart';
 /// caller's, such as the `GIT_DIR` a hook exports, so it acts on the repo
 /// muster names alone, and keeps those that carry its caller's
 /// configuration, as git itself does on moving to another repo.
+///
+/// Each executable starts by its own name, found on `PATH` with no shell,
+/// but `flutter` on Windows, which starts as `flutter.bat`. Windows finds a
+/// name with no extension on `PATH` only as a `.exe`, and the Flutter SDK's
+/// `flutter` there is a batch script, which Windows runs in `cmd`, so its
+/// arguments, a path among them, are read by `cmd`'s rules.
 class Runner {
   /// The runner that starts each process with [environment], less and over
-  /// the variables the class names.
-  Runner(Map<String, String> environment)
+  /// the variables the class names, on [_os].
+  Runner(Map<String, String> environment, this._os)
     : _environment = .unmodifiable(environment);
 
   final Map<String, String> _environment;
+
+  final Os _os;
 
   /// Runs [command] to its exit, and returns what it left where its exit code
   /// is one of [exits].
@@ -39,7 +48,7 @@ class Runner {
     final ProcessResult result;
     try {
       result = await Process.run(
-        command.executable.name,
+        _started(command.executable),
         command.arguments,
         environment: _for(command.executable),
         includeParentEnvironment: false,
@@ -61,6 +70,15 @@ class Runner {
     }
     return ran;
   }
+
+  /// The name [executable] starts by on [_os].
+  String _started(Executable executable) => switch (executable) {
+    .git || .dart => executable.name,
+    .flutter => switch (_os) {
+      .posix => 'flutter',
+      .windows => 'flutter.bat',
+    },
+  };
 
   Map<String, String> _for(Executable executable) => {
     'GIT_TERMINAL_PROMPT': '0',

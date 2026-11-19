@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
@@ -34,7 +35,7 @@ void main() {
 
   test('the muster command locks then fetches a git codebase that holds no '
       'lock of its own, exiting 0 with its row Fetched', () async {
-    final Origin origin = await .make(temp, .new(hermetic(temp)));
+    final Origin origin = await .make(temp, .new(hermetic(temp), host));
     final Commit pin = await origin.commit(
       null,
       packageFiles('app', locked: false),

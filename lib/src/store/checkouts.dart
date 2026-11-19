@@ -171,7 +171,7 @@ class Checkouts {
       _chosen(
         Hosted(codebase),
         locks,
-        chooseLocks(unpacked.packages, _kept(survey)),
+        chooseLocks(unpacked.packages, await _kept(Hosted(codebase), locks)),
       ),
       unpacked.unresolved,
       survey.sdk,
@@ -222,14 +222,7 @@ class Checkouts {
           );
           final List<Package> lacking = locksLacking(
             await _atCommit(clone, codebase),
-            {
-              for (final Package package in Package.values)
-                if (await _hash(
-                      keptLockOf(locks, Git(codebase), package).path,
-                    ) !=
-                    null)
-                  package,
-            },
+            await _kept(Git(codebase), locks),
           );
           if (lacking.isEmpty) {
             return const [];
@@ -257,7 +250,7 @@ class Checkouts {
       await _unstamp(at);
       final List<Package> lacking = locksLacking(
         (await _unpack(at, codebase)).packages,
-        _kept(survey),
+        await _kept(Hosted(codebase), locks),
       );
       return _keepLacking(Hosted(codebase), locks, at, lacking);
     });
@@ -316,7 +309,10 @@ class Checkouts {
     final Map<Package, LockSource> chosen = _chosen(
       Git(codebase),
       locks,
-      chooseLocks(await _atCommit(clone, codebase), _kept(survey)),
+      chooseLocks(
+        await _atCommit(clone, codebase),
+        await _kept(Git(codebase), locks),
+      ),
     );
     await _unstamp(at);
     await _place(at, clone, codebase);
@@ -337,11 +333,11 @@ class Checkouts {
     ),
   };
 
-  /// The packages [survey] found a kept lock for.
-  Set<Package> _kept(Survey survey) => {
-    for (final MapEntry<Package, SurveyedPackage>(:key, :value)
-        in survey.packages.entries)
-      if (value.keptLock != null) key,
+  /// The packages of [codebase] whose kept lock in [locks] is there.
+  Future<Set<Package>> _kept(Codebase codebase, LocksDirectory locks) async => {
+    for (final Package package in Package.values)
+      if (await _hash(keptLockOf(locks, codebase, package).path) != null)
+        package,
   };
 
   /// [codebase]'s packages in the checkout at [at], each with the lock

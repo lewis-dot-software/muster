@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:pub_semver/pub_semver.dart';
 import 'package:test/test.dart';
 
 import '../support/git.dart';
@@ -77,17 +78,33 @@ void main() {
     });
 
     test(
-      "installs as the README does, at a tag muster's repo holds.",
+      "installs as the README does, at a tag muster's repo holds or one a "
+      'next land makes, a patch, a minor or a major above its newest.',
       () async {
         final String install = _blocks(quickstart, 'yaml').first;
         expect(_blocks(readme, 'yaml').first, install);
         final String tag = _gitSource.firstMatch(install)![1]!;
-        final ProcessResult tagged = await Process.run('git', [
-          'rev-parse',
-          '--verify',
-          'refs/tags/$tag',
+        final ProcessResult listed = await Process.run('git', [
+          'tag',
+          '--list',
+          'v*',
         ], workingDirectory: await musterRoot());
-        expect(tagged.exitCode, 0, reason: '${tagged.stderr}');
+        expect(listed.exitCode, 0, reason: '${listed.stderr}');
+        final List<String> held = LineSplitter.split(listed.stdout as String)
+            .toList();
+        expect(held, isNotEmpty, reason: "muster's repo holds no v* tag");
+        final Version newest = .primary([
+          for (final String version in held) .parse(version.substring(1)),
+        ]);
+        expect({
+          ...held,
+          for (final Version next in [
+            newest.nextPatch,
+            newest.nextMinor,
+            newest.nextMajor,
+          ])
+            'v$next',
+        }, contains(tag));
       },
     );
 

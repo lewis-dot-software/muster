@@ -11,6 +11,7 @@ import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/packages.dart';
@@ -49,7 +50,7 @@ void main() {
 
   setUp(() async {
     temp = await .systemTemp.createTemp('muster-');
-    final Runner runner = .new(hermetic(temp)..remove('PUB_HOSTED_URL'));
+    final Runner runner = .new(hermetic(temp)..remove('PUB_HOSTED_URL'), host);
     checkouts = checkoutsIn(temp, runner);
     locks = locksBeside(atRoot(temp));
   });

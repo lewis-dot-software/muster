@@ -20,6 +20,7 @@ import 'package:test/test.dart';
 
 import '../support/git.dart';
 import '../support/git_shrinks.dart';
+import '../support/host.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/manifests.dart';
@@ -434,7 +435,7 @@ void main() {
       expect(
         await loaderIn(
           temp,
-          .new(hermetic(temp)),
+          .new(hermetic(temp), host),
           variables: {'MUSTER_MANIFESTS': ?listed},
         ).load(),
         refusedFor(

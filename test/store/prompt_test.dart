@@ -11,6 +11,7 @@ import '../support/askpass.dart';
 import '../support/asking_server.dart';
 import '../support/faults.dart';
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/quiet_in.dart';
 import '../support/ssh_server.dart';
 
@@ -33,7 +34,7 @@ void main() {
   tearDown(() => temp.delete(recursive: true));
 
   /// Sets [key] to [value] in the user's own git configuration.
-  Future<void> configure(String key, String value) => Runner(quiet).run((
+  Future<void> configure(String key, String value) => Runner(quiet, host).run((
     executable: .git,
     arguments: ['config', '--file', gitConfigIn(temp), key, value],
   ));
@@ -46,7 +47,7 @@ void main() {
     String message,
   ) async {
     await expectLater(
-      cacheIn(temp, .new(environment)).clone(url, _pin),
+      cacheIn(temp, .new(environment, host)).clone(url, _pin),
       throwsA(
         storeFault(
           isA<CommandFailed>().having(

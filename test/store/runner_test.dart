@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:muster/src/model/command.dart';
 import 'package:muster/src/model/executable.dart';
 import 'package:muster/src/model/fetch_outcome.dart';
+import 'package:muster/src/model/os.dart';
 import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:test/test.dart';
 
 import '../support/chmod.dart';
 import '../support/faults.dart';
+import '../support/host.dart';
 
 /// A git command that prints, through the shell, three variables of its
 /// process's environment a line each: `MUSTER_PROBE`, `GIT_TERMINAL_PROMPT`
@@ -39,8 +41,10 @@ final Map<String, String> _path = {'PATH': Platform.environment['PATH']!};
 void main() {
   test('a process reads the environment its runner was made with, and '
       'nothing else of the test process\'s', () async {
-    final Ran ran = await Runner({..._path, 'MUSTER_PROBE': 'here'})
-        .run(_probe);
+    final Ran ran = await Runner({
+      ..._path,
+      'MUSTER_PROBE': 'here',
+    }, host).run(_probe);
     expect(_printed(ran), ['here', '0', '']);
   });
 
@@ -83,7 +87,7 @@ void main() {
 
   test('an environment handed in reaches git whole, with its prompts off and '
       'no askpass over it', () async {
-    final Ran ran = await Runner(handed).run((
+    final Ran ran = await Runner(handed, host).run((
       executable: .git,
       arguments: ['-c', 'alias.muster-env=!env', 'muster-env'],
     ));
@@ -102,8 +106,10 @@ void main() {
       '  }\n'
       '}\n',
     );
-    final Ran ran = await Runner(handed)
-        .run((executable: .dart, arguments: [script.path]));
+    final Ran ran = await Runner(
+      handed,
+      host,
+    ).run((executable: .dart, arguments: [script.path]));
     expectReached(ran.stdout);
   });
 
@@ -120,7 +126,7 @@ void main() {
       ..._path,
       'MUSTER_PROBE': 'here',
       'GIT_DIR': 'kept',
-    }).run((executable: .dart, arguments: [script.path]));
+    }, host).run((executable: .dart, arguments: [script.path]));
     expect(ran.stdout.trim(), 'here,-,kept');
   });
 
@@ -139,7 +145,7 @@ void main() {
       'GIT_ASKPASS': 'muster-asks',
       'SSH_ASKPASS': 'muster-asks',
       'SSH_ASKPASS_REQUIRE': 'never',
-    }).run((executable: .dart, arguments: [script.path]));
+    }, host).run((executable: .dart, arguments: [script.path]));
     expect(
       ran.stdout.trim(),
       'GIT_TERMINAL_PROMPT=0,GIT_ASKPASS=,SSH_ASKPASS=false,'
@@ -148,13 +154,15 @@ void main() {
   });
 
   test('git runs with its terminal prompt off', () async {
-    final Ran ran = await Runner(_path).run(_probe);
+    final Ran ran = await Runner(_path, host).run(_probe);
     expect(_printed(ran)[1], '0');
   });
 
   test('the runner\'s environment wins over its own for git', () async {
-    final Ran ran = await Runner({..._path, 'GIT_TERMINAL_PROMPT': '1'})
-        .run(_probe);
+    final Ran ran = await Runner({
+      ..._path,
+      'GIT_TERMINAL_PROMPT': '1',
+    }, host).run(_probe);
     expect(_printed(ran)[1], '1');
   });
 
@@ -162,7 +170,7 @@ void main() {
       'in, every one git lists but the two that carry configuration', () async {
     final Directory temp = await .systemTemp.createTemp('muster-');
     addTearDown(() => temp.delete(recursive: true));
-    final List<String> listed = (await Runner(_path).run((
+    final List<String> listed = (await Runner(_path, host).run((
       executable: .git,
       arguments: ['-C', temp.path, 'rev-parse', '--local-env-vars'],
     ))).stdout.trim().split('\n');
@@ -179,10 +187,13 @@ void main() {
           'printf "%s\\n"${names.map((String n) => ' "\$$n"').join()}\n',
         );
     await chmod('+x', command);
-    final Ran ran = await Runner({
-      'PATH': '${temp.path}:${_path['PATH']}',
-      for (final String name in names) name: 'muster-probe',
-    }).run((executable: .git, arguments: ['-C', temp.path, 'muster-repo']));
+    final Ran ran = await Runner(
+      {
+        'PATH': '${temp.path}:${_path['PATH']}',
+        for (final String name in names) name: 'muster-probe',
+      },
+      host,
+    ).run((executable: .git, arguments: ['-C', temp.path, 'muster-repo']));
     expect(ran.stdout.split('\n').take(names.length), [
       for (final String _ in names) '',
     ]);
@@ -198,7 +209,7 @@ void main() {
             'GIT_CONFIG_KEY_0': 'muster.counted',
             'GIT_CONFIG_VALUE_0': 'here',
             'GIT_CONFIG_PARAMETERS': "'muster.passed'='there'",
-          }).run((
+          }, host).run((
             executable: .git,
             arguments: [
               '-c',
@@ -211,7 +222,7 @@ void main() {
   );
 
   test('output that is no UTF-8 is read, its bad bytes replaced', () async {
-    final Ran ran = await Runner(_path).run((
+    final Ran ran = await Runner(_path, host).run((
       executable: .git,
       arguments: [
         '-c',
@@ -223,14 +234,16 @@ void main() {
   });
 
   test('a command that exits 0 returns what it wrote', () async {
-    final Ran ran = await Runner(_path)
-        .run((executable: .git, arguments: ['--version']));
+    final Ran ran = await Runner(
+      _path,
+      host,
+    ).run((executable: .git, arguments: ['--version']));
     expect(ran.exitCode, 0);
     expect(ran.stdout, startsWith('git version'));
   });
 
   test('an exit code named among the exits returns', () async {
-    final Ran ran = await Runner(_path).run(_absent, exits: const {0, 1});
+    final Ran ran = await Runner(_path, host).run(_absent, exits: const {0, 1});
     expect(ran.exitCode, 1);
   });
 
@@ -238,7 +251,7 @@ void main() {
       'the command, its exit code and its output', () async {
     const Command bad = (executable: .git, arguments: ['muster-no-such-verb']);
     await expectLater(
-      Runner(_path).run(bad),
+      Runner(_path, host).run(bad),
       throwsA(
         storeFault(
           isA<CommandFailed>()
@@ -256,7 +269,7 @@ void main() {
 
   test('a code left out of the exits fails, even 0\'s neighbour 1', () async {
     await expectLater(
-      Runner(_path).run(_absent),
+      Runner(_path, host).run(_absent),
       throwsA(
         storeFault(
           isA<CommandFailed>()
@@ -267,9 +280,54 @@ void main() {
     );
   });
 
+  test('flutter starts as flutter.bat on Windows, the script the Flutter SDK '
+      'holds there, and as flutter on any other system', () async {
+    final Directory bin = await .systemTemp.createTemp('muster-');
+    addTearDown(() => bin.delete(recursive: true));
+    for (final (String name, String says) in [
+      ('flutter', 'posix'),
+      ('flutter.bat', 'windows'),
+    ]) {
+      final File script = await .new(
+        '${bin.path}/$name',
+      ).writeAsString('#!/bin/sh\necho $says\n');
+      await chmod('+x', script);
+    }
+    for (final Os os in Os.values) {
+      final Ran ran = await Runner({
+        'PATH': bin.path,
+      }, os).run((executable: .flutter, arguments: const []));
+      expect(ran.stdout.trim(), os.name);
+    }
+  });
+
+  test('flutter on Windows never starts by its bare name, so one with no '
+      'flutter.bat on PATH cannot start', () async {
+    final Directory bin = await .systemTemp.createTemp('muster-');
+    addTearDown(() => bin.delete(recursive: true));
+    final File script = await .new(
+      '${bin.path}/flutter',
+    ).writeAsString('#!/bin/sh\necho posix\n');
+    await chmod('+x', script);
+    await expectLater(
+      Runner({
+        'PATH': bin.path,
+      }, .windows).run((executable: .flutter, arguments: const [])),
+      throwsA(
+        storeFault(
+          isA<Unstartable>().having(
+            (Unstartable f) => f.executable,
+            'executable',
+            Executable.flutter,
+          ),
+        ),
+      ),
+    );
+  });
+
   test('an executable that cannot start fails, naming it', () async {
     await expectLater(
-      Runner({'PATH': '/muster-no-such-directory'}).run(_probe),
+      Runner({'PATH': '/muster-no-such-directory'}, host).run(_probe),
       throwsA(
         storeFault(
           isA<Unstartable>().having(

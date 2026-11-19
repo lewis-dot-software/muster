@@ -16,6 +16,7 @@ import 'package:test/test.dart';
 
 import '../support/fixed_loads.dart';
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/lines_of.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
@@ -59,7 +60,7 @@ void main() {
 
     setUp(() async {
       temp = await .systemTemp.createTemp('muster-');
-      origin = await .make(temp, .new(hermetic(temp)));
+      origin = await .make(temp, .new(hermetic(temp), host));
     });
 
     tearDown(() => temp.delete(recursive: true));
@@ -68,7 +69,7 @@ void main() {
         branchedCodebase(origin, name, files);
 
     Future<_Run> run(List<String> arguments) =>
-        _run(loaderIn(temp, .new(hermetic(temp))), arguments);
+        _run(loaderIn(temp, .new(hermetic(temp), host)), arguments);
 
     test(
       '`muster lock` then `muster fetch` on a manifest of git codebases '
@@ -120,7 +121,7 @@ void main() {
         codebaseOf(
           await .make(
             await .new(p.join(temp.path, 'other')).create(),
-            .new(hermetic(temp)),
+            .new(hermetic(temp), host),
           ),
           await origin.commit(),
         ),

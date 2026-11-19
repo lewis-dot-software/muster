@@ -11,6 +11,7 @@ import 'load.dart';
 import 'loader.dart';
 import 'loads.dart';
 import 'locking.dart';
+import 'refusal.dart';
 
 /// The runs of the process muster runs in: its environment, its system, its
 /// working directory and its temporary directory read once per run, at its
@@ -32,7 +33,7 @@ final class ProcessLoads implements Loads {
     final Loader loader;
     try {
       loader = await _loader();
-    } on _Refused catch (refused) {
+    } on Refusal catch (refused) {
       return Refused(refused.reason);
     }
     return loader.load(named: named, root: root);
@@ -47,7 +48,7 @@ final class ProcessLoads implements Loads {
     final Loader loader;
     try {
       loader = await _loader();
-    } on _Refused catch (refused) {
+    } on Refusal catch (refused) {
       return LockRefused(refused.reason);
     }
     return loader.lock(named: named);
@@ -55,32 +56,25 @@ final class ProcessLoads implements Loads {
 
   /// The loader of the process as it stands now.
   ///
-  /// Throws a [_Refused] where muster takes no claim on the system or the
+  /// Throws a [Refusal] where muster takes no claim on the system or the
   /// working directory cannot be read.
   Future<Loader> _loader() async {
     final Environment environment = processEnvironment();
     final String system = _system();
     final Locker locker =
-        .of(environment.os, system) ?? (throw _Refused(NoClaim(system)));
+        .of(environment.os, system) ?? (throw Refusal(NoClaim(system)));
     final WorkingDirectory directory;
     try {
       directory = await currentDirectory(environment.os);
     } on StoreFault catch (fault) {
-      throw _Refused(NoWorkingDirectory(fault.fileFailure.reason));
+      throw Refusal(NoWorkingDirectory(fault.fileFailure.reason));
     }
     return .new(
       environment,
       directory,
-      .new(environment.variables),
+      .new(environment.variables, environment.os),
       .new(locker),
       systemTemp(environment.os),
     );
   }
-}
-
-/// A run refused for [reason] before any process or file write.
-final class _Refused implements Exception {
-  const _Refused(this.reason);
-
-  final LoadRefusal reason;
 }

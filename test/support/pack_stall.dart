@@ -37,7 +37,7 @@ class PackStall {
     ]);
     expect(made.exitCode, 0, reason: '${made.stderr}');
     final String pack = shellQuoted(at('pack'));
-    final File hook = await File(at('hook')).writeAsString(
+    final File hook = await .new(at('hook')).writeAsString(
       '#!/bin/sh\n'
       '"\$@" > $pack\n'
       'head -c $_sent $pack\n'
@@ -47,7 +47,7 @@ class PackStall {
       'tail -c +${_sent + 1} $pack\n',
     );
     await chmod('+x', hook);
-    final File config = await File(at('gitconfig')).writeAsString(
+    final File config = await .new(at('gitconfig')).writeAsString(
       '[uploadpack]\n'
       '\tpackObjectsHook = ${shellQuoted(hook.path)}\n'
       '[trace2]\n'

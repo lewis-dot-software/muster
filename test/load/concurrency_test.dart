@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 import '../support/apart.dart';
 import '../support/contender.dart';
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/loads.dart';
 import '../support/locker.dart';
 import '../support/origin.dart';
@@ -26,7 +27,7 @@ void main() {
 
   setUp(() async {
     temp = await .systemTemp.createTemp('muster-');
-    origin = await .make(temp, .new(hermetic(temp)));
+    origin = await .make(temp, .new(hermetic(temp), host));
     final Commit pin = await origin.commit(null, packageFiles('app'));
     await origin.ref('refs/heads/main', pin);
     app = codebaseOf(origin, pin);
@@ -113,7 +114,7 @@ void main() {
       final Directory left = .new(path);
       expect(await left.list().isEmpty, isFalse);
       expect(
-        await loaderIn(temp, .new(hermetic(temp))).load(),
+        await loaderIn(temp, .new(hermetic(temp), host)).load(),
         loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
       );
       expect(await left.exists(), isFalse);
@@ -153,7 +154,7 @@ void main() {
           if (file is File) await file.length(),
       ], contains(inExclusiveRange(0, await stall.packed())));
       expect(
-        await loaderIn(temp, .new(hermetic(temp))).load(),
+        await loaderIn(temp, .new(hermetic(temp), host)).load(),
         loadedWith({'app': fetchedAt(checkoutAt(temp, 'app'))}),
       );
       expect(await left.exists(), isFalse);
@@ -186,7 +187,7 @@ void main() {
       addTearDown(later.release);
       final Future<Load> load = loaderIn(
         temp,
-        .new({...hermetic(temp), 'GIT_CONFIG_GLOBAL': later.config}),
+        .new({...hermetic(temp), 'GIT_CONFIG_GLOBAL': later.config}, host),
       ).load();
       await later.stalled();
       await orphaned.release();
@@ -220,7 +221,7 @@ void main() {
       expect(
         await loaderIn(
           temp,
-          .new(hermetic(temp)),
+          .new(hermetic(temp), host),
           root: root,
           claims: .new(
             testLocker,

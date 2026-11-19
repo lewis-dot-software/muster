@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/git.dart';
+import '../support/host.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/packages.dart';
@@ -56,7 +57,7 @@ void main() {
       'MUSTER_MANIFESTS name at its pin, resolved, with no setup', () async {
     await inTemp((Directory temp) async {
       final Map<String, String> environment = hermetic(temp);
-      final Runner runner = .new(environment);
+      final Runner runner = .new(environment, host);
       final Origin origin = await .make(temp, runner);
       final Commit app = await origin.commit(null, packageFiles('app'));
       final Commit bench = await origin.commit(

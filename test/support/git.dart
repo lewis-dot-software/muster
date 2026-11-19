@@ -8,6 +8,7 @@ import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:path/path.dart' as p;
 
+import 'host.dart';
 import 'locker.dart';
 
 /// A directory of a test's own, deleted when [body] is done with it.
@@ -44,7 +45,7 @@ Map<String, String> hermetic(Directory temp) {
 /// A runner in [temp] that can start no process, since its `PATH` holds no
 /// executable.
 Runner unstartableIn(Directory temp) =>
-    .new({...hermetic(temp), 'PATH': '/muster-no-such-directory'});
+    .new({...hermetic(temp), 'PATH': '/muster-no-such-directory'}, host);
 
 /// The cache a test's clones go into in [temp].
 CacheDirectory cacheDirectoryIn(Directory temp) =>

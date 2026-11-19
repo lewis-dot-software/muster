@@ -146,18 +146,28 @@ final class _LockFileEx extends Hold {
       claim.path,
       () => File(claim.path).open(mode: .append),
     );
+    final bool locked;
     try {
-      await file.lock(.exclusive);
-      return _LockFileEx._(file);
-    } on FileSystemException catch (e) {
+      locked = await fileAct(claim.path, () async {
+        try {
+          await file.lock(.exclusive);
+          return true;
+        } on FileSystemException catch (e) {
+          if (e.osError?.errorCode == _lockViolation) {
+            return false;
+          }
+          rethrow;
+        }
+      });
+    } on StoreFault {
       await fileAct(claim.path, file.close);
-      if (e.osError?.errorCode == _lockViolation) {
-        return null;
-      }
-      throw StoreFault(
-        StoreFailed(e.path ?? claim.path, e.osError?.message ?? e.message),
-      );
+      rethrow;
     }
+    if (!locked) {
+      await fileAct(claim.path, file.close);
+      return null;
+    }
+    return _LockFileEx._(file);
   }
 
   @override

@@ -39,6 +39,7 @@ import 'load.dart';
 import 'loads.dart';
 import 'locking.dart';
 import 'muster.dart';
+import 'refusal.dart';
 
 /// Loads and locks the codebases a consumer's manifests name, in the
 /// environment and working directory it was made with, its processes run by a
@@ -86,7 +87,7 @@ class Loader implements Loads {
     final _Read read;
     try {
       read = await _read(named, root);
-    } on _Refusal catch (refusal) {
+    } on Refusal catch (refusal) {
       return Refused(refusal.reason);
     }
     final Map<CodebaseName, FetchOutcome> outcomes = {};
@@ -137,7 +138,7 @@ class Loader implements Loads {
     final _Read read;
     try {
       read = await _read(named, null);
-    } on _Refusal catch (refusal) {
+    } on Refusal catch (refusal) {
       return LockRefused(refusal.reason);
     }
     final Map<CodebaseName, LockOutcome> outcomes = {};
@@ -200,7 +201,7 @@ class Loader implements Loads {
   /// every one `MUSTER_MANIFESTS` lists, name, in their order, beside the
   /// checkouts under [root] that bring them to their pins.
   ///
-  /// Throws a [_Refusal] on the first fault the manifests meet, or where no
+  /// Throws a [Refusal] on the first fault the manifests meet, or where no
   /// cache is named, with no process started and no file written.
   Future<_Read> _read(List<String> named, String? root) async {
     final ConsumerRoot consumer = .new(
@@ -217,17 +218,17 @@ class Loader implements Loads {
     )) {
       final ManifestPath? manifest = .parse(sought.path, _environment.os);
       if (manifest == null) {
-        throw _Refusal(NotManifestName(sought.path));
+        throw Refusal(NotManifestName(sought.path));
       }
       final List<int>? bytes;
       try {
         bytes = await bytesIfThere(manifest.path);
       } on StoreFault catch (fault) {
-        throw _Refusal(ManifestUnreadable(manifest, fault.fileFailure.reason));
+        throw Refusal(ManifestUnreadable(manifest, fault.fileFailure.reason));
       }
       if (bytes == null) {
         if (sought.named) {
-          throw _Refusal(ManifestMissing(manifest));
+          throw Refusal(ManifestMissing(manifest));
         }
         continue;
       }
@@ -235,7 +236,7 @@ class Loader implements Loads {
       try {
         text = utf8.decode(bytes);
       } on FormatException catch (e) {
-        throw _Refusal(
+        throw Refusal(
           ManifestInvalid(
             manifest,
             NotYaml(switch (e.offset) {
@@ -249,12 +250,12 @@ class Loader implements Loads {
         case ManifestParsed(:final Manifest manifest):
           manifests.add(manifest);
         case ManifestRefused(:final ManifestRefusal refusal):
-          throw _Refusal(ManifestInvalid(manifest, refusal));
+          throw Refusal(ManifestInvalid(manifest, refusal));
       }
       paths.add(manifest);
     }
     if (manifests.isEmpty) {
-      throw _Refusal(NoManifest(consumer));
+      throw Refusal(NoManifest(consumer));
     }
     final List<NamedCodebase> codebases;
     switch (mergeManifests(manifests)) {
@@ -265,13 +266,13 @@ class Loader implements Loads {
         :final int first,
         :final int second,
       ):
-        throw _Refusal(
+        throw Refusal(
           CodebaseNamedTwice(name, first: paths[first], second: paths[second]),
         );
     }
     final CacheDirectory? cache = .of(_environment);
     if (cache == null) {
-      throw _Refusal(NoCache(_environment.os));
+      throw Refusal(NoCache(_environment.os));
     }
     final Cache clones = .new(cache, _runner, _claims);
     return (
@@ -292,10 +293,3 @@ typedef _Read = ({
   Cache clones,
   Checkouts checkouts,
 });
-
-/// A run refused for [reason] before any process or file write.
-final class _Refusal implements Exception {
-  const _Refusal(this.reason);
-
-  final LoadRefusal reason;
-}

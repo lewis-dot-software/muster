@@ -4,14 +4,16 @@ import 'package:muster/src/store/ran.dart';
 import 'package:muster/src/store/runner.dart';
 import 'package:muster/src/store/store_fault.dart';
 
+import 'host.dart';
+
 /// A runner that keeps every command it is given, in order, awaits [before]
 /// on it, then runs it, or answers it in place of running it where [answer]
 /// gives what it left, then awaits [after] on it.
 ///
 /// An answer whose exit code is none of the exits fails as a run's does.
 class SpyRunner extends Runner {
-  /// The spy that starts each process with [environment].
-  SpyRunner(super.environment);
+  /// The spy that starts each process with [environment], on [host].
+  SpyRunner(Map<String, String> environment) : super(environment, host);
 
   /// Every command given so far.
   final List<Command> commands = [];

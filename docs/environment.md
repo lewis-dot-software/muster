@@ -9,7 +9,7 @@ muster runs the `git`, `dart` and `flutter` on `PATH`, keeps one cache of clones
 
 ## Toolchains
 
-Each codebase resolves with the toolchain its manifest names, the `dart` or `flutter` on `PATH`, and `Fetched.sdk` names the SDK version that resolved it ([outcomes](outcomes.md)). A hosted package is unpacked by `dart` whichever toolchain resolves it. A checkout stamped by another SDK than the one on `PATH` is made again on the next load.
+Each codebase resolves with the toolchain its manifest names, the `dart` or `flutter` on `PATH`, and `Fetched.sdk` names the SDK version that resolved it ([outcomes](outcomes.md)). A hosted package is unpacked by `dart` whichever toolchain resolves it. On Windows `flutter` starts as `flutter.bat`, the script the Flutter SDK holds on `PATH`, since Windows finds a name with no extension there only as a `.exe`. Windows runs that script in `cmd`, so a consumer's root whose path holds a character `cmd` reads, such as `&` or `%`, may not reach `flutter` whole. A checkout stamped by another SDK than the one on `PATH` is made again on the next load.
 
 ## Variables
 
