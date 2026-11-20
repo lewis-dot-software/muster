@@ -5,7 +5,7 @@ aliases: muster.yaml, keys, codebases, git codebase, hosted codebase, toolchain,
 
 # Manifest
 
-A manifest is a YAML file naming the codebases a package's tests load, each under its key in a `codebases` mapping. `muster.yaml` at the package's root is the one a load reads first, and further manifests name codebases a public repo cannot.
+A manifest is a YAML file naming the codebases a package's tests load, each under its key in a `codebases` mapping. `muster.yaml` at the package's root is the one a load reads first, and further manifests name codebases a public repo cannot, so each sits outside that repo, in one of its own.
 
 ## Codebases
 

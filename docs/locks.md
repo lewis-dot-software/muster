@@ -21,7 +21,7 @@ A hosted example left unresolved takes no lock ([outcomes](outcomes.md)).
 
 ## Kept locks
 
-A kept lock is a lock muster keeps beside a manifest, in `<stem>_locks/`, so `muster.yaml`'s are in `muster_locks/`. Its file is `<name>-<key>.lock`, and an example's adds `.example` before `.lock`. Commit the directory, since a machine without it resolves nothing that needs one.
+A kept lock is a lock muster keeps beside a manifest, in `<stem>_locks/`, so `muster.yaml`'s are in `muster_locks/` and a further manifest's in a directory of its own. Its file is `<name>-<key>.lock`, and an example's adds `.example` before `.lock`. Commit the directory in its manifest's repo, since a machine without it resolves nothing that needs one.
 
 The key is a hash of every manifest value the resolve turns on: the source, the git URL as written or the hosted package's name, then the pin, `root` for a git codebase, `resolution` for a hosted one, and the toolchain. So an edit to any of those, a URL spelled another way among them, finds no lock and the next load returns `Unlocked` until `muster lock` runs again, never a resolution on a lock made for other values.
 
