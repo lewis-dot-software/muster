@@ -73,4 +73,4 @@ class Claims {
 }
 
 /// The wait between two tries of a claim another hold has.
-Future<void> _pause() => Future<void>.delayed(const .new(milliseconds: 50));
+Future<void> _pause() => .delayed(const .new(milliseconds: 50));
