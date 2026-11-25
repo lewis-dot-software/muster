@@ -67,8 +67,8 @@ Map<String, Set<Element>> _members(Element element) => switch (element) {
 };
 
 void main() {
-  test('Every type a public member of the library names is exported by '
-      '`lib/muster.dart`.', () async {
+  test('LOA-9: Every type a public member of the library names is exported '
+      'by `lib/muster.dart`.', () async {
     final LibraryElement surface = await musterSurface();
     final Set<Element> exported = {
       ...surface.exportNamespace.definedNames2.values,

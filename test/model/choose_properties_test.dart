@@ -15,9 +15,11 @@ import '../support/manifests.dart';
 
 void main() {
   property(
-    'Each package a git codebase resolves, its `root` and an `example/` with '
-    'a pubspec of its own, takes the `pubspec.lock` its commit holds there, '
-    'else its kept lock, and with neither the codebase returns `Unlocked`.',
+    'MAN-2: The lock chosen for each package a git codebase resolves, its '
+    '`root` and an `example/` with a pubspec of its own, is the '
+    '`pubspec.lock` its commit holds there, else its kept lock, and with '
+    "neither the first such package, the root's before the example's, is "
+    'the one lacking.',
     (Draw draw) {
       final RepoRoot root = .parse(draw(anyNormalRoot, label: 'root'))!;
       final Set<int> indices = draw(

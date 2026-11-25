@@ -31,10 +31,12 @@ const Set<String> _hostedKeys = {'hosted', 'version', 'resolution'};
 /// The keys muster knows in a codebase of either kind.
 const Set<String> _codebaseKeys = {..._gitKeys, ..._hostedKeys, 'toolchain'};
 
-/// A key, a known one at either depth among them.
+/// A key, a known one at either depth among them, and one its path quotes:
+/// an empty one, one holding a `.` or a line break, and one opening on `"`.
 final Gen<String> _anyKey = .oneOf([
   .element([..._topKeys, ..._codebaseKeys]),
   .string(alphabet: .lowerCase, minLength: 1),
+  .element(['', 'a.b', '"a', 'a\nb', 'a\u2028b']),
 ]);
 
 /// A character that breaks a line: a control character but a tab, or a line
@@ -73,7 +75,7 @@ final Gen<String> _warnedDirective = .oneOf([
 
 /// A key of a git codebase's whose value the manifest can refuse, the
 /// codebase's name among them.
-enum _Bad { commit, toolchain, root, name }
+enum _Bad { git, commit, toolchain, root, name }
 
 /// A git codebase's key whose value no character that breaks a line stands
 /// in, with what its key wants.
@@ -90,8 +92,8 @@ enum _Unbroken {
 /// How a full hash is made into a commit that is no full hash.
 enum _CommitFault { cut, capital, stray, long }
 
-/// How a root is made into one that leaves its repo.
-enum _RootFault { climb, climbBack, absolute, drive, backslash }
+/// How a root is made into one that leaves its repo, or holds a `\`.
+enum _RootFault { climb, climbBack, absolute, drive, backslash, separator }
 
 /// How a codebase name is made into a name that is none.
 enum _NameFault { lead, inner, empty }
@@ -137,6 +139,13 @@ enum _VersionFault {
 /// How a codebase is made into one of both kinds or of neither.
 enum _KindFault { both, neither }
 
+/// A git URL git would not take as one: the empty one, or one opening on `-`,
+/// which git would read as an option.
+final Gen<String> _badUrl = .oneOf([
+  .element(['']),
+  .build((Draw draw) => '-${draw(.element(['', '-']))}${draw(anyGitUrl)}'),
+]);
+
 /// A commit that is no full hash: a full one cut short, given a capital, given
 /// a character no hash holds, or run one digit long.
 final Gen<String> _badCommit = .build((Draw draw) {
@@ -179,7 +188,7 @@ final Gen<String> _badToolchain = .oneOf([
 ]);
 
 /// A root that leaves its repo: one that climbs above the top, an absolute
-/// one, a drive's, or one in Windows' separators.
+/// one, a drive's, or one in Windows' separators, climbing or not.
 final Gen<String> _badRoot = .build((Draw draw) {
   final String root = draw(anyNormalRoot);
   final _RootFault fault = draw(.element(_RootFault.values));
@@ -190,6 +199,7 @@ final Gen<String> _badRoot = .build((Draw draw) {
     .absolute => '/$root',
     .drive => 'C:/$root',
     .backslash => '..\\${root.replaceAll('/', '\\')}',
+    .separator => '$root\\a',
   };
 });
 
@@ -324,8 +334,8 @@ _Placed _with(Draw draw, List<Codebase> codebases, Codebase codebase) {
 }
 
 void main() {
-  property("A key muster does not know, at any depth, refuses the load, "
-      "naming that key's path from the top.", (Draw draw) {
+  property("MAN-12: A key muster does not know, at the top or in a codebase, "
+      "refuses the load, naming that key's path from the top.", (Draw draw) {
     final List<Codebase> codebases = draw(anyCodebases(), label: 'codebases');
     final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final int target = draw(
@@ -353,8 +363,8 @@ void main() {
     );
   });
 
-  property("A git URL or a `root` holding a character that breaks a line "
-      "refuses the load, naming its key's path.", (Draw draw) {
+  property("MAN-17: A git URL or a `root` holding a character that breaks a "
+      "line refuses the load, naming its key's path.", (Draw draw) {
     final List<GitCodebase> codebases = draw(
       someGitCodebases,
       label: 'codebases',
@@ -386,10 +396,11 @@ void main() {
     );
   });
 
-  property("A value its key cannot take refuses the load, naming that key's "
-      "path: a commit that is not a full hash, a toolchain that is not `dart` "
-      "or `flutter`, a `root` that leaves its repo, or a codebase name that is "
-      "not `[a-z][a-z0-9_]*`.", (Draw draw) {
+  property("MAN-8: A value its key cannot take refuses the load, naming that "
+      "key's path: a git URL that is empty or opens on `-`, a commit that is "
+      "not a full hash, a toolchain that is not `dart` or `flutter`, a `root` "
+      r"that leaves its repo or holds a `\`, or a codebase name that is not "
+      "`[a-z][a-z0-9_]*`.", (Draw draw) {
     final List<GitCodebase> codebases = draw(
       someGitCodebases,
       label: 'codebases',
@@ -401,6 +412,7 @@ void main() {
     );
     final _Bad bad = draw(.element(_Bad.values), label: 'bad');
     final String text = draw(switch (bad) {
+      .git => _badUrl,
       .commit => _badCommit,
       .toolchain => _badToolchain,
       .root => _badRoot,
@@ -417,6 +429,8 @@ void main() {
           badValue(['codebases', text], .codebaseName),
         );
         return;
+      case .git:
+        (key, wanted) = ('git', .gitUrl);
       case .commit:
         (key, wanted) = ('commit', .fullHash);
       case .toolchain:
@@ -438,8 +452,8 @@ void main() {
     );
   });
 
-  property("A hosted codebase's `hosted` is a pub package name and its "
-      "`version` a version pub reads, and any other value refuses the load, "
+  property("MAN-9: A hosted codebase's `hosted` is a pub package name and its "
+      "`version` a version pub reads, and any other text refuses the load, "
       "naming its key's path.", (Draw draw) {
     final List<Codebase> others = draw(anyCodebases(), label: 'others');
     final HostedCodebase codebase = draw(
@@ -496,8 +510,10 @@ void main() {
     }
   });
 
-  property("A `resolution` left out reads as `alone`, and any value but "
-      "`alone` or `as-dependency` refuses.", (Draw draw) {
+  property("MAN-13: A `resolution` left out reads as `alone`, and any value "
+      "but `alone` or `as-dependency` refuses, naming its key's path.", (
+    Draw draw,
+  ) {
     final List<Codebase> others = draw(anyCodebases(), label: 'others');
     final HostedCodebase codebase = draw(
       anyHostedCodebase(),
@@ -543,8 +559,11 @@ void main() {
     }
   });
 
-  property("A codebase holding a key of both kinds, or of neither, refuses the "
-      "load.", (Draw draw) {
+  property("MAN-11: A codebase holding no key of either kind refuses the load, "
+      "naming the codebase's path, and one holding keys of both refuses at "
+      "the first key of the kind its first kind's key does not name.", (
+    Draw draw,
+  ) {
     final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
     final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final int target = draw(
@@ -612,9 +631,9 @@ void main() {
     }
   });
 
-  property("A git codebase missing `git`, `commit` or `toolchain`, or a hosted "
-      "one missing `hosted`, `version` or `toolchain`, refuses the load, "
-      "naming that key's path.", (Draw draw) {
+  property("MAN-10: A git codebase missing `git`, `commit` or `toolchain`, or "
+      "a hosted one missing `hosted`, `version` or `toolchain`, refuses the "
+      "load, naming that key's path.", (Draw draw) {
     final List<Codebase> drawn = draw(someCodebases, label: 'drawn');
     final int at = draw(.integer(min: 0, max: drawn.length - 1), label: 'at');
     final _Gap gap = draw(.element(_Gap.values), label: 'gap');
@@ -655,9 +674,9 @@ void main() {
     );
   });
 
-  property("A parse gives the codebases back in the manifests' order, each "
-      "under its own name, and a name met twice across the manifests of one "
-      "load refuses it.", (Draw draw) {
+  property("MAN-7: A parse gives the codebases back in the manifests' order, "
+      "each under its own name, and the first name met twice across them "
+      "refuses, naming it and the manifests it is met in.", (Draw draw) {
     final List<List<Codebase>> manifests = draw(
       .list(anyCodebases(names: .element(['a', 'b', 'c', 'd', 'e', 'f']))),
       label: 'manifests',
@@ -693,8 +712,8 @@ void main() {
   });
 
   property(
-    'A directive the YAML reader warns of, opening a manifest, leaves its '
-    'parse as it stands without one, and prints nothing.',
+    'MAN-20: A directive the YAML reader warns of, opening a manifest, leaves '
+    'its parse as it stands without one, and prints nothing.',
     (Draw draw) {
       final List<Codebase> codebases = draw(anyCodebases(), label: 'codebases');
       final String directive = draw(_warnedDirective, label: 'directive');
@@ -709,13 +728,14 @@ void main() {
   );
 
   final Gen<GitCodebase> nearby = anyGitCodebase(
-    urls: .element(['/srv/a.git', '/srv/b.git']),
+    urls: .element(['/srv/a.git', '/srv/a.git/', '/srv/b.git']),
     commits: .element(['ab' * 20, 'cd' * 20]),
     roots: .element(['.', 'pkgs']),
   );
-  property("Two codebases share a kept lock's key exactly when they agree on "
-      "URL, commit, `root` and toolchain, and no other change to a manifest "
-      "moves the key.", (Draw draw) {
+  property("MAN-4: Two git codebases share a kept lock's key exactly when they "
+      "agree on URL as written, commit, `root` and toolchain, and neither a "
+      "rename, a `root` spelt another way, the keys' order nor the codebases "
+      "beside it moves the key.", (Draw draw) {
     final GitCodebase a = draw(nearby, label: 'a');
     final GitCodebase b = draw(nearby, label: 'b');
     final List<GitCodebase> others = draw(anyGitCodebases(), label: 'others');
@@ -754,9 +774,9 @@ void main() {
     packages: .element(['args', 'path']),
     versions: .element(['1.0.0', '1.0.1', '1.0.0-dev.1']),
   );
-  property("Two hosted codebases' kept locks share a key exactly when their "
-      "package, version, resolution and toolchain are the same, and never "
-      "share one with a git codebase.", (Draw draw) {
+  property("MAN-5: Two hosted codebases' kept locks share a key exactly when "
+      "their package, version, resolution and toolchain are the same, and "
+      "never share one with a git codebase.", (Draw draw) {
     final HostedCodebase a = draw(nearbyHosted, label: 'a');
     final HostedCodebase b = draw(nearbyHosted, label: 'b');
     final GitCodebase git = draw(anyGitCodebase(), label: 'git');

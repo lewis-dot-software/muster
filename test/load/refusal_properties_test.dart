@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/model/cache_directory.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/git.dart';
@@ -147,10 +148,14 @@ final Gen<List<int>> _manifest = .oneOf([
   }),
 ]);
 
-/// The lines [text] runs over, broken at every line break Unicode names.
-List<String> _linesOf(String text) => text.split(_lineBreak);
+/// Every control character but a tab, and Unicode's line breaks beyond them.
+final RegExp _controlButTab = .new(
+  r'[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028\u2029]',
+);
 
-final RegExp _lineBreak = .new(r'\r\n|[\n\x0b\x0c\r\x85\u2028\u2029]');
+/// The characters a manifest's file name is drawn from: letters, line
+/// breaks, Unicode's among them, and another control character.
+const String _nameCharacters = 'ab\n\r\x07\x85\u2028';
 
 /// A path [os] reads as absolute.
 String _absolute(Os os) => switch (os) {
@@ -176,29 +181,44 @@ Set<String> _variablesIn(String text) => {
 };
 
 void main() {
-  property("Every refusal's text is one line, whatever the manifest holds.", (
-    Draw draw,
-  ) async {
-    final List<int> bytes = draw(_manifest, label: 'bytes');
-    await inTemp((Directory temp) async {
-      final String manifest = atRoot(temp);
-      await File(manifest).create(recursive: true);
-      await File(manifest).writeAsBytes(bytes);
-      final Load load = await loaderIn(
-        temp,
-        SpyRunner(hermetic(temp)),
-        cached: false,
-      ).load();
-      switch (load) {
-        case Refused(:final LoadRefusal reason):
-          expect(_linesOf('$reason'), hasLength(1));
-        case Loaded():
-          fail('a load with no cache loaded');
-      }
-    });
-  }, settings: .new(shrinkSteps: gitShrinks));
+  property(
+    'LOA-10: The text a load refuses with is one line holding no control '
+    'character but a tab, whatever its manifest holds and whatever its '
+    'path.',
+    (Draw draw) async {
+      final List<int> bytes = draw(_manifest, label: 'bytes');
+      final String stem = draw(
+        .string(alphabet: .of(_nameCharacters), minLength: 1),
+        label: 'stem',
+      );
+      final String ending = draw(.element(['.yaml', '.yml']), label: 'ending');
+      final bool missing = draw(
+        .integer(min: 0, max: 3).map((int n) => n == 0),
+        label: 'missing',
+      );
+      await inTemp((Directory temp) async {
+        final String manifest = p.join(temp.path, 'manifests', '$stem$ending');
+        if (!missing) {
+          await File(manifest).create(recursive: true);
+          await File(manifest).writeAsBytes(bytes);
+        }
+        final Load load = await loaderIn(
+          temp,
+          SpyRunner(hermetic(temp)),
+          cached: false,
+        ).load(named: [manifest]);
+        switch (load) {
+          case Refused(:final LoadRefusal reason):
+            expect('$reason', isNot(contains(_controlButTab)));
+          case Loaded():
+            fail('a load with no cache loaded');
+        }
+      });
+    },
+    settings: .new(shrinkSteps: gitShrinks),
+  );
 
-  property('The `NoCache` text names exactly the variables the running system '
+  property('LOA-13: The `NoCache` text names exactly the variables its system '
       'weighs.', (Draw draw) {
     final Os os = draw(.element(Os.values), label: 'os');
     final List<String> others = draw(.list(_variable), label: 'others');

@@ -6,8 +6,11 @@ import 'package:test/test.dart';
 import '../support/manifests.dart';
 
 /// A key drawn from text that a path could mistake: an empty one, a `.`, a
-/// `"`, a `\`, a line break and Unicode's, among plain letters.
-final Gen<String> _key = .string(alphabet: .of('ab."\\\n\u2028'));
+/// `"`, a `\`, a tab, a line break, a carriage return, a nul, a C1 control
+/// and Unicode's line and paragraph separators, among plain letters.
+final Gen<String> _key = .string(
+  alphabet: .of('ab."\\\t\n\r\x00\x85\u2028\u2029'),
+);
 
 /// [keys] as they would read joined by `.` and split again.
 List<String> _resplit(List<String> keys) =>
@@ -18,8 +21,9 @@ bool _same(List<String> a, List<String> b) => jsonEncode(a) == jsonEncode(b);
 
 void main() {
   property(
-    'Two key paths are the same exactly when their keys are, an empty key '
-    'and one holding a dot among them.',
+    'MAN-19: Two key paths are the same exactly when their keys are, whatever '
+    'a key holds, an empty key and ones holding a dot, a quote or a character '
+    'that breaks a line among them.',
     (Draw draw) {
       final List<String> a = draw(.list(_key), label: 'a');
       final List<String> b = draw(.list(_key), label: 'b');

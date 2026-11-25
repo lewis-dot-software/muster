@@ -47,6 +47,7 @@ The [quickstart](docs/quickstart.md) writes that test, writes the locks and load
 - [Locks](docs/locks.md) - Every codebase resolves on a lock, so its dependencies hold still as pub.dev publishes and every machine resolves it alike.
 - [Manifest](docs/manifest.md) - A manifest is a YAML file naming the codebases a package's tests load, each under its key in a `codebases` mapping.
 - [Outcomes](docs/outcomes.md) - `Muster.load()` returns a `Load`, and a loaded one gives every codebase a `FetchOutcome`.
+- [Property index](docs/property-index.md) - Every property the code holds, each by its number beside its property test.
 - [Quickstart](docs/quickstart.md) - This page installs muster in a package, names two codebases for its tests, and loads them in a test, writing their locks on the way, then links a doc for each topic it touches.
 - [Refusals](docs/refusals.md) - A load refuses before it starts any process or writes any file, where it cannot start: its manifests do not hold, or the machine gives it no working directory, no cache or no claim.
 - [Scratches](docs/scratches.md) - A scratch is a worktree of a git codebase's clone in a temporary directory, a test's own to move to any commit.

@@ -119,13 +119,16 @@ enum _Refusal {
 /// The files of the example of the package `a`, refused by pub for
 /// [refusal], or pub's to resolve where it is null, beside a dependency `c`
 /// at [outside], a path that leaves the package, after the refused entry
-/// where [first] holds and before it else.
+/// where [first] holds and before it else, and `i` before `c` at a path
+/// spelled through `..` that stays inside the package.
 Map<String, String> _refusedExample(
   _Refusal? refusal,
   String outside,
   bool first,
 ) {
-  final String leaving = '  c:\n    path: ${jsonEncode(outside)}\n';
+  final String leaving =
+      '  i:\n    path: ../packages/../packages/i\n'
+      '  c:\n    path: ${jsonEncode(outside)}\n';
   final String refused = switch (refusal) {
     .invalidName || .servedName => '  my-b: any\n',
     .selfDependency => '  a_example:\n    path: .\n',
@@ -407,6 +410,13 @@ enum _Off {
   /// The root's lock rewritten.
   rootLock,
 
+  /// The root's kept lock beside its manifest rewritten, still one pub
+  /// reads.
+  rootKeptLock,
+
+  /// The pubspec of the package handed out deleted.
+  pubspecGone,
+
   /// The root's `package_config.json` rewritten.
   rootConfig,
 
@@ -426,17 +436,21 @@ enum _Off {
     .stampGarbled ||
     .stampElsewhere ||
     .rootLock ||
+    .rootKeptLock ||
+    .pubspecGone ||
     .rootConfig ||
     .rootConfigGone => false,
   };
 }
 
 void main() {
-  property('A hosted checkout made afresh holds every file pub serves for the '
-      'package at its version, unchanged but for the `pubspec.lock` of a '
-      'package that resolves in place, which its resolve replaces, and nothing '
-      'beside them but what the resolve, the package around it and each '
-      "package's `pubspec_overrides.yaml` write.", (Draw draw) async {
+  property('STO-6: A hosted checkout made afresh holds every file pub serves '
+      'for the package at its version, unchanged but for the `pubspec.lock` of '
+      'a package that resolves in place, which its resolve replaces with its '
+      'kept lock, and nothing beside them but what the resolve, the package '
+      "around it and each package's `pubspec_overrides.yaml` write.", (
+    Draw draw,
+  ) async {
     final _Open open = draw(_open, label: 'open');
     for (final (_Shape shape, _Before before) in [
       for (final _Shape shape in _shapesOf(open))
@@ -479,10 +493,15 @@ void main() {
           codebase,
           _packages(shape),
         );
-        for (final String lock in resolved.where(
-          (String path) => path.endsWith('pubspec.lock'),
-        )) {
-          expect(await File(fileIn(bench.checkout, lock)).exists(), isTrue);
+        for (final Package package in _packages(shape)) {
+          expect(
+            await File(
+              hostedPackage(bench.checkout, codebase, package).lock.path,
+            ).readAsString(),
+            await File(keptLockOf(bench.locks, Hosted(codebase), package).path)
+                .readAsString(),
+            reason: '$before $package',
+          );
         }
         expect(await filesUnder(bench.checkout.path, less: resolved), {
           for (final MapEntry<String, String>(:key, :value) in _served(
@@ -516,106 +535,109 @@ void main() {
     }
   }, settings: .new(runs: 1, shrinkSteps: gitShrinks));
 
-  property(
-    'A package resolved `alone` resolves with its dev dependencies, and one '
-    'resolved `as-dependency` without them.',
-    (Draw draw) async {
-      final Set<String> dependencies = draw(
-        .set(.element(['r', 's'])),
-        label: 'dependencies',
-      );
-      final Set<String> dev = draw(.set(.element(['d', 'e'])), label: 'dev');
-      // Every resolution and membership, so none is left to the draws.
-      for (final Resolution resolution in Resolution.values) {
-        for (final bool workspace in [false, true]) {
-          await _onBench((_Bench bench) async {
-            bench.server.serve('a', '1.0.0', {
-              'pubspec.yaml': hostedPubspec(
-                'a',
-                '1.0.0',
-                workspace: workspace,
-                dependencies: {
-                  for (final String d in dependencies) d: '^1.0.0',
-                },
-                devDependencies: {
-                  for (final String d in dev) d: '^1.0.0',
-                  // A dev dependency no host serves, which only a resolve
-                  // without dev dependencies passes by.
-                  if (resolution == .asDependency) 'unserved': '^1.0.0',
-                },
-              ),
-            });
-            for (final String leaf in {...dependencies, ...dev}) {
-              serveLeaf(bench.server, leaf, '1.0.0');
-            }
-            final HostedCodebase codebase = hostedOf(
+  property('STO-11: A hosted package resolved `alone` resolves with its dev '
+      'dependencies, and one resolved `as-dependency` without them.', (
+    Draw draw,
+  ) async {
+    final Set<String> dependencies = draw(
+      .set(.element(['r', 's'])),
+      label: 'dependencies',
+    );
+    final Set<String> dev = draw(
+      .set(.element(['d', 'e']), minSize: 1),
+      label: 'dev',
+    );
+    // Every resolution and membership, so none is left to the draws.
+    for (final Resolution resolution in Resolution.values) {
+      for (final bool workspace in [false, true]) {
+        await _onBench((_Bench bench) async {
+          bench.server.serve('a', '1.0.0', {
+            'pubspec.yaml': hostedPubspec(
               'a',
-              resolution: resolution,
-            );
-            await bench.lockedCheckout(codebase);
-            expect(
-              await configuredIn(
-                hostedPackage(bench.checkout, codebase, .root),
-              ),
-              {
-                'a',
-                ...dependencies,
-                ...switch (resolution) {
-                  .alone => dev,
-                  .asDependency => {aroundName},
-                },
+              '1.0.0',
+              workspace: workspace,
+              dependencies: {for (final String d in dependencies) d: '^1.0.0'},
+              devDependencies: {
+                for (final String d in dev) d: '^1.0.0',
+                // A dev dependency no host serves, which only a resolve
+                // without dev dependencies passes by.
+                if (resolution == .asDependency) 'unserved': '^1.0.0',
               },
-            );
+            ),
           });
-        }
+          for (final String leaf in {...dependencies, ...dev}) {
+            serveLeaf(bench.server, leaf, '1.0.0');
+          }
+          final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+          await bench.lockedCheckout(codebase);
+          expect(
+            await configuredIn(hostedPackage(bench.checkout, codebase, .root)),
+            {
+              'a',
+              ...dependencies,
+              ...switch (resolution) {
+                .alone => dev,
+                .asDependency => {aroundName},
+              },
+            },
+          );
+        });
+      }
+    }
+  }, settings: .new(runs: 3, shrinkSteps: gitShrinks));
+
+  property(
+    'STO-17: A hosted package resolved `alone` resolves with none of the '
+    '`dependency_overrides` its pubspec publishes.',
+    (Draw draw) async {
+      final Set<String> overridden = draw(
+        .set(.element(['r', 'd', 'o']), minSize: 1),
+        label: 'overridden',
+      );
+      // Every membership, so none is left to the draws.
+      for (final bool workspace in [false, true]) {
+        await _onBench((_Bench bench) async {
+          // `r` a dependency, `d` a dev dependency and `o` neither, each
+          // drawn overridden to a path the package does not ship, which only
+          // a resolve without the overrides passes by.
+          bench.server.serve('a', '1.0.0', {
+            'pubspec.yaml': hostedPubspec(
+              'a',
+              '1.0.0',
+              workspace: workspace,
+              dependencies: {'r': '^1.0.0'},
+              devDependencies: {'d': '^1.0.0'},
+              dependencyOverrides: {
+                for (final String d in overridden) d: '../unshipped_$d',
+              },
+            ),
+          });
+          for (final String leaf in ['r', 'd', 'o']) {
+            serveLeaf(bench.server, leaf, '1.0.0');
+          }
+          final HostedCodebase codebase = hostedOf('a');
+          await bench.lockedCheckout(codebase);
+          final PackagePath root = hostedPackage(
+            bench.checkout,
+            codebase,
+            .root,
+          );
+          expect(await configuredIn(root), {'a', 'r', 'd'});
+          expect(
+            await File(root.lock.path).readAsString(),
+            isNot(contains('source: path')),
+          );
+        });
       }
     },
     settings: .new(runs: 3, shrinkSteps: gitShrinks),
   );
 
-  property('A hosted package resolved `alone` resolves with none of the '
-      '`dependency_overrides` its pubspec publishes.', (Draw draw) async {
-    final Set<String> overridden = draw(
-      .set(.element(['r', 'd', 'o'])),
-      label: 'overridden',
-    );
-    // Every membership, so none is left to the draws.
-    for (final bool workspace in [false, true]) {
-      await _onBench((_Bench bench) async {
-        // `r` a dependency, `d` a dev dependency and `o` neither, each
-        // drawn overridden to a path the package does not ship, which only
-        // a resolve without the overrides passes by.
-        bench.server.serve('a', '1.0.0', {
-          'pubspec.yaml': hostedPubspec(
-            'a',
-            '1.0.0',
-            workspace: workspace,
-            dependencies: {'r': '^1.0.0'},
-            devDependencies: {'d': '^1.0.0'},
-            dependencyOverrides: {
-              for (final String d in overridden) d: '../unshipped_$d',
-            },
-          ),
-        });
-        for (final String leaf in ['r', 'd', 'o']) {
-          serveLeaf(bench.server, leaf, '1.0.0');
-        }
-        final HostedCodebase codebase = hostedOf('a');
-        await bench.lockedCheckout(codebase);
-        final PackagePath root = hostedPackage(bench.checkout, codebase, .root);
-        expect(await configuredIn(root), {'a', 'r', 'd'});
-        expect(
-          await File(root.lock.path).readAsString(),
-          isNot(contains('source: path')),
-        );
-      });
-    }
-  }, settings: .new(runs: 3, shrinkSteps: gitShrinks));
-
   property(
-    "A hosted package's example is left unresolved exactly when its pubspec "
-    'path-depends outside the package on a package muster does not override '
-    "to the package's own path, and `Fetched` says which.",
+    "STO-12: A hosted package's example is left unresolved exactly when its "
+    'pubspec path-depends outside the package on a package muster does not '
+    "override to the package's own path, and `Fetched` names the first such "
+    'dependency and its path as the pubspec writes it.',
     (Draw draw) async {
       final List<_Dependency> drawnExtra = draw(
         .list(.element(_extraDependencies)),
@@ -626,8 +648,9 @@ void main() {
       // own path and each membership meets every other in one at least, the
       // draw's own beside them, each under every resolution, so none is left
       // to the draws: an example with no path but the package's, one inside,
-      // the package's own path above it, and one outside, first or after one
-      // inside, and an overrides file served empty of YAML, which pub reads
+      // the package's own path above it, one outside, first or after one
+      // inside, two outside, and an overrides file served empty of YAML,
+      // which pub reads
       // as none, so the package's own path and its membership are left out
       // beside it.
       for (final (
@@ -659,6 +682,12 @@ void main() {
                     (
                       [_extraDependencies[0], _extraDependencies[2]],
                       true,
+                      true,
+                      null,
+                    ),
+                    (
+                      [_extraDependencies[2], _extraDependencies[1]],
+                      false,
                       true,
                       null,
                     ),
@@ -737,14 +766,15 @@ void main() {
     settings: .new(runs: 1, shrinkSteps: gitShrinks),
   );
 
-  property('An example that fails to resolve for any other reason is its '
-      "codebase's failure, never `Fetched`.", (Draw draw) async {
-    final _Unresolvable unresolvable = draw(
-      .element(_Unresolvable.values),
-      label: 'unresolvable',
-    );
-    // Every resolution, so none is left to the draws.
-    for (final Resolution resolution in Resolution.values) {
+  property('STO-13: A hosted example that fails to resolve for any other '
+      "reason fails its codebase, by `muster lock` and by a checkout alike, "
+      'never `Fetched`.', (Draw draw) async {
+    // Every reason under every resolution, so none is left to the draws.
+    for (final (_Unresolvable unresolvable, Resolution resolution) in [
+      for (final _Unresolvable unresolvable in _Unresolvable.values)
+        for (final Resolution resolution in Resolution.values)
+          (unresolvable, resolution),
+    ]) {
       await _onBench((_Bench bench) async {
         serveLeaf(bench.server, 'b', '1.0.0');
         bench.server.serve('a', '1.0.0', {
@@ -758,9 +788,25 @@ void main() {
           },
         });
         final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+        final Matcher failed = throwsA(
+          storeFault(
+            isA<CommandFailed>().having(
+              (CommandFailed f) => f.command.arguments,
+              'arguments',
+              containsAll([
+                'pub',
+                'get',
+                '--directory='
+                    '${hostedPackage(bench.checkout, codebase, .example).path}',
+              ]),
+            ),
+          ),
+        );
+        final String reason = '$unresolvable $resolution';
         await expectLater(
           bench.checkouts.lock(Hosted(codebase), bench.locks),
-          throwsA(storeFault(isA<CommandFailed>())),
+          failed,
+          reason: reason,
         );
         // A lock of its own for the example, so its checkout reaches the
         // resolve, which holds it to a lock that does not fit.
@@ -770,94 +816,106 @@ void main() {
         );
         await expectLater(
           bench.checkouts.checkout(Hosted(codebase), bench.locks),
-          throwsA(storeFault(isA<CommandFailed>())),
+          failed,
+          reason: reason,
+        );
+        // A stamp left would hand the checkout out to the next load.
+        expect(
+          await File(bench.checkout.stamp.path).exists(),
+          isFalse,
+          reason: reason,
         );
       });
     }
-  }, settings: .new(runs: 4, shrinkSteps: gitShrinks));
+  }, settings: .new(runs: 1, shrinkSteps: gitShrinks));
 
-  property(
-    'An example is left unresolved exactly where a path dependency of it, '
-    'read as pub reads it, leaves the package, and a pubspec or served '
-    'overrides that pub would refuse fails its codebase.',
-    (Draw draw) async {
-      final String outside = draw(
-        .element(['../../c', '/c', '../x/../../c']),
-        label: 'outside',
-      );
-      final bool first = draw(.boolean(), label: 'first');
-      // Every refusal, and none, under every resolution, so none is left to
-      // the draws.
-      for (final (_Refusal? refusal, Resolution resolution) in [
-        for (final _Refusal? refusal in [null, ..._Refusal.values])
-          for (final Resolution resolution in Resolution.values)
-            (refusal, resolution),
-      ]) {
-        await _onBench((_Bench bench) async {
-          bench.server.serve('a', '1.0.0', {
-            'pubspec.yaml': hostedPubspec('a', '1.0.0'),
-            'packages/b/pubspec.yaml': pubspecOf('b'),
-            ..._refusedExample(refusal, outside, first),
-          });
-          final HostedCodebase codebase = hostedOf('a', resolution: resolution);
-          final PackagePath example = hostedPackage(
-            bench.checkout,
-            codebase,
-            .example,
-          );
-          final Matcher refused = throwsA(
-            storeFault(
-              isA<CommandFailed>().having(
-                (CommandFailed f) => f.command.arguments,
-                'arguments',
-                containsAll(['pub', 'get', '--directory=${example.path}']),
-              ),
-            ),
-          );
-          final String reason = '$refusal $resolution';
-          switch (refusal) {
-            case null:
-              expect(
-                await bench.checkouts.lock(Hosted(codebase), bench.locks),
-                [keptLockOf(bench.locks, Hosted(codebase), .root)],
-                reason: reason,
-              );
-              expect(
-                (await bench.checkouts.checkout(
-                  Hosted(codebase),
-                  bench.locks,
-                )).example,
-                ExampleUnresolved((dependency: .parse('c')!, path: outside)),
-                reason: reason,
-              );
-            case _Refusal():
-              await expectLater(
-                bench.checkouts.lock(Hosted(codebase), bench.locks),
-                refused,
-                reason: reason,
-              );
-              // A lock of its own for the example, so its checkout reaches
-              // the resolve, which pub refuses.
-              await writeFile(
-                keptLockOf(bench.locks, Hosted(codebase), .example).path,
-                lockText,
-              );
-              await expectLater(
-                bench.checkouts.checkout(Hosted(codebase), bench.locks),
-                refused,
-                reason: reason,
-              );
-          }
-        });
-      }
-    },
-    settings: .new(runs: 1, shrinkSteps: gitShrinks),
-  );
-
-  property('A package resolved `as-dependency` resolves where one of its own '
-      'dependencies depends back on it from the host it is served from.', (
+  property('STO-14: A hosted example is left unresolved exactly where a path '
+      'dependency of it, read as pub reads it, leaves the package, and a '
+      'pubspec or served overrides that pub would refuse fails its codebase.', (
     Draw draw,
   ) async {
+    final String outside = draw(
+      .element(['../../c', '/c', '../x/../../c']),
+      label: 'outside',
+    );
+    final bool first = draw(.boolean(), label: 'first');
+    // Every refusal, and none, under every resolution, each resolution
+    // beside one order of the refused entry and the leaving path, so both
+    // orders meet every refusal and none is left to the draws.
+    for (final (_Refusal? refusal, Resolution resolution, bool first) in [
+      for (final _Refusal? refusal in [null, ..._Refusal.values])
+        for (final Resolution resolution in Resolution.values)
+          (
+            refusal,
+            resolution,
+            switch (resolution) {
+              .alone => first,
+              .asDependency => !first,
+            },
+          ),
+    ]) {
+      await _onBench((_Bench bench) async {
+        bench.server.serve('a', '1.0.0', {
+          'pubspec.yaml': hostedPubspec('a', '1.0.0'),
+          'packages/b/pubspec.yaml': pubspecOf('b'),
+          'packages/i/pubspec.yaml': pubspecOf('i'),
+          ..._refusedExample(refusal, outside, first),
+        });
+        final HostedCodebase codebase = hostedOf('a', resolution: resolution);
+        final PackagePath example = hostedPackage(
+          bench.checkout,
+          codebase,
+          .example,
+        );
+        final Matcher refused = throwsA(
+          storeFault(
+            isA<CommandFailed>().having(
+              (CommandFailed f) => f.command.arguments,
+              'arguments',
+              containsAll(['pub', 'get', '--directory=${example.path}']),
+            ),
+          ),
+        );
+        final String reason = '$refusal $resolution';
+        switch (refusal) {
+          case null:
+            expect(await bench.checkouts.lock(Hosted(codebase), bench.locks), [
+              keptLockOf(bench.locks, Hosted(codebase), .root),
+            ], reason: reason);
+            expect(
+              (await bench.checkouts.checkout(
+                Hosted(codebase),
+                bench.locks,
+              )).example,
+              ExampleUnresolved((dependency: .parse('c')!, path: outside)),
+              reason: reason,
+            );
+          case _Refusal():
+            await expectLater(
+              bench.checkouts.lock(Hosted(codebase), bench.locks),
+              refused,
+              reason: reason,
+            );
+            // A lock of its own for the example, so its checkout reaches
+            // the resolve, which pub refuses.
+            await writeFile(
+              keptLockOf(bench.locks, Hosted(codebase), .example).path,
+              lockText,
+            );
+            await expectLater(
+              bench.checkouts.checkout(Hosted(codebase), bench.locks),
+              refused,
+              reason: reason,
+            );
+        }
+      });
+    }
+  }, settings: .new(runs: 1, shrinkSteps: gitShrinks));
+
+  property('STO-16: A package resolved `as-dependency` resolves where a '
+      'dependency of it, direct or through others, depends back on it from '
+      'the host it is served from, whatever its constraint, and that '
+      'dependency takes the package itself.', (Draw draw) async {
     final int depth = draw(.integer(min: 1, max: 3), label: 'depth');
     // Every constraint, with an example and without, so none is left to
     // the draws.
@@ -921,40 +979,40 @@ void main() {
     }
   }, settings: .new(runs: 2, shrinkSteps: gitShrinks));
 
-  property(
-    'A second checkout of a hosted codebase hands the first out untouched, '
-    'unpacking and resolving nothing.',
-    (Draw draw) async {
-      final _Open open = draw(_open, label: 'open');
-      for (final _Shape shape in _shapesOf(open)) {
-        await _onBench((_Bench bench) async {
-          bench.server.serve('a', '1.0.0', _served(shape));
-          final HostedCodebase codebase = hostedOf(
-            'a',
-            resolution: shape.resolution,
-          );
-          final Checkout first = await bench.lockedCheckout(codebase);
-          final Map<String, String> tree = await treeUnder(bench.checkout.path);
-          final String stamp = await File(bench.checkout.stamp.path)
-              .readAsString();
-          bench.runner.commands.clear();
-          final Checkout second = await bench.fresh.checkout(
-            Hosted(codebase),
-            bench.locks,
-          );
-          expect(bench.runner.given, ['dart --version']);
-          expect(second, first);
-          expect(await treeUnder(bench.checkout.path), tree);
-          expect(await File(bench.checkout.stamp.path).readAsString(), stamp);
-        });
-      }
-    },
-    settings: .new(runs: 2, shrinkSteps: gitShrinks),
-  );
+  property('STO-9: A second checkout of a hosted codebase hands the first out '
+      "untouched, starting no process but its SDK's version read.", (
+    Draw draw,
+  ) async {
+    final _Open open = draw(_open, label: 'open');
+    for (final _Shape shape in _shapesOf(open)) {
+      await _onBench((_Bench bench) async {
+        bench.server.serve('a', '1.0.0', _served(shape));
+        final HostedCodebase codebase = hostedOf(
+          'a',
+          resolution: shape.resolution,
+        );
+        final Checkout first = await bench.lockedCheckout(codebase);
+        final Map<String, String> tree = await treeUnder(bench.checkout.path);
+        final String stamp = await File(bench.checkout.stamp.path)
+            .readAsString();
+        bench.runner.commands.clear();
+        final Checkout second = await bench.fresh.checkout(
+          Hosted(codebase),
+          bench.locks,
+        );
+        expect(bench.runner.given, ['dart --version']);
+        expect(second, first);
+        expect(await treeUnder(bench.checkout.path), tree);
+        expect(await File(bench.checkout.stamp.path).readAsString(), stamp);
+      });
+    }
+  }, settings: .new(runs: 2, shrinkSteps: gitShrinks));
 
   property(
-    'A hosted checkout whose stamp, lock or `package_config.json` differs '
-    'from what was stamped is unpacked afresh.',
+    'STO-5: A hosted checkout is unpacked afresh, and then stands, where '
+    'any of these holds: its stamp is gone or differs, its lock, kept lock '
+    'or `package_config.json` is not the one stamped, or its package has '
+    'lost its pubspec.',
     (Draw draw) async {
       final _Open open = draw(_open, label: 'open');
       for (final _Shape shape in _shapesOf(open)) {
@@ -968,8 +1026,7 @@ void main() {
           PackagePath of(Package package) =>
               hostedPackage(bench.checkout, codebase, package);
           final String marker = fileIn(bench.checkout, 'a-1.0.0/marker.txt');
-          // Each off alone, on a checkout that stands once the last is made
-          // again.
+          // Each off alone, on the checkout the last made again.
           for (final _Off off in _Off.values) {
             if (off.example && !shape.example) {
               continue;
@@ -990,6 +1047,20 @@ void main() {
                 );
               case .rootLock:
                 await writeFile(of(.root).lock.path, 'packages: {}\n');
+              case .rootKeptLock:
+                final String kept = keptLockOf(
+                  bench.locks,
+                  Hosted(codebase),
+                  .root,
+                ).path;
+                await writeFile(
+                  kept,
+                  '# edited\n${await File(kept).readAsString()}',
+                );
+              case .pubspecGone:
+                await File(
+                  unpackedPackage(bench.checkout, codebase).pubspec.path,
+                ).delete();
               case .rootConfig:
                 await writeFile(of(.root).packageConfig.path, '{}\n');
               case .rootConfigGone:
@@ -1012,6 +1083,9 @@ void main() {
                 reason: '$off',
               );
             }
+            bench.runner.commands.clear();
+            await bench.fresh.checkout(Hosted(codebase), bench.locks);
+            expect(bench.runner.given, ['dart --version'], reason: '$off');
           }
         });
       }
@@ -1019,8 +1093,11 @@ void main() {
     settings: .new(runs: 1, shrinkSteps: gitShrinks),
   );
 
-  property('A package and its example each resolve on their own kept lock, and a '
-      'lock that is missing gives `Unlocked`, naming it.', (Draw draw) async {
+  property('MAN-3: A package and its example each resolve on their own kept '
+      'lock, never the lock pub serves, and a lock that is missing gives '
+      "`Unlocked`, naming the first missing, the root's before the example's.", (
+    Draw draw,
+  ) async {
     final _Open open = draw(_open, label: 'open');
     for (final _Shape shape in _shapesOf(open)) {
       for (final Set<Package> gone in _subsets) {
@@ -1101,7 +1178,8 @@ void main() {
   }, settings: .new(runs: 1, shrinkSteps: gitShrinks));
 
   property(
-    'A hosted codebase\'s checkout takes no clone\'s claim and starts no git.',
+    "STO-20: A hosted codebase's lock and checkout take no clone's claim, "
+    'start no git and make no cache.',
     (Draw draw) {
       final Resolution resolution = draw(
         .element(Resolution.values),

@@ -76,8 +76,10 @@ enum _Fault {
 
 void main() {
   property(
-    'A scratch worktree moves to any commit in its clone without touching '
-    "any consumer's checkout, and is gone once it is disposed of.",
+    'LOA-7: A scratch worktree moves to any commit of its URL\'s, fetching '
+    "one its clone lacks, without touching any consumer's checkout, and is "
+    "gone with its clone's record of it once disposed of, a second disposal "
+    'giving `Disposed` too.',
     (Draw draw) async {
       final List<Set<int>> history = draw(
         .list(
@@ -87,10 +89,11 @@ void main() {
         ),
         label: 'history',
       );
-      final int pin = draw(
-        .integer(min: 0, max: history.length - 1),
-        label: 'pin',
+      final int published = draw(
+        .integer(min: 1, max: history.length),
+        label: 'published',
       );
+      final int pin = draw(.integer(min: 0, max: published - 1), label: 'pin');
       final List<_Move> moves = draw(
         .list(
           .build(
@@ -113,7 +116,9 @@ void main() {
           parent = await origin.commit(parent, _commitFiles(i, history[i]));
           commits.add(parent);
         }
-        await origin.ref('refs/heads/main', commits.last);
+        // The commits past the published ones are on no ref until the
+        // scratch is made, so its clone lacks them.
+        await origin.ref('refs/heads/main', commits[published - 1]);
         final GitCodebase app = codebaseOf(origin, commits[pin]);
         final String manifest = atRoot(temp);
         await writeManifest(manifest, [app]);
@@ -138,6 +143,9 @@ void main() {
           NotNamed() || NotGit() || ScratchFailed() => fail('$made'),
         };
         final String at = scratch.package.path;
+        if (published < commits.length) {
+          await origin.ref('refs/heads/later', commits.last);
+        }
         for (final (int to, _Dirt dirt) in moves) {
           switch (dirt) {
             case .none:
@@ -156,6 +164,7 @@ void main() {
             expect(await treeUnder(root), before[root], reason: root);
           }
         }
+        expect(await scratch.dispose(), isA<Disposed>());
         expect(await scratch.dispose(), isA<Disposed>());
         expect(await Directory(at).exists(), isFalse);
         expect(await scratchesLeft(temp), isEmpty);
@@ -179,8 +188,9 @@ void main() {
     settings: .new(runs: 10, shrinkSteps: gitShrinks),
   );
 
-  property('A scratch that cannot be made comes back as an outcome, never a '
-      'throw.', (Draw draw) async {
+  property('LOA-8: A scratch that cannot be made comes back as `NotNamed`, '
+      'starting no process, or as `ScratchFailed` for the act that failed, '
+      'leaving no directory behind, never as a throw.', (Draw draw) async {
     final _Fault fault = draw(.element(_Fault.values), label: 'fault');
     final String letters = draw(
       .string(alphabet: .lowerCase),
@@ -257,7 +267,18 @@ void main() {
         .cacheBlocked ||
         .tempBlocked => app.name,
       };
+      final int before = runner.commands.length;
       final Scratching made = await muster.scratch(name);
+      switch (fault) {
+        case .notNamed:
+          expect(runner.commands, hasLength(before));
+        case .unstartable ||
+            .pinMissing ||
+            .notARepo ||
+            .cacheBlocked ||
+            .tempBlocked:
+          break;
+      }
       expect(made, switch (fault) {
         .notNamed => isA<NotNamed>().having(
           (NotNamed n) => n.name,
@@ -282,12 +303,13 @@ void main() {
     });
   }, settings: .new(runs: 18, shrinkSteps: gitShrinks));
 
-  property('A scratch asked of a hosted codebase gives `NotGit` and starts no '
-      'process.', (Draw draw) async {
+  property('LOA-12: A scratch asked of a hosted codebase gives `NotGit` and '
+      'starts no process.', (Draw draw) async {
     final List<bool> hosted = draw(
       .list(.boolean(), minLength: 1),
       label: 'hosted',
     );
+    final int forced = draw(.integer(min: 0, max: 3), label: 'forced');
     final List<int> asks = draw(
       .list(.integer(min: 0, max: 5), minLength: 1),
       label: 'asks',
@@ -305,8 +327,9 @@ void main() {
         await origin.ref('refs/heads/main', commit);
         final List<Entry> entries = [];
         final List<CodebaseName> hostedNames = [];
-        for (final (int i, bool isHosted) in hosted.take(4).indexed) {
-          if (isHosted) {
+        final List<bool> taken = hosted.take(4).toList();
+        for (final (int i, bool drawn) in taken.indexed) {
+          if (drawn || i == forced % taken.length) {
             entries.add(hostedEntryOf(hostedOf('p$i', name: 'c$i')));
             hostedNames.add(.parse('c$i')!);
           } else {
@@ -318,7 +341,7 @@ void main() {
           Loaded(:final Muster muster) => muster,
           Refused(:final LoadRefusal reason) => fail('refused: $reason'),
         };
-        for (final int ask in hostedNames.isEmpty ? <int>[] : asks.take(4)) {
+        for (final int ask in asks.take(4)) {
           final CodebaseName name = hostedNames[ask % hostedNames.length];
           final int before = runner.commands.length;
           expect(

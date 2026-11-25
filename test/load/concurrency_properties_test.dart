@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
+import 'package:muster/src/model/cache_directory.dart';
+import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -10,7 +12,6 @@ import 'package:test/test.dart';
 import '../support/apart.dart';
 import '../support/contender.dart';
 import '../support/git.dart';
-import '../support/git_shrinks.dart';
 import '../support/loads.dart';
 import '../support/origin.dart';
 import '../support/outcome_case.dart';
@@ -108,137 +109,195 @@ class _Bench {
 /// at its pin.
 bool _makes(Command command) => Pause.place.holds(command);
 
+/// Whether [command] reaches a URL, by a clone or a fetch.
+bool _reachesUrl(Command command) => switch (command.executable) {
+  .git =>
+    command.arguments.contains('clone') || command.arguments.contains('fetch'),
+  .dart || .flutter => false,
+};
+
 void main() {
   property(
-    'Two loads at once, as isolates of one process or as separate processes, '
-    'never act on one clone or checkout together, and the second hands out '
-    "the first's checkout untouched.",
+    'STO-1: Two loads at once, as isolates of one process or as separate '
+    'processes, never act on one clone or checkout together: the second '
+    "waits, uses the first's clone with no clone or fetch of its own, and "
+    "hands out the first's checkout untouched where they share one.",
     (Draw draw) async {
-      final Apart firstApart = draw(
-        .element(Apart.values),
-        label: 'firstApart',
-      );
-      final Apart secondApart = draw(
-        .element(Apart.values),
-        label: 'secondApart',
-      );
-      final Pause pause = draw(.element(Pause.values), label: 'pause');
-      final _Shared shared = draw(.element(_Shared.values), label: 'shared');
-      final _Before before = draw(.element(_Before.values), label: 'before');
-      await inTemp((Directory temp) async {
-        final _Bench bench = await .make(temp, before);
-        final String secondRoot = switch (shared) {
-          .checkout => bench.root,
-          .clone => bench.otherRoot,
-        };
-        // What the second load must not run while the first is paused: on one
-        // checkout, any command at all, since its claim comes before the
-        // survey, and on one clone, any command on the clone.
-        bool acts(Command command) => switch (shared) {
-          .checkout => true,
-          .clone => Pause.clone.holds(command),
-        };
-        final Contender first = await bench.contender(
-          firstApart,
-          bench.root,
-          pause: pause,
-        );
-        await first.told(.paused);
-        final Contender second = await bench.contender(secondApart, secondRoot);
-        final String met = await second.until(
-          (String said) =>
-              said == Said.waiting.name ||
-              said.startsWith('${Said.done.name} ') ||
-              second.ran.any(acts),
-        );
-        expect(met, Said.waiting.name);
-        expect(second.ran.where(acts), isEmpty);
-        await first.tell(.go);
-        expect(await first.done(), {
-          'app': (
-            outcome: OutcomeCase.fetched,
-            path: bench.checkoutUnder(bench.root),
-          ),
-        });
-        expect(await second.done(), {
-          'app': (
-            outcome: OutcomeCase.fetched,
-            path: bench.checkoutUnder(secondRoot),
-          ),
-        });
-        switch (shared) {
-          case .checkout:
-            expect(
-              second.ran,
-              everyElement(
-                predicate(
-                  (Command c) =>
-                      c.arguments.last == '--version' ||
-                      c.arguments.contains('status'),
-                  'the survey alone',
-                ),
-              ),
-            );
-            expect(first.ran.where(_makes), hasLength(1));
-          case .clone:
-            expect(first.ran.where(_makes), hasLength(1));
-            expect(second.ran.where(_makes), hasLength(1));
+      for (final Apart firstApart in Apart.values) {
+        for (final Apart secondApart in Apart.values) {
+          for (final Pause pause in Pause.values) {
+            for (final _Shared shared in _Shared.values) {
+              for (final _Before before in _Before.values) {
+                await _contend(firstApart, secondApart, pause, shared, before);
+              }
+            }
+          }
         }
-        await first.end();
-        await second.end();
-      });
+      }
     },
-    settings: .new(runs: 12, shrinkSteps: gitShrinks),
+    settings: .new(runs: 1),
   );
 
   property(
-    'A claim held by a load that crashed, which never released it, or that '
-    'failed, which released it as the failure unwound, never blocks a later '
-    'load.',
+    'STO-7: A claim held by a load that crashed, which never released it, or '
+    'that failed, which released it as the failure unwound, never blocks a '
+    'later load, which hands out the checkout made whole and leaves no '
+    'temporary clone.',
     (Draw draw) async {
-      final Apart apart = draw(.element(Apart.values), label: 'apart');
-      final Pause pause = draw(.element(Pause.values), label: 'pause');
-      final _Ending ending = draw(.element(_Ending.values), label: 'ending');
-      final _Before before = draw(.element(_Before.values), label: 'before');
-      await inTemp((Directory temp) async {
-        final _Bench bench = await .make(temp, before);
-        final Contender ended = await bench.contender(
-          apart,
-          bench.root,
-          pause: pause,
-        );
-        await ended.told(.paused);
-        switch (ending) {
-          case .crash:
-            await ended.kill();
-          case .error:
-            await ended.tell(.fail);
-            expect(
-              (await ended.done())['app']?.outcome,
-              OutcomeCase.commandFailed,
-            );
+      for (final Apart apart in Apart.values) {
+        for (final Pause pause in Pause.values) {
+          for (final _Ending ending in _Ending.values) {
+            for (final _Before before in _Before.values) {
+              await _endThenLoad(apart, pause, ending, before);
+            }
+          }
         }
-        final String checkout = bench.checkoutUnder(bench.root);
-        expect(await bench.load(), loadedWith({'app': fetchedAt(checkout)}));
-        expect(
-          await File(p.join(checkout, 'pubspec.yaml')).readAsString(),
-          pubspecOf('app'),
-        );
-        expect(
-          jsonDecode(
-            await File(p.join(checkout, '.dart_tool', 'package_config.json'))
-                .readAsString(),
-          ),
-          isA<Map<String, Object?>>(),
-        );
-        switch (ending) {
-          case .crash:
-            break;
-          case .error:
-            await ended.end();
-        }
-      });
+      }
     },
-    settings: .new(runs: 12, shrinkSteps: gitShrinks),
+    settings: .new(runs: 1),
   );
 }
+
+/// Two loads of one manifest, the first [firstApart] held at the command
+/// [pause] names, the second [secondApart] sharing what [shared] names with
+/// it, the checkout first as [before] leaves it.
+Future<void> _contend(
+  Apart firstApart,
+  Apart secondApart,
+  Pause pause,
+  _Shared shared,
+  _Before before,
+) => inTemp((Directory temp) async {
+  final String at =
+      'first ${firstApart.name}, second ${secondApart.name}, '
+      'pause ${pause.name}, shared ${shared.name}, before ${before.name}';
+  final _Bench bench = await .make(temp, before);
+  final String secondRoot = switch (shared) {
+    .checkout => bench.root,
+    .clone => bench.otherRoot,
+  };
+  // What the second load must not run while the first is paused: on one
+  // checkout, any command at all, since its claim comes before the survey,
+  // and on one clone, any command on the clone.
+  bool acts(Command command) => switch (shared) {
+    .checkout => true,
+    .clone => Pause.clone.holds(command),
+  };
+  final Contender first = await bench.contender(
+    firstApart,
+    bench.root,
+    pause: pause,
+  );
+  await first.told(.paused);
+  final Contender second = await bench.contender(secondApart, secondRoot);
+  final String met = await second.until(
+    (String said) =>
+        said == Said.waiting.name ||
+        said.startsWith('${Said.done.name} ') ||
+        second.ran.any(acts),
+  );
+  expect(met, Said.waiting.name, reason: at);
+  expect(second.ran.where(acts), isEmpty, reason: at);
+  await first.tell(.go);
+  expect(await first.done(), {
+    'app': (
+      outcome: OutcomeCase.fetched,
+      path: bench.checkoutUnder(bench.root),
+    ),
+  }, reason: at);
+  expect(await second.done(), {
+    'app': (
+      outcome: OutcomeCase.fetched,
+      path: bench.checkoutUnder(secondRoot),
+    ),
+  }, reason: at);
+  expect(second.ran.where(_reachesUrl), isEmpty, reason: at);
+  switch (shared) {
+    case .checkout:
+      expect(
+        second.ran,
+        everyElement(
+          predicate(
+            (Command c) =>
+                c.arguments.last == '--version' ||
+                c.arguments.contains('status'),
+            'the survey alone',
+          ),
+        ),
+        reason: at,
+      );
+      expect(first.ran.where(_makes), hasLength(1), reason: at);
+    case .clone:
+      expect(first.ran.where(_makes), hasLength(1), reason: at);
+      expect(second.ran.where(_makes), hasLength(1), reason: at);
+  }
+  await first.end();
+  await second.end();
+});
+
+/// A load [apart] held at the command [pause] names, then ended as [ending]
+/// says, the checkout first as [before] leaves it, and a later load of the
+/// same manifest in this isolate.
+Future<void> _endThenLoad(
+  Apart apart,
+  Pause pause,
+  _Ending ending,
+  _Before before,
+) => inTemp((Directory temp) async {
+  final String at =
+      'apart ${apart.name}, pause ${pause.name}, ending ${ending.name}, '
+      'before ${before.name}';
+  final _Bench bench = await .make(temp, before);
+  final Contender ended = await bench.contender(
+    apart,
+    bench.root,
+    pause: pause,
+  );
+  await ended.told(.paused);
+  switch (ending) {
+    case .crash:
+      await ended.kill();
+    case .error:
+      await ended.tell(.fail);
+      expect(
+        (await ended.done())['app']?.outcome,
+        OutcomeCase.commandFailed,
+        reason: at,
+      );
+  }
+  final String checkout = bench.checkoutUnder(bench.root);
+  expect(
+    await bench.load(),
+    loadedWith({'app': fetchedAt(checkout)}),
+    reason: at,
+  );
+  expect(
+    await File(p.join(checkout, 'pubspec.yaml')).readAsString(),
+    pubspecOf('app'),
+    reason: at,
+  );
+  expect(
+    jsonDecode(
+      await File(p.join(checkout, '.dart_tool', 'package_config.json'))
+          .readAsString(),
+    ),
+    isA<Map<String, Object?>>(),
+    reason: at,
+  );
+  final CacheDirectory cache = cacheDirectoryIn(temp);
+  expect(
+    [
+      await for (final FileSystemEntity entity in Directory(cache.path).list())
+        if (ClonePath.ofTemporary(cache, p.basename(entity.path)) != null)
+          entity.path,
+    ],
+    isEmpty,
+    reason: at,
+  );
+  switch (ending) {
+    case .crash:
+      break;
+    case .error:
+      await ended.end();
+  }
+});

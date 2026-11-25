@@ -93,7 +93,8 @@ final Gen<String> _awkwardRoot = .build((Draw draw) {
 const List<String> _inLine = ['', '\t', ' ', '"'];
 
 /// The directories a checkout, a manifest or a store's path stands under,
-/// plain, holding a tab or a line break, or opening on a quote.
+/// plain, holding a tab, a line break or another control character, or
+/// opening on a quote.
 const List<String> _directories = [
   '/consumer',
   '/con\tsumer',
@@ -101,6 +102,9 @@ const List<String> _directories = [
   '/con\rsumer',
   '/con\u2028sumer',
   '/con\x7fsumer',
+  '/con\x85sumer',
+  '/con\u2029sumer',
+  '/con\x00sumer',
   '"consumer',
 ];
 

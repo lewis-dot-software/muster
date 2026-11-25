@@ -86,8 +86,8 @@ void main() {
   });
 
   property(
-    'A temporary clone\'s name is read back as the clone it is made for, '
-    'whatever letters and digits its token holds.',
+    "STO-25: A temporary clone's name is read back as the clone it is made "
+    'for, whatever letters and digits its token holds.',
     (Draw draw) {
       final GitCodebase codebase = draw(anyGitCodebase(), label: 'codebase');
       final String token = draw(
@@ -105,7 +105,8 @@ void main() {
   );
 
   property(
-    'Two codebases share a clone exactly when their URLs are the same string.',
+    'STO-22: Two codebases share a clone exactly when their URLs are the same '
+    'string.',
     (Draw draw) {
       final GitCodebase a = draw(anyGitCodebase(), label: 'a');
       final GitCodebase other = draw(anyGitCodebase(), label: 'other');

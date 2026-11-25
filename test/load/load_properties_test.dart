@@ -4,6 +4,7 @@ import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/load/locking.dart';
+import 'package:muster/src/model/around_pubspec.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/content_hash.dart';
@@ -27,6 +28,7 @@ import '../support/manifests.dart';
 import '../support/origin.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
+import '../support/scratches.dart';
 import '../support/spy_runner.dart';
 import '../support/tree_under.dart';
 import '../support/write_file.dart';
@@ -103,9 +105,6 @@ class _Bench {
       checkoutAt(temp, codebase.name.name);
 }
 
-/// Matches an outcome that is a failure, never [Fetched].
-final Matcher _failure = isA<FetchFailure>();
-
 /// Text YAML cannot read.
 const List<String> _notYaml = [
   'codebases: [',
@@ -117,17 +116,29 @@ const List<String> _notYaml = [
   'a: b: c',
 ];
 
-/// A file name whose ending is no `.yaml`.
+/// A file name whose ending is no `.yaml` after a stem of its own: `.yaml`
+/// alone, or a stem before another ending.
 final Gen<String> _notYamlName = .build((Draw draw) {
-  final String stem = draw(.string(alphabet: .letters, minLength: 1));
   final String ending = draw(
-    .element(['', '.yml', '.YAML', '.yaml.bak', '.json', '_yaml', '.yaml~']),
+    .element([
+      '.yaml',
+      '',
+      '.yml',
+      '.YAML',
+      '.yaml.bak',
+      '.json',
+      '_yaml',
+      '.yaml~',
+    ]),
   );
-  return '$stem$ending';
+  if (ending == '.yaml') {
+    return ending;
+  }
+  return '${draw(.string(alphabet: .letters, minLength: 1))}$ending';
 });
 
 /// A fault a named manifest can meet.
-enum _ManifestFault { missing, unreadable, notYaml }
+enum _ManifestFault { missing, unreadable, notUtf8, notYaml }
 
 /// A codebase's kind, as its manifest names it.
 enum _Kind { git, hosted }
@@ -160,18 +171,35 @@ enum _Refusal {
   noCache,
 }
 
-/// A codebase a load names, drawn: the [toolchain] it resolves with, and
-/// whether its URL [reached] a repo, which it fails to clone where it does
-/// not.
-typedef _Versioned = ({Toolchain toolchain, bool reached});
+/// A codebase a load names, drawn: its [kind], the [toolchain] it resolves
+/// with, and whether a git one's URL [reached] a repo, which it fails to
+/// clone where it does not.
+typedef _Versioned = ({_Kind kind, Toolchain toolchain, bool reached});
 
 /// A codebase of a load run twice, drawn: whether its package is [nested]
 /// below the repo's top, holds an [example], has its locks [committed], and
 /// is [listed] in a manifest `MUSTER_MANIFESTS` names, not the root's.
 typedef _Repeated = ({bool nested, bool example, bool committed, bool listed});
 
+/// A package a load resolved, where its directory stands, and the names its
+/// package config lists.
+typedef _Resolved = (Package package, PackagePath path, Set<String> names);
+
 /// A fault a codebase can meet.
-enum _Fault { none, pinMissing, noRepo, unlocked, badStamp, unresolvable }
+enum _Fault {
+  none,
+  pinMissing,
+  noRepo,
+  unlocked,
+  badStamp,
+  unresolvable,
+
+  /// A hosted codebase at a version no host serves.
+  hostedUnserved,
+
+  /// A hosted codebase served, with no kept lock.
+  hostedUnlocked,
+}
 
 /// How a toolchain's version command ends in a test that drives it.
 enum _VersionRead {
@@ -206,15 +234,35 @@ String _versionText(Toolchain toolchain) => switch (toolchain) {
   .flutter => '{"frameworkVersion": "3.47.9"}',
 };
 
+/// Matches a refusal of the manifest at [path] as not YAML, for a reason
+/// [reason] matches.
+Matcher _notYamlAt(String path, Matcher reason) => isA<ManifestInvalid>()
+    .having((ManifestInvalid i) => i.manifest.path, 'manifest', path)
+    .having(
+      (ManifestInvalid i) => i.refusal,
+      'refusal',
+      isA<NotYaml>().having((NotYaml n) => n.reason, 'reason', reason),
+    );
+
+/// Matches a [CommandFailed] of a command [executable] ran.
+Matcher _failedBy(Executable executable) => isA<CommandFailed>().having(
+  (CommandFailed f) => f.command.executable,
+  'executable',
+  executable,
+);
+
 void main() {
   property(
-    'A load reads each toolchain\'s SDK version at most once, however many '
-    'codebases it names.',
+    "LOA-11: A load reads each toolchain's SDK version once where any "
+    'codebase, git or hosted, names it and never otherwise, each codebase it '
+    'resolves carrying that version and each of a failed read failing with '
+    'it.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Versioned> drawn = draw(
         .list(
           .build(
             (Draw draw) => (
+              kind: draw(.element(_Kind.values)),
               toolchain: draw(.element(Toolchain.values)),
               reached: draw(.boolean()),
             ),
@@ -232,106 +280,143 @@ void main() {
         label: 'reads',
       );
       final _Bench bench = await .make(temp);
-      bench.runner.before = (Command command) async {
-        if (_versionOf(command) case final Toolchain toolchain) {
-          switch (reads[toolchain.index]) {
-            case .answered:
-              break;
-            case .fails:
-              throw StoreFault(
-                CommandFailed(command, 1, '', 'failed by its test'),
+      // A server serving nothing, so no unpack reaches pub.dev.
+      final PackageServer server = await .start();
+      try {
+        final SpyRunner runner = .new({
+          ...hermetic(temp),
+          ...pubVariables(temp, server),
+        });
+        runner.before = (Command command) async {
+          if (_versionOf(command) case final Toolchain toolchain) {
+            switch (reads[toolchain.index]) {
+              case .answered:
+                break;
+              case .fails:
+                throw StoreFault(
+                  CommandFailed(command, 1, '', 'failed by its test'),
+                );
+              case .unstartable:
+                throw StoreFault(Unstartable(command.executable));
+            }
+          }
+        };
+        runner.answer = (Command command) => switch (_versionOf(command)) {
+          final Toolchain toolchain => (
+            exitCode: 0,
+            stdout: _versionText(toolchain),
+            stderr: '',
+          ),
+          null => null,
+        };
+        final List<Codebase> codebases = [];
+        for (final (int i, (:kind, :toolchain, :reached))
+            in drawn.take(6).indexed) {
+          switch (kind) {
+            case .git:
+              final GitCodebase made = await bench.codebase(
+                'c$i',
+                packageFiles('c$i'),
               );
-            case .unstartable:
-              throw StoreFault(Unstartable(command.executable));
+              // Only a Dart codebase on an answered read is resolved, since a
+              // Flutter one would need Flutter's SDK, every other on an
+              // answered read fails at its clone or its unpack, and each on a
+              // failed read fails at it.
+              codebases.add(
+                Git((
+                  name: made.name,
+                  url: reached && toolchain == .dart
+                      ? made.url
+                      : .parse(p.join(temp.path, 'no-repo-$i'))!,
+                  commit: made.commit,
+                  root: made.root,
+                  toolchain: toolchain,
+                )),
+              );
+            case .hosted:
+              codebases.add(
+                Hosted(hostedOf('p$i', name: 'c$i', toolchain: toolchain)),
+              );
           }
         }
-      };
-      bench.runner.answer = (Command command) => switch (_versionOf(command)) {
-        final Toolchain toolchain => (
-          exitCode: 0,
-          stdout: _versionText(toolchain),
-          stderr: '',
-        ),
-        null => null,
-      };
-      final List<GitCodebase> codebases = [];
-      for (final (int i, (:toolchain, :reached)) in drawn.take(6).indexed) {
-        final GitCodebase made = await bench.codebase(
-          'c$i',
-          packageFiles('c$i'),
+        await writeFile(
+          atRoot(temp),
+          renderManifest(codebases.map(anyEntryOf).toList()),
         );
-        // Only a Dart codebase on an answered read is resolved, since a
-        // Flutter one would need Flutter's SDK, every other on an answered
-        // read fails at its clone, and each on a failed read fails at it.
-        codebases.add((
-          name: made.name,
-          url: reached && toolchain == .dart
-              ? made.url
-              : .parse(p.join(temp.path, 'no-repo-$i'))!,
-          commit: made.commit,
-          root: made.root,
-          toolchain: toolchain,
-        ));
-      }
-      await writeManifest(atRoot(temp), codebases);
-      bench.runner.commands.clear();
-      final Load load = await bench.load();
-      expect(load, isA<Loaded>());
-      for (final Toolchain toolchain in Toolchain.values) {
-        expect(
-          bench.runner.given.where(
-            (String given) => given == _versionGiven(toolchain),
-          ),
-          hasLength(
-            codebases.any(
-                  (GitCodebase codebase) => codebase.toolchain == toolchain,
-                )
-                ? 1
-                : 0,
-          ),
-          reason: toolchain.name,
-        );
-      }
-      // A version read that failed fails each codebase of its toolchain
-      // with that one failure.
-      for (final GitCodebase codebase in codebases) {
-        final FetchOutcome? outcome = (load as Loaded).outcomes[codebase.name];
-        switch (reads[codebase.toolchain.index]) {
-          case .answered:
-            break;
-          case .fails:
-            expect(
-              outcome,
-              isA<CommandFailed>().having(
-                (CommandFailed failed) => SpyRunner.givenOf(failed.command),
-                'command',
-                _versionGiven(codebase.toolchain),
-              ),
-              reason: codebase.name.name,
-            );
-          case .unstartable:
-            expect(
-              outcome,
-              isA<Unstartable>().having(
-                (Unstartable failed) => failed.executable,
-                'executable',
-                codebase.toolchain.executable,
-              ),
-              reason: codebase.name.name,
-            );
+        final Load load = await bench.load(runner);
+        expect(load, isA<Loaded>());
+        for (final Toolchain toolchain in Toolchain.values) {
+          expect(
+            runner.given.where(
+              (String given) => given == _versionGiven(toolchain),
+            ),
+            hasLength(
+              codebases.any(
+                    (Codebase codebase) => codebase.toolchain == toolchain,
+                  )
+                  ? 1
+                  : 0,
+            ),
+            reason: toolchain.name,
+          );
         }
+        for (final (int i, Codebase codebase) in codebases.indexed) {
+          final FetchOutcome? outcome =
+              (load as Loaded).outcomes[codebase.name];
+          switch (reads[codebase.toolchain.index]) {
+            case .answered:
+              if ((drawn[i].kind, drawn[i].toolchain, drawn[i].reached) case (
+                .git,
+                .dart,
+                true,
+              )) {
+                expect(
+                  outcome,
+                  isA<Fetched>().having(
+                    (Fetched fetched) => fetched.sdk,
+                    'sdk',
+                    SdkVersion.parse('3.13.0'),
+                  ),
+                  reason: codebase.name.name,
+                );
+              }
+            case .fails:
+              expect(
+                outcome,
+                isA<CommandFailed>().having(
+                  (CommandFailed failed) => SpyRunner.givenOf(failed.command),
+                  'command',
+                  _versionGiven(codebase.toolchain),
+                ),
+                reason: codebase.name.name,
+              );
+            case .unstartable:
+              expect(
+                outcome,
+                isA<Unstartable>().having(
+                  (Unstartable failed) => failed.executable,
+                  'executable',
+                  codebase.toolchain.executable,
+                ),
+                reason: codebase.name.name,
+              );
+          }
+        }
+      } finally {
+        await server.close();
       }
     }),
     settings: .new(runs: 20, shrinkSteps: gitShrinks),
   );
 
   property(
-    'A manifest whose file name does not end `.yaml` refuses the load.',
+    'MAN-16: A manifest whose file name does not end `.yaml` after a stem of '
+    'its own refuses the load.',
     (Draw draw) async {
       final String name = draw(_notYamlName, label: 'name');
       final _By by = draw(.element(_By.values), label: 'by');
       final int before = draw(.integer(min: 0, max: 2), label: 'before');
-      expect(name, isNot(endsWith('.yaml')));
+      expect(name == '.yaml' || !name.endsWith('.yaml'), isTrue, reason: name);
       await inTemp((Directory temp) async {
         final _Bench bench = await .make(temp);
         for (int i = 0; i < before; i++) {
@@ -356,8 +441,9 @@ void main() {
   );
 
   property(
-    'A named manifest that is missing, unreadable or not YAML refuses the '
-    'load, naming the file and why.',
+    'MAN-14: A named manifest refuses the load, naming the file and why, '
+    'and for its text where the read stopped, where it is one of these: '
+    'missing, unreadable, not UTF-8, or not YAML.',
     (Draw draw) async {
       final _ManifestFault fault = draw(
         .element(_ManifestFault.values),
@@ -378,6 +464,8 @@ void main() {
             break;
           case .unreadable:
             await Directory(path).create();
+          case .notUtf8:
+            await File(path).writeAsBytes([0xff]);
           case .notYaml:
             await File(path).writeAsString(text);
         }
@@ -401,22 +489,11 @@ void main() {
                     'reason',
                     isNotEmpty,
                   ),
-            .notYaml =>
-              isA<ManifestInvalid>()
-                  .having(
-                    (ManifestInvalid i) => i.manifest.path,
-                    'manifest',
-                    path,
-                  )
-                  .having(
-                    (ManifestInvalid i) => i.refusal,
-                    'refusal',
-                    isA<NotYaml>().having(
-                      (NotYaml n) => n.reason,
-                      'reason',
-                      isNotEmpty,
-                    ),
-                  ),
+            .notUtf8 => _notYamlAt(path, startsWith('byte 0: ')),
+            .notYaml => _notYamlAt(
+              path,
+              matches(RegExp(r'^line \d+, column \d+: \S')),
+            ),
           }),
         );
       });
@@ -425,8 +502,8 @@ void main() {
   );
 
   property(
-    'A load with no manifest at all refuses: no `muster.yaml` at the root and '
-    'nothing in `MUSTER_MANIFESTS`.',
+    'MAN-15: A load with no manifest at all refuses, naming its root: no '
+    '`muster.yaml` at the root and nothing in `MUSTER_MANIFESTS`.',
     (Draw draw) => inTemp((Directory temp) async {
       final String? listed = draw(
         .element(<String?>[null, '', ':', '::']),
@@ -451,8 +528,10 @@ void main() {
   );
 
   property(
-    'A load naming git and hosted codebases gives one outcome per codebase, in '
-    "the manifests' order, whatever its kind.",
+    'LOA-2: A load naming git and hosted codebases gives one outcome per '
+    "codebase, fetched or failed, in the manifests' order, the root's "
+    '`muster.yaml` first where one is read and the rest as listed or named, '
+    'whatever its kind.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<List<_Drawn>> manifests = draw(
         .list(
@@ -541,8 +620,9 @@ void main() {
   );
 
   property(
-    'The package config a `Fetched` names is the one its codebase\'s '
-    'resolve wrote, whatever its resolution.',
+    'LOA-4: The lock and the package config a `Fetched` names, a hosted '
+    "package's example's among them, are the ones its codebase's resolve "
+    'wrote, whatever its resolution.',
     (Draw draw) => inTemp((Directory temp) async {
       final bool example = draw(.boolean(), label: 'example');
       final _Bench bench = await .make(temp);
@@ -582,22 +662,49 @@ void main() {
             await File(CheckoutPath.of(consumerIn(temp), name).stamp.path)
                 .readAsString(),
           )!;
-          switch (load) {
-            case Loaded(:final Map<CodebaseName, FetchOutcome> outcomes):
+          final Fetched fetched = switch (load) {
+            Loaded(:final Map<CodebaseName, FetchOutcome> outcomes) =>
               switch (outcomes[name]) {
-                case Fetched(:final PackagePath package):
-                  expect(
-                    ContentHash.of(
-                      await File(package.packageConfig.path).readAsBytes(),
-                    ),
-                    stamp.packages[Package.root]!.packageConfig,
-                    reason: handout.name,
-                  );
-                case final FetchOutcome? other:
-                  fail('${handout.name}: $other');
-              }
-            case Refused():
-              fail('$load');
+                final Fetched fetched => fetched,
+                final FetchOutcome? other => fail('${handout.name}: $other'),
+              },
+            Refused() => fail('$load'),
+          };
+          // Each resolve's config lists the package it ran in, so one read
+          // from any other package's directory lists other names.
+          final List<_Resolved> resolved = [
+            (
+              .root,
+              fetched.package,
+              switch (handout) {
+                .git => {name.name},
+                .alone => {'h'},
+                .asDependency => {aroundName, 'h'},
+              },
+            ),
+            if (fetched.example case ExampleResolved(
+              :final PackagePath package,
+            ))
+              (.example, package, {'h_example', 'h'}),
+          ];
+          expect(fetched.example, switch (handout) {
+            .alone || .asDependency when example => isA<ExampleResolved>(),
+            .git || .alone || .asDependency => isA<NoExample>(),
+          }, reason: handout.name);
+          for (final (Package package, PackagePath path, Set<String> names)
+              in resolved) {
+            final String reason = '${handout.name} ${package.name}';
+            expect(
+              ContentHash.of(await File(path.lock.path).readAsBytes()),
+              stamp.packages[package]!.lock,
+              reason: reason,
+            );
+            expect(
+              ContentHash.of(await File(path.packageConfig.path).readAsBytes()),
+              stamp.packages[package]!.packageConfig,
+              reason: reason,
+            );
+            expect(await configuredIn(path), names, reason: reason);
           }
         }
       } finally {
@@ -607,7 +714,8 @@ void main() {
     settings: .new(runs: 3, shrinkSteps: gitShrinks),
   );
 
-  property('A refused load starts no process and writes no file.', (
+  property('LOA-6: A load refused by its manifests or for want of a cache '
+      'refuses for that fault, starting no process and writing no file.', (
     Draw draw,
   ) async {
     final _Refusal refusal = draw(.element(_Refusal.values), label: 'refusal');
@@ -684,15 +792,36 @@ void main() {
       };
       final Map<String, String> tree = await treeUnder(temp.path);
       bench.runner.commands.clear();
-      expect(await loader.load(), isA<Refused>());
+      expect(
+        await loader.load(),
+        refusedFor(switch (refusal) {
+          .notManifestName => isA<NotManifestName>(),
+          .missing => isA<ManifestMissing>(),
+          .unreadable => isA<ManifestUnreadable>(),
+          .notYaml => isA<ManifestInvalid>().having(
+            (ManifestInvalid i) => i.refusal,
+            'refusal',
+            isA<NotYaml>(),
+          ),
+          .unknownKey => isA<ManifestInvalid>().having(
+            (ManifestInvalid i) => i.refusal,
+            'refusal',
+            isA<UnknownKey>(),
+          ),
+          .none => isA<NoManifest>(),
+          .namedTwice => isA<CodebaseNamedTwice>(),
+          .noCache => isA<NoCache>(),
+        }),
+      );
       expect(bench.runner.given, isEmpty);
       expect(await treeUnder(temp.path), tree);
     });
   }, settings: .new(runs: 24, shrinkSteps: gitShrinks));
 
   property(
-    'A load right after another load hands out the same paths, and clones, '
-    'checks out and resolves nothing.',
+    'LOA-3: A load of git codebases right after another load hands out the '
+    'same packages, examples and SDK versions, writes no file, and runs '
+    'nothing but its SDK version reads and its git statuses.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Repeated> draws = draw(
         .list(
@@ -742,6 +871,7 @@ void main() {
       expect(first, isA<Loaded>());
       final Map<CodebaseName, FetchOutcome> handed = (first as Loaded).outcomes;
       expect(handed.values, everyElement(isA<Fetched>()));
+      final Map<String, String> tree = await treeUnder(temp.path);
       bench.runner.commands.clear();
       final Load second = await bench.load();
       expect(
@@ -749,9 +879,16 @@ void main() {
         loadedWith({
           for (final MapEntry<CodebaseName, FetchOutcome>(:key, :value)
               in handed.entries)
-            key.name: fetchedAt((value as Fetched).package.path),
+            if (value case Fetched(:final package, :final example, :final sdk))
+              key.name: allOf(
+                fetchedAt(package.path),
+                isA<Fetched>()
+                    .having((Fetched f) => f.example, 'example', example)
+                    .having((Fetched f) => f.sdk, 'sdk', sdk),
+              ),
         }),
       );
+      expect(await treeUnder(temp.path), tree);
       expect(
         bench.runner.given,
         everyElement(anyOf(endsWith(' --version'), contains(' status '))),
@@ -761,8 +898,9 @@ void main() {
   );
 
   property(
-    'Every failure a codebase meets comes back as an outcome other than '
-    '`Fetched`, and nothing throws out of `Loader.load` but a bug.',
+    'LOA-1: Every failure a codebase meets, git or hosted, comes back as its '
+    'own outcome other than `Fetched`, every other codebase still getting '
+    'its own, and none throws out of `Loader.load`.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Fault> faults = draw(
         .list(.element(_Fault.values), minLength: 1),
@@ -773,87 +911,111 @@ void main() {
         label: 'unstartable',
       );
       final _Bench bench = await .make(temp);
-      final List<GitCodebase> codebases = [];
-      final Map<String, Matcher> expected = {};
-      for (final (int i, _Fault fault) in faults.take(4).indexed) {
-        final String name = 'c$i';
-        final GitCodebase made = await bench.codebase(name, switch (fault) {
-          .unlocked => packageFiles(name, locked: false),
-          .unresolvable => {
-            'pubspec.yaml':
-                '${pubspecOf(name)}dependencies:\n  gone:\n    path: ../gone\n',
-            'pubspec.lock': lockText,
-          },
-          .none || .pinMissing || .noRepo || .badStamp => packageFiles(name),
-        });
-        codebases.add(switch (fault) {
-          .pinMissing => codebaseOf(
-            bench.origins.first,
-            .parse('f' * 40)!,
-            name: name,
-          ),
-          .noRepo => (
-            name: made.name,
-            url: .parse(p.join(temp.path, 'no-repo-$i'))!,
-            commit: made.commit,
-            root: made.root,
-            toolchain: made.toolchain,
-          ),
-          .none || .unlocked || .badStamp || .unresolvable => made,
-        });
-        switch (fault) {
-          case .badStamp:
-            await Directory('${bench.checkoutOf(made)}.stamp')
-                .create(recursive: true);
-          case .none || .pinMissing || .noRepo || .unlocked || .unresolvable:
-            break;
+      final PackageServer server = await .start();
+      try {
+        final List<Codebase> codebases = [];
+        final Map<String, Matcher> expected = {};
+        for (final (int i, _Fault fault) in faults.take(4).indexed) {
+          final String name = 'c$i';
+          switch (fault) {
+            case .hostedUnserved:
+              codebases.add(Hosted(hostedOf('p$i', name: name)));
+            case .hostedUnlocked:
+              serveLeaf(server, 'p$i', '1.0.0');
+              codebases.add(Hosted(hostedOf('p$i', name: name)));
+            case .none ||
+                .pinMissing ||
+                .noRepo ||
+                .unlocked ||
+                .badStamp ||
+                .unresolvable:
+              final GitCodebase made = await bench.codebase(
+                name,
+                switch (fault) {
+                  .unlocked => packageFiles(name, locked: false),
+                  .unresolvable => {
+                    'pubspec.yaml':
+                        '${pubspecOf(name)}dependencies:\n'
+                        '  gone:\n'
+                        '    path: ../gone\n',
+                    'pubspec.lock': lockText,
+                  },
+                  .none ||
+                  .pinMissing ||
+                  .noRepo ||
+                  .badStamp ||
+                  .hostedUnserved ||
+                  .hostedUnlocked => packageFiles(name),
+                },
+              );
+              codebases.add(
+                Git(switch (fault) {
+                  .pinMissing => codebaseOf(
+                    bench.origins.first,
+                    .parse('f' * 40)!,
+                    name: name,
+                  ),
+                  .noRepo => (
+                    name: made.name,
+                    url: .parse(p.join(temp.path, 'no-repo-$i'))!,
+                    commit: made.commit,
+                    root: made.root,
+                    toolchain: made.toolchain,
+                  ),
+                  .none ||
+                  .unlocked ||
+                  .badStamp ||
+                  .unresolvable ||
+                  .hostedUnserved ||
+                  .hostedUnlocked => made,
+                }),
+              );
+              switch (fault) {
+                case .badStamp:
+                  await Directory('${bench.checkoutOf(made)}.stamp')
+                      .create(recursive: true);
+                case .none ||
+                    .pinMissing ||
+                    .noRepo ||
+                    .unlocked ||
+                    .unresolvable ||
+                    .hostedUnserved ||
+                    .hostedUnlocked:
+                  break;
+              }
+          }
+          expected[name] = unstartable
+              ? isA<Unstartable>()
+              : switch (fault) {
+                  .none => isA<Fetched>(),
+                  .pinMissing => isA<PinMissing>(),
+                  .noRepo => _failedBy(.git),
+                  .unlocked || .hostedUnlocked => isA<Unlocked>(),
+                  .badStamp => isA<StoreFailed>(),
+                  .unresolvable || .hostedUnserved => _failedBy(.dart),
+                };
         }
-        expected[name] = unstartable
-            ? isA<Unstartable>()
-            : switch (fault) {
-                .none => isA<Fetched>(),
-                .pinMissing => isA<PinMissing>(),
-                .noRepo => isA<CommandFailed>().having(
-                  (CommandFailed f) => f.command.executable,
-                  'executable',
-                  Executable.git,
-                ),
-                .unlocked => isA<Unlocked>(),
-                .badStamp => isA<StoreFailed>(),
-                .unresolvable => isA<CommandFailed>().having(
-                  (CommandFailed f) => f.command.executable,
-                  'executable',
-                  Executable.dart,
-                ),
-              };
-      }
-      await writeManifest(atRoot(temp), codebases);
-      final Load load = await bench.load(
-        unstartable ? unstartableIn(temp) : null,
-      );
-      expect(load, loadedWith(expected));
-      for (final (int i, _Fault fault) in faults.take(4).indexed) {
-        if (unstartable ||
-            switch (fault) {
-              .none => false,
-              .pinMissing ||
-              .noRepo ||
-              .unlocked ||
-              .badStamp ||
-              .unresolvable => true,
-            }) {
-          expect(
-            (load as Loaded).outcomes[CodebaseName.parse('c$i')!],
-            _failure,
-          );
-        }
+        await writeFile(
+          atRoot(temp),
+          renderManifest(codebases.map(anyEntryOf).toList()),
+        );
+        final Load load = await bench.load(
+          unstartable
+              ? unstartableIn(temp)
+              : SpyRunner({...hermetic(temp), ...pubVariables(temp, server)}),
+        );
+        expect(load, loadedWith(expected));
+      } finally {
+        await server.close();
       }
     }),
     settings: .new(runs: 12, shrinkSteps: gitShrinks),
   );
 
   property(
-    'A checkout or a clone deleted by hand comes back on the next load.',
+    'LOA-5: Each of these deleted by hand comes back at its path and its '
+    'pin on the next load: a checkout, the whole of `.dart_tool/muster/`, '
+    'or a clone.',
     (Draw draw) async {
       final List<bool> fromSecond = draw(
         .list(.boolean(), minLength: 1),
@@ -867,6 +1029,7 @@ void main() {
         .set(.integer(min: 0, max: 1)),
         label: 'clones',
       );
+      final bool whole = draw(.boolean(), label: 'whole');
       await inTemp((Directory temp) async {
         final _Bench bench = await .make(temp);
         final List<GitCodebase> codebases = [
@@ -888,6 +1051,10 @@ void main() {
             await Directory(bench.checkoutOf(codebase)).delete(recursive: true);
           }
         }
+        if (whole) {
+          await Directory(p.dirname(bench.checkoutOf(codebases.first)))
+              .delete(recursive: true);
+        }
         for (final int origin in clones) {
           final Directory clone = .new(
             cloneOf(
@@ -905,6 +1072,10 @@ void main() {
             await File(p.join(bench.checkoutOf(codebase), 'pubspec.yaml'))
                 .readAsString(),
             pubspecOf(codebase.name.name),
+          );
+          expect(
+            await headOf(bench.checkoutOf(codebase), bench.runner),
+            codebase.commit.hash,
           );
           expect(
             await Directory(cloneOf(temp, codebase).path).exists(),

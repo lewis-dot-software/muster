@@ -27,18 +27,27 @@ import '../support/spy_runner.dart';
 import '../support/write_file.dart';
 
 /// One codebase of a draw: whether its commit holds an example, whether it
-/// holds its packages' locks, whether a kept lock stands for each package
-/// before the lock, and whether its manifest is the one `MUSTER_MANIFESTS`
-/// lists in place of the root's.
-typedef _Codebase = ({bool example, bool committed, bool kept, bool listed});
+/// holds its packages' locks, the packages whose kept lock stands before the
+/// lock, whether its manifest is the one `MUSTER_MANIFESTS` lists in place of
+/// the root's, and whether locks no manifest names stray beside it: one of
+/// its name at a key its values do not give, that one's partial, and its
+/// own beside the manifest that does not name it.
+typedef _Codebase = ({
+  bool example,
+  bool committed,
+  Set<Package> kept,
+  bool listed,
+  bool strayed,
+});
 
 /// A codebase of a draw, its flags drawn in turn.
 final Gen<_Codebase> _codebase = .build(
   (Draw draw) => (
     example: draw(.boolean()),
     committed: draw(.boolean()),
-    kept: draw(.boolean()),
+    kept: draw(.set(.element(Package.values))),
     listed: draw(.boolean()),
+    strayed: draw(.boolean()),
   ),
 );
 
@@ -87,9 +96,10 @@ Gen<List<int>> _orderOf(int length) => .build((Draw draw) {
 
 void main() {
   property(
-    '`muster lock` writes a kept lock for each codebase that needs one and '
-    'has none, leaves every existing lock untouched, and removes every lock '
-    'its manifest no longer names, so a second run changes nothing.',
+    'MAN-1: `muster lock` writes a kept lock for each package that needs one '
+    'and has none, leaves every existing lock untouched, and removes every '
+    'lock and partial its manifest no longer names, so a second run changes '
+    'nothing.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Codebase> draws = draw(
         .list(_codebase, minLength: 1),
@@ -103,6 +113,7 @@ void main() {
       final List<GitCodebase> inListed = [];
       final Map<KeptLockPath, bool> needed = {};
       final Set<KeptLockPath> standing = {};
+      final List<String> gone = [];
       for (final (int i, _Codebase drawn) in draws.take(3).indexed) {
         final Commit pin = await origin.commit(null, {
           ...packageFiles('c$i', locked: drawn.committed),
@@ -120,21 +131,33 @@ void main() {
         for (final Package package in [.root, if (drawn.example) .example]) {
           final KeptLockPath kept = keptOf(manifest, codebase, package);
           needed[kept] = !drawn.committed;
-          if (drawn.kept) {
+          if (drawn.kept.contains(package)) {
             await writeFile(kept.path, _standing);
             standing.add(kept);
           }
         }
+        if (drawn.strayed) {
+          final String stale = p.join(
+            locksBeside(manifest).path,
+            'c$i-${'0' * 64}.lock',
+          );
+          gone.addAll([
+            stale,
+            '$stale.partial',
+            keptOf(drawn.listed ? atRoot(temp) : listed, codebase).path,
+          ]);
+        }
       }
       await writeManifest(atRoot(temp), atRootManifest);
       await writeManifest(listed, inListed);
-      final List<String> gone = [
-        for (final (int i, String stray) in strays.take(2).indexed)
+      for (final (int i, String stray) in strays.take(2).indexed) {
+        gone.add(
           p.join(
             locksBeside(i.isEven ? atRoot(temp) : listed).path,
             '$stray-gone.lock',
           ),
-      ];
+        );
+      }
       for (final String stray in gone) {
         await writeFile(stray, lockText);
       }
@@ -180,8 +203,9 @@ void main() {
   );
 
   property(
-    '`muster lock` writes the kept locks a hosted package and its example '
-    'lack, and a load after it gives `Fetched`.',
+    'MAN-6: `muster lock` writes the kept locks a hosted package and its '
+    'example lack, leaving those that stand, and a load after it gives '
+    '`Fetched`.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<int> order = draw(
         _orderOf(_hostedCases.length),

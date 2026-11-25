@@ -23,14 +23,34 @@ void main() {
     }
   });
 
-  property('no system but macos and linux names a kernel', (Draw draw) {
+  property("STO-26: `macos` names Darwin's kernel, `linux` names Linux's, and "
+      'no other system names one.', (Draw draw) {
+    final String name = draw(.element(['macos', 'linux']), label: 'name');
     final String system = draw(
-      .string(alphabet: .lettersAndDigits),
+      .oneOf([
+        .element([name]),
+        .element([
+          name.toUpperCase(),
+          '${name[0].toUpperCase()}${name.substring(1)}',
+          name.substring(1),
+          name.substring(0, name.length - 1),
+          '$name ',
+          ' $name',
+          '${name}x',
+          'darwin',
+          'freebsd',
+          'windows',
+          '',
+        ]),
+        .string(alphabet: .lettersAndDigits),
+      ]),
       label: 'system',
     );
-    if (system != 'macos' && system != 'linux') {
-      expect(Kernel.named(system), isNull);
-    }
+    expect(Kernel.named(system), switch (system) {
+      'macos' => Kernel.darwin,
+      'linux' => Kernel.linux,
+      _ => null,
+    });
   });
 
   test('a POSIX system muster knows no C library of has no locker', () {

@@ -1,7 +1,6 @@
 import 'package:grit/grit.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/choose_unnamed.dart';
-import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/locks_directory.dart';
 import 'package:muster/src/model/locks_lacking.dart';
@@ -16,20 +15,39 @@ import '../support/manifests.dart';
 final LocksDirectory _locks = .beside(.parse('/m/muster.yaml', .posix)!);
 
 /// The file name of each kept lock of [codebases]' packages.
-List<String> _namedFiles(List<GitCodebase> codebases) => [
-  for (final GitCodebase codebase in codebases)
+List<String> _namedFiles(List<Codebase> codebases) => [
+  for (final Codebase codebase in codebases)
     for (final Package package in Package.values)
-      p.posix.basename(keptLockOf(_locks, Git(codebase), package).path),
+      p.posix.basename(keptLockOf(_locks, codebase, package).path),
 ];
 
+/// Whether [name] is a kept lock's file name: a stem of its own, then
+/// `.lock`.
+bool _isKept(String name) =>
+    name.length > '.lock'.length && name.endsWith('.lock');
+
+/// Whether [name] is a partial's file name: a kept lock's, then `.partial`.
+bool _isPartial(String name) =>
+    name.endsWith('.partial') &&
+    _isKept(name.substring(0, name.length - '.partial'.length));
+
 void main() {
-  property('Of the files a locks directory lists, every kept lock and partial '
-      'no codebase names is chosen for removal, in their file names\' order, '
-      'and nothing else is.', (Draw draw) {
-    final List<GitCodebase> named = draw(anyGitCodebases(), label: 'named');
-    final List<GitCodebase> others = draw(anyGitCodebases(), label: 'others');
+  property('MAN-18: Of the files a locks directory lists, every kept lock and '
+      'partial no codebase names is chosen for removal, in their file names\' '
+      'order, and nothing else is.', (Draw draw) {
+    final List<Codebase> named = draw(anyCodebases(), label: 'named');
+    final List<Codebase> others = draw(anyCodebases(), label: 'others');
     final List<String> strays = draw(
-      .list(.element(['a.lock', 'b.example.lock', 'README.md', '.lock'])),
+      .list(
+        .element([
+          'a.lock',
+          'b.example.lock',
+          'README.md',
+          '.lock',
+          'a.partial',
+          'a.lock.bak',
+        ]),
+      ),
       label: 'strays',
     );
     final List<String> listed = [
@@ -39,11 +57,7 @@ void main() {
         ...strays,
       ]) ...[name, '$name.partial'],
     ];
-    final List<UnnamedLock> unnamed = chooseUnnamed(
-      _locks,
-      listed,
-      named.map(Git.new),
-    );
+    final List<UnnamedLock> unnamed = chooseUnnamed(_locks, listed, named);
     final Set<String> keep = {
       for (final String name in _namedFiles(named)) ...[name, '$name.partial'],
     };
@@ -57,10 +71,7 @@ void main() {
       ],
       [
         for (final String name in [...listed]..sort())
-          if ((listedKeptLock(_locks, name) != null ||
-                  PartialLockPath.listed(_locks, name) != null) &&
-              !keep.contains(name))
-            name,
+          if ((_isKept(name) || _isPartial(name)) && !keep.contains(name)) name,
       ],
     );
   });

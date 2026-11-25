@@ -69,25 +69,30 @@ void main() {
     );
   });
 
-  property('MUSTER_CACHE is the cache wherever it is set, whatever else is', (
-    Draw draw,
-  ) {
-    final String cache = draw(
-      .string(alphabet: .letters, minLength: 1),
-      label: 'cache',
-    );
-    final List<String> others = draw(
-      .list(.element(['XDG_CACHE_HOME', 'HOME', 'LOCALAPPDATA', 'PATH'])),
-      label: 'others',
-    );
-    final String value = draw(.string(alphabet: .letters), label: 'value');
-    final Os os = draw(.element(Os.values), label: 'os');
-    expect(
-      _cache({
-        for (final String name in others) name: '/$value',
-        'MUSTER_CACHE': cache,
-      }, os: os),
-      cache,
-    );
-  });
+  property(
+    'STO-19: `MUSTER_CACHE` is the cache on either system, whatever else is '
+    'set.',
+    (Draw draw) {
+      final String cache = draw(
+        .string(alphabet: .of(r'aZ09/\ .:-_'), minLength: 1),
+        label: 'cache',
+      );
+      final Map<String, String> others = {
+        for (final String name in [
+          'XDG_CACHE_HOME',
+          'HOME',
+          'LOCALAPPDATA',
+          'PATH',
+        ])
+          if (draw(
+                .element(<String?>[null, '', 'x', '/x', r'C:\x']),
+                label: name,
+              )
+              case final String value)
+            name: value,
+      };
+      final Os os = draw(.element(Os.values), label: 'os');
+      expect(_cache({...others, 'MUSTER_CACHE': cache}, os: os), cache);
+    },
+  );
 }

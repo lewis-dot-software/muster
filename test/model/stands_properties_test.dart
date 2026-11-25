@@ -6,6 +6,7 @@ import 'package:muster/src/model/commit.dart';
 import 'package:muster/src/model/content_hash.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/hosted_codebase.dart';
+import 'package:muster/src/model/outside_path.dart';
 import 'package:muster/src/model/package.dart';
 import 'package:muster/src/model/sdk_version.dart';
 import 'package:muster/src/model/stamp.dart';
@@ -53,6 +54,9 @@ enum _Off {
 
   /// A package's lock in the checkout is another.
   lock,
+
+  /// A package's lock in the checkout is gone.
+  lockGone,
 
   /// A kept lock a package resolved on is another.
   keptLock,
@@ -107,7 +111,9 @@ Survey _survey(
     for (final Package package in Package.values)
       package: switch (stamp.packages[package]) {
         final StampedPackage stamped => (
-          lock: package == at && offs.contains(_Off.lock)
+          lock: package == at && offs.contains(_Off.lockGone)
+              ? null
+              : package == at && offs.contains(_Off.lock)
               ? _other(stamped.lock)
               : stamped.lock,
           keptLock: switch (stamped.source) {
@@ -193,6 +199,9 @@ enum _HostedOff {
   /// A package's lock in the checkout is another.
   lock,
 
+  /// A package's lock in the checkout is gone.
+  lockGone,
+
   /// A package's kept lock is another.
   keptLock,
 
@@ -230,13 +239,15 @@ HostedCodebase _editedHosted(HostedCodebase codebase, Set<_HostedOff> offs) => (
 );
 
 /// The survey of a hosted checkout stamped [stamp] that stands, carrying
-/// [worktree], then fallen off by [offs] on its package [at].
+/// [worktree], then fallen off by [offs] on its package [at], each package
+/// the stamp does not name holding files of its own where [unstamped] holds.
 Survey _hostedSurvey(
   Stamp stamp,
   Set<_HostedOff> offs,
   Worktree? worktree,
-  Package at,
-) {
+  Package at, {
+  required bool unstamped,
+}) {
   bool off(Package package, _HostedOff kind) =>
       package == at && offs.contains(kind);
   return (
@@ -250,7 +261,11 @@ Survey _hostedSurvey(
       for (final Package package in Package.values)
         package: switch (stamp.packages[package]) {
           final StampedPackage stamped => (
-            lock: off(package, .lock) ? _other(stamped.lock) : stamped.lock,
+            lock: off(package, .lockGone)
+                ? null
+                : off(package, .lock)
+                ? _other(stamped.lock)
+                : stamped.lock,
             keptLock: off(package, .keptLockGone)
                 ? null
                 : off(package, .keptLock)
@@ -262,6 +277,11 @@ Survey _hostedSurvey(
                 ? _other(stamped.packageConfig)
                 : stamped.packageConfig,
           ),
+          null when unstamped => (
+            lock: stamp.packages[Package.root]!.lock,
+            keptLock: stamp.packages[Package.root]!.lock,
+            packageConfig: stamp.packages[Package.root]!.packageConfig,
+          ),
           null => (lock: null, keptLock: null, packageConfig: null),
         },
     },
@@ -269,91 +289,100 @@ Survey _hostedSurvey(
 }
 
 void main() {
-  property(
-    'A git checkout stands exactly when its stamp matches the codebase\'s '
-    'values, each lock\'s hash and the SDK version on PATH, the package it '
-    'hands out is there, `HEAD` is the pin, no tracked file has changed '
-    'and each `package_config.json` is the one it was stamped with, and is '
-    'made again where any one of those is off.',
-    (Draw draw) {
-      final GitCodebase drawn = draw(anyGitCodebase(), label: 'codebase');
-      final Map<Package, StampedPackage> packages = draw(
-        anyStampedPackages,
-        label: 'packages',
-      );
-      final SdkVersion sdk = draw(anySdkVersion, label: 'sdk');
-      // At most two at once, so a draw with none off, and one with one
-      // alone, are each common.
-      final Set<_Off> offs = draw(
-        .list(.element(_Off.values), maxLength: 2),
-        label: 'offs',
-      ).toSet();
-      final Set<_Noise> noise = draw(
-        .set(.element(_Noise.values)),
-        label: 'noise',
-      );
-      final Package at = draw(.element(packages.keys.toList()), label: 'at');
-      final Stamp stamp = stampOf(
-        Git(drawn),
-        _keptWhereOff(packages, at, offs),
-        sdk,
-      );
-      final GitCodebase codebase = _edited(drawn, offs);
-      expect(
-        stands(Git(codebase), _survey(stamp, drawn.commit, offs, noise, at)),
-        offs.isEmpty,
-      );
-    },
-    settings: .new(runs: 400),
-  );
+  property('STO-2: A git checkout stands exactly when each of these holds, '
+      'and does not stand where any one is off: its stamp matches the '
+      'codebase\'s values, the lock each package holds, a kept lock\'s source '
+      'beside its manifest and the SDK version on PATH, the package it hands '
+      'out is there, `HEAD` is the pin, no tracked file has changed, and each '
+      '`package_config.json` is the one it was stamped with.', (Draw draw) {
+    final GitCodebase drawn = draw(anyGitCodebase(), label: 'codebase');
+    final Map<Package, StampedPackage> packages = draw(
+      anyStampedPackages,
+      label: 'packages',
+    );
+    final SdkVersion sdk = draw(anySdkVersion, label: 'sdk');
+    // At most two at once, so a draw with none off, and one with one
+    // alone, are each common.
+    final Set<_Off> offs = draw(
+      .list(.element(_Off.values), maxLength: 2),
+      label: 'offs',
+    ).toSet();
+    final Set<_Noise> noise = draw(
+      .set(.element(_Noise.values)),
+      label: 'noise',
+    );
+    final Package at = draw(.element(packages.keys.toList()), label: 'at');
+    final Stamp stamp = stampOf(
+      Git(drawn),
+      _keptWhereOff(packages, at, offs),
+      sdk,
+    );
+    final GitCodebase codebase = _edited(drawn, offs);
+    expect(
+      stands(Git(codebase), _survey(stamp, drawn.commit, offs, noise, at)),
+      offs.isEmpty,
+    );
+  }, settings: .new(runs: 400));
 
-  property(
-    'A hosted checkout stands exactly when its stamp matches the codebase\'s '
-    'values and the SDK version on PATH, the package it hands out is there, '
-    'and each package holds the lock and '
-    'the `package_config.json` it was stamped with, on its kept lock, '
-    'whatever a worktree shows, and is made again where any one of those is '
-    'off.',
-    (Draw draw) {
-      final HostedCodebase codebase = draw(
-        anyHostedCodebase(),
-        label: 'codebase',
-      );
-      final Map<Package, StampedPackage> packages = draw(
-        anyStampedPackages.map(
-          (Map<Package, StampedPackage> packages) => {
-            for (final MapEntry<Package, StampedPackage>(:key, :value)
-                in packages.entries)
-              key: (
-                source: .kept,
-                lock: value.lock,
-                packageConfig: value.packageConfig,
-              ),
-          },
-        ),
-        label: 'packages',
-      );
-      final SdkVersion sdk = draw(anySdkVersion, label: 'sdk');
-      final Set<_HostedOff> offs = draw(
-        .list(.element(_HostedOff.values), maxLength: 2),
-        label: 'offs',
-      ).toSet();
-      final Package at = draw(.element(packages.keys.toList()), label: 'at');
-      final Worktree? worktree = draw(.boolean(), label: 'there')
-          ? (
-              head: .parse(draw(anyFullHash, label: 'head'))!,
-              changed: draw(.boolean(), label: 'changed'),
-            )
-          : null;
-      final Stamp stamp = stampOf(Hosted(codebase), packages, sdk);
-      expect(
-        stands(
-          Hosted(_editedHosted(codebase, offs)),
-          _hostedSurvey(stamp, offs, worktree, at),
-        ),
-        offs.isEmpty,
-      );
-    },
-    settings: .new(runs: 400),
-  );
+  property('STO-3: A hosted checkout stands exactly when each of these '
+      'holds, whatever a worktree or a package the stamp does not name shows '
+      'and whether its example was left unresolved, and does not stand where '
+      'any one is off: its stamp matches the codebase\'s values and the SDK '
+      'version on PATH, the package it hands out is there, each package holds '
+      'the lock and the `package_config.json` it was stamped with, and its '
+      'kept lock beside its manifest is the one it resolved on.', (Draw draw) {
+    final HostedCodebase codebase = draw(
+      anyHostedCodebase(),
+      label: 'codebase',
+    );
+    final Map<Package, StampedPackage> packages = draw(
+      anyStampedPackages.map(
+        (Map<Package, StampedPackage> packages) => {
+          for (final MapEntry<Package, StampedPackage>(:key, :value)
+              in packages.entries)
+            key: (
+              source: .kept,
+              lock: value.lock,
+              packageConfig: value.packageConfig,
+            ),
+        },
+      ),
+      label: 'packages',
+    );
+    final SdkVersion sdk = draw(anySdkVersion, label: 'sdk');
+    final Set<_HostedOff> offs = draw(
+      .list(.element(_HostedOff.values), maxLength: 2),
+      label: 'offs',
+    ).toSet();
+    final Package at = draw(.element(packages.keys.toList()), label: 'at');
+    final Worktree? worktree = draw(.boolean(), label: 'there')
+        ? (
+            head: .parse(draw(anyFullHash, label: 'head'))!,
+            changed: draw(.boolean(), label: 'changed'),
+          )
+        : null;
+    final bool unstamped = draw(.boolean(), label: 'unstamped');
+    final OutsidePath? unresolved = packages.containsKey(Package.example)
+        ? null
+        : draw(
+            .oneOf([
+              .element([null]),
+              anyOutsidePath,
+            ]),
+            label: 'unresolved',
+          );
+    final Stamp stamp = stampOf(
+      Hosted(codebase),
+      packages,
+      sdk,
+      unresolved: unresolved,
+    );
+    expect(
+      stands(
+        Hosted(_editedHosted(codebase, offs)),
+        _hostedSurvey(stamp, offs, worktree, at, unstamped: unstamped),
+      ),
+      offs.isEmpty,
+    );
+  }, settings: .new(runs: 400));
 }

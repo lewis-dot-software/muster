@@ -62,8 +62,23 @@ const Set<_Act> _forcing = {
   .deleteStamp,
 };
 
+/// What stands in a checkout's place once the acts on it are done.
+enum _Place {
+  /// The checkout as the acts left it.
+  checkout,
+
+  /// Its directory deleted.
+  gone,
+
+  /// A directory that is no worktree, holding a file.
+  directory,
+
+  /// A file.
+  file,
+}
+
 /// What a tool writes beside a checkout's tracked files.
-enum _Kind { untracked, ignored, inDartTool }
+enum _Kind { untracked, untrackedInTracked, ignored, inDartTool }
 
 /// A file a tool writes: its `kind`, the index `at` that names it, and its
 /// `contents`.
@@ -77,6 +92,7 @@ typedef _Step = (_Act act, int at);
 /// [kind] that [at] names.
 String _written(_Kind kind, int at) => switch (kind) {
   .untracked => 'stray/$at.txt',
+  .untrackedInTracked => 'lib/tool$at.dart',
   .ignored => at.isEven ? 'ignored/$at.txt' : 'out$at.log',
   .inDartTool => '.dart_tool/tool$at',
 };
@@ -121,8 +137,9 @@ class _Bench {
 
 void main() {
   property(
-    'A checkout made again holds exactly the pin\'s tracked files: every edit '
-    'is reverted and every file the pin lacks is removed.',
+    "STO-4: A checkout made again holds exactly the pin's tracked files, "
+    'whatever stood in its place: every edit is reverted and every file the '
+    'pin lacks is removed.',
     (Draw draw) async {
       final Set<int> pool = draw(
         .set(.integer(min: 0, max: _pool.length - 1)),
@@ -141,6 +158,7 @@ void main() {
         ),
         label: 'acts',
       );
+      final _Place place = draw(.element(_Place.values), label: 'place');
       await inTemp((Directory temp) async {
         final _Bench bench = await .make(temp);
         final Map<String, String> files = _pinFiles(pool, seed);
@@ -193,6 +211,18 @@ void main() {
               }
           }
         }
+        switch (place) {
+          case .checkout:
+            break;
+          case .gone:
+            await Directory(bench.checkout.path).delete(recursive: true);
+          case .directory:
+            await Directory(bench.checkout.path).delete(recursive: true);
+            await bench.write('stray.txt', 'no worktree');
+          case .file:
+            await Directory(bench.checkout.path).delete(recursive: true);
+            await File(bench.checkout.path).writeAsString('no directory');
+        }
         await bench.checkouts.checkout(Git(codebase), bench.locks);
         expect(
           await filesUnder(bench.checkout.path, less: ['.git', '.dart_tool']),
@@ -210,8 +240,9 @@ void main() {
   );
 
   property(
-    'A standing checkout keeps everything a tool wrote beside its tracked '
-    'files, ignored or untracked.',
+    'STO-8: A standing checkout keeps everything a tool wrote beside its '
+    'tracked files, ignored or untracked, and is handed out with nothing run '
+    'but its survey.',
     (Draw draw) async {
       final List<_Write> writes = draw(
         .list(

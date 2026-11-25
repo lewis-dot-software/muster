@@ -38,8 +38,10 @@ List<CloneStep> _steps(
 
 void main() {
   property(
-    'A clone that is missing is cloned, one that lacks the pin\'s commit is '
-    'fetched, and one that holds it is left untouched.',
+    'STO-23: Each of these holds of a clone: one that is missing is cloned, '
+    "one that lacks the pin's commit is fetched once, one that holds it is "
+    'left untouched, and one that still lacks it after its fetch is '
+    '`PinMissing`.',
     (Draw draw) {
       final CloneState first = draw(
         .element(CloneState.values),
@@ -75,8 +77,8 @@ void main() {
   );
 
   property(
-    'A checkout that is a worktree of its URL\'s clone is moved to its pin, '
-    'and any other is removed and added afresh.',
+    "STO-24: A checkout that is a worktree of its URL's clone is moved to its "
+    'pin, and any other is removed and added afresh.',
     (Draw draw) {
       final CheckoutFound found = draw(
         .element(CheckoutFound.values),
