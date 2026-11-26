@@ -28,8 +28,9 @@ import 'written.dart';
 /// key of the other kind's is one muster does not know. A codebase holding no
 /// key of either kind's refuses.
 ///
-/// A plain value YAML reads as a number or a bool is taken as its text, so an
-/// unquoted hash of digits alone is still a hash.
+/// A plain value YAML reads as a number, a bool or a null is taken as its
+/// text, so an unquoted hash of digits alone is still a hash and a codebase
+/// named `null` is still a name. A value left empty is none.
 ///
 /// The text is one YAML mapping whose one key, `codebases`, maps each
 /// codebase's name to its fields: a git codebase's `git` URL, its `commit`,
@@ -210,12 +211,14 @@ T _value<T>(
     } ??
     (throw _Refusal(BadValue(at, wanted, _written(node))));
 
-/// The text [node] holds: a string's own, or a number's or a bool's as
-/// written, since YAML types a plain scalar before muster reads it. Null for a
-/// mapping, a list or a null.
+/// The text [node] holds: a string's own, or a number's, a bool's or a
+/// null's as written, since YAML types a plain scalar before muster reads it.
+/// Null for a mapping, a list or an empty value.
 String? _text(YamlNode node) => switch (node) {
   YamlScalar(value: final String text) => text,
   YamlScalar(value: num() || bool()) => node.span.text,
+  YamlScalar(value: null, style: .PLAIN) when node.span.text.isNotEmpty =>
+    node.span.text,
   _ => null,
 };
 

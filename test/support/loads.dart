@@ -3,6 +3,7 @@ import 'dart:isolate';
 
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
+import 'package:muster/src/model/cache_variable.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/clone_path.dart';
 import 'package:muster/src/model/environment.dart';
@@ -35,12 +36,9 @@ Environment loadEnvironment(
   os: .posix,
 );
 
-/// The variables a cache's directory can be taken from.
-const Set<String> cacheVariables = {
-  'MUSTER_CACHE',
-  'XDG_CACHE_HOME',
-  'HOME',
-  'LOCALAPPDATA',
+/// The variables a cache's directory can be taken from, on either system.
+final Set<String> cacheVariables = {
+  for (final CacheVariable variable in CacheVariable.values) variable.variable,
 };
 
 /// The clone of [codebase]'s URL in the cache of a test's load in [temp].

@@ -4,13 +4,18 @@ import 'dart:io';
 import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/model/cache_directory.dart';
+import 'package:muster/src/model/cache_variable.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 import '../support/git.dart';
 import '../support/git_shrinks.dart';
 import '../support/loads.dart';
+import '../support/manifest_refusal_case.dart';
+import '../support/manifests.dart';
+import '../support/refusal_case.dart';
 import '../support/spy_runner.dart';
+import '../support/written_case.dart';
 
 final String _sha1 = 'ab' * 20;
 
@@ -163,16 +168,89 @@ String _absolute(Os os) => switch (os) {
   .windows => r'C:\cache',
 };
 
-/// A variable the cache could be taken from, or a name of another.
-final Gen<String> _variable = .oneOf([
-  .element([...cacheVariables]),
-  .string(alphabet: .upperCase, minLength: 1),
-]);
+/// Text a refusal carries, drawn from [_characters] and [_nameCharacters],
+/// control characters and line breaks among them.
+final Gen<String> _text = .string(
+  alphabet: .of('$_characters$_nameCharacters\x00\x1b\x9f'),
+);
 
-/// Whether [os] weighs [variable]: whether it alone, set to an absolute
-/// path, gives a cache.
-bool _weighs(Os os, String variable) =>
-    CacheDirectory.of((variables: {variable: _absolute(os)}, os: os)) != null;
+/// Drawn [_text] with no character either system reads as a separator, so
+/// it stands as one part of a path.
+final Gen<String> _part = _text.map(
+  (String text) => text.replaceAll(RegExp(r'[/\\]'), ''),
+);
+
+/// A path [os] writes, of drawn [_text] in its directory and a drawn [_part]
+/// in its file name, ending `.yaml` after a stem of its own.
+Gen<ManifestPath> _manifestPath(Os os) => .build(
+  (Draw draw) => .parse(
+    os.paths.join(_absolute(os), draw(_text), 'a${draw(_part)}.yaml'),
+    os,
+  )!,
+);
+
+/// A key path of drawn keys from the top.
+final Gen<KeyPath> _keyPath = .list(_text, maxLength: 4).map(pathOf);
+
+/// A value a manifest wrote, of each [WrittenCase].
+final Gen<Written> _written = .build((Draw draw) {
+  final WrittenCase written = draw(.element(WrittenCase.values));
+  return switch (written) {
+    .text => WrittenText(draw(_text)),
+    .list || .mapping || .nothing => written.sample,
+  };
+});
+
+/// A manifest's refusal of each [ManifestRefusalCase], its key path, its
+/// reason and what it wrote drawn.
+final Gen<ManifestRefusal> _manifestRefusal = .build(
+  (Draw draw) => switch (draw(.element(ManifestRefusalCase.values))) {
+    .notYaml => NotYaml(draw(_text)),
+    .unknownKey => UnknownKey(draw(_keyPath)),
+    .missingKey => MissingKey(draw(_keyPath)),
+    .missingKind => MissingKind(draw(_keyPath)),
+    .badValue => BadValue(
+      draw(_keyPath),
+      draw(.element(Wanted.values)),
+      draw(_written),
+    ),
+  },
+);
+
+/// A refusal of each [RefusalCase] on a drawn system, every path, reason
+/// and system name it carries drawn.
+final Gen<LoadRefusal> _refusal = .build((Draw draw) {
+  final Os os = draw(.element(Os.values));
+  ManifestPath manifest() => draw(_manifestPath(os));
+  return switch (draw(.element(RefusalCase.values))) {
+    .noManifest => NoManifest(.new(draw(_text), os)),
+    .notManifestName => NotManifestName(draw(_text)),
+    .manifestMissing => ManifestMissing(manifest()),
+    .manifestUnreadable => ManifestUnreadable(manifest(), draw(_text)),
+    .manifestInvalid => ManifestInvalid(manifest(), draw(_manifestRefusal)),
+    .codebaseNamedTwice => CodebaseNamedTwice(
+      .parse('a${draw(.string(alphabet: .lowerCase))}')!,
+      first: manifest(),
+      second: manifest(),
+    ),
+    .noWorkingDirectory => NoWorkingDirectory(draw(_text)),
+    .noCache => NoCache(os),
+    .noClaim => NoClaim(draw(_text)),
+  };
+});
+
+/// The names a variable is drawn under: capitals, digits and underscores,
+/// as a variable a system weighs is named.
+final Gen<String> _variable = .string(
+  alphabet: .of('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'),
+  minLength: 1,
+);
+
+/// The variables [os] weighs, by their names.
+Set<String> _weighedOn(Os os) => {
+  for (final CacheVariable variable in CacheVariable.values)
+    if (variable.weighedOn(os)) variable.variable,
+};
 
 /// The variables [text] names, every word of capitals and underscores.
 Set<String> _variablesIn(String text) => {
@@ -181,50 +259,58 @@ Set<String> _variablesIn(String text) => {
 };
 
 void main() {
-  property(
-    'LOA-10: The text a load refuses with is one line holding no control '
-    'character but a tab, whatever its manifest holds and whatever its '
-    'path.',
-    (Draw draw) async {
-      final List<int> bytes = draw(_manifest, label: 'bytes');
-      final String stem = draw(
-        .string(alphabet: .of(_nameCharacters), minLength: 1),
-        label: 'stem',
-      );
-      final String ending = draw(.element(['.yaml', '.yml']), label: 'ending');
-      final bool missing = draw(
-        .integer(min: 0, max: 3).map((int n) => n == 0),
-        label: 'missing',
-      );
-      await inTemp((Directory temp) async {
-        final String manifest = p.join(temp.path, 'manifests', '$stem$ending');
-        if (!missing) {
-          await File(manifest).create(recursive: true);
-          await File(manifest).writeAsBytes(bytes);
-        }
-        final Load load = await loaderIn(
-          temp,
-          SpyRunner(hermetic(temp)),
-          cached: false,
-        ).load(named: [manifest]);
-        switch (load) {
-          case Refused(:final LoadRefusal reason):
-            expect('$reason', isNot(contains(_controlButTab)));
-          case Loaded():
-            fail('a load with no cache loaded');
-        }
-      });
-    },
-    settings: .new(shrinkSteps: gitShrinks),
-  );
+  property('LOA-10: Every `LoadRefusal` reads as one line holding no control '
+      'character but a tab, whatever its paths and reasons hold, and so does '
+      'the refusal of a load of any manifest at any path.', (Draw draw) async {
+    final bool loaded = draw(.boolean(), label: 'loaded');
+    if (!loaded) {
+      final LoadRefusal refusal = draw(_refusal, label: 'refusal');
+      expect('$refusal', isNot(contains(_controlButTab)));
+      return;
+    }
+    final List<int> bytes = draw(_manifest, label: 'bytes');
+    final String stem = draw(
+      .string(alphabet: .of(_nameCharacters), minLength: 1),
+      label: 'stem',
+    );
+    final String ending = draw(.element(['.yaml', '.yml']), label: 'ending');
+    final bool missing = draw(
+      .integer(min: 0, max: 3).map((int n) => n == 0),
+      label: 'missing',
+    );
+    await inTemp((Directory temp) async {
+      final String manifest = p.join(temp.path, 'manifests', '$stem$ending');
+      if (!missing) {
+        await File(manifest).create(recursive: true);
+        await File(manifest).writeAsBytes(bytes);
+      }
+      final Load load = await loaderIn(
+        temp,
+        SpyRunner(hermetic(temp)),
+        cached: false,
+      ).load(named: [manifest]);
+      switch (load) {
+        case Refused(:final LoadRefusal reason):
+          expect('$reason', isNot(contains(_controlButTab)));
+        case Loaded():
+          fail('a load with no cache loaded');
+      }
+    });
+  }, settings: .new(shrinkSteps: gitShrinks));
 
   property('LOA-13: The `NoCache` text names exactly the variables its system '
-      'weighs.', (Draw draw) {
+      'weighs, each of which alone names a cache there, and no other variable '
+      'does.', (Draw draw) {
     final Os os = draw(.element(Os.values), label: 'os');
     final List<String> others = draw(.list(_variable), label: 'others');
-    expect(_variablesIn('${NoCache(os)}'), {
-      for (final String variable in [...cacheVariables, ...others])
-        if (_weighs(os, variable)) variable,
-    });
+    final Set<String> weighed = _weighedOn(os);
+    expect(_variablesIn('${NoCache(os)}'), weighed);
+    for (final String variable in {...cacheVariables, ...others}) {
+      expect(
+        CacheDirectory.of((variables: {variable: _absolute(os)}, os: os)),
+        weighed.contains(variable) ? isNotNull : isNull,
+        reason: variable,
+      );
+    }
   });
 }

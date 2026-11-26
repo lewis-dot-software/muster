@@ -11,6 +11,9 @@ enum Pause {
   /// pin.
   place,
 
+  /// A hosted package's unpack.
+  unpack,
+
   /// A package's resolve.
   resolve;
 
@@ -29,6 +32,10 @@ enum Pause {
             command.arguments.contains('checkout'),
       .dart || .flutter => false,
     },
+    .unpack => switch (command.executable) {
+      .git => false,
+      .dart || .flutter => command.arguments.contains('unpack'),
+    },
     .resolve => switch (command.executable) {
       .git => false,
       .dart || .flutter => command.arguments.contains('get'),
@@ -39,6 +46,6 @@ enum Pause {
   /// place of before it runs.
   bool holdsOnceRun(Command command) => switch (this) {
     .clone => command.arguments.first == 'clone',
-    .place || .resolve => false,
+    .place || .unpack || .resolve => false,
   };
 }

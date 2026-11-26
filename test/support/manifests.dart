@@ -1,4 +1,5 @@
 import 'package:grit/grit.dart';
+import 'package:muster/src/model/breaks_line.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/codebase_name.dart';
 import 'package:muster/src/model/git_codebase.dart';
@@ -7,6 +8,7 @@ import 'package:muster/src/model/key_path.dart';
 import 'package:muster/src/model/quoted.dart';
 import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/toolchain.dart';
+import 'package:yaml/yaml.dart';
 
 /// One key and its value, as a manifest's text writes them.
 typedef Field = (String key, String value);
@@ -15,10 +17,28 @@ typedef Field = (String key, String value);
 /// its fields, in order.
 typedef Entry = (String name, List<Field> fields);
 
+/// How a manifest's text writes each key and value.
+enum Writing {
+  /// In double quotes, so YAML reads each back as the string it is.
+  quoted,
+
+  /// Bare, as a consumer writes one, wherever YAML reads it back as written:
+  /// as the string it is, or as a number, a bool or a null its text spells.
+  /// Any other is quoted, since bare it would read as something else.
+  plain,
+}
+
 /// The text of a manifest whose `codebases` holds [entries], with [top]'s
-/// fields after it at the top. Every key and value is quoted, so YAML reads
-/// each back as the string it is.
-String renderManifest(List<Entry> entries, {List<Field> top = const []}) {
+/// fields after it at the top, each key and value written as [writing] says.
+String renderManifest(
+  List<Entry> entries, {
+  List<Field> top = const [],
+  Writing writing = .quoted,
+}) {
+  String written(String text) => switch (writing) {
+    .quoted => quoted(text),
+    .plain => readsBare(text) ? text : quoted(text),
+  };
   final StringBuffer text = .new();
   if (entries.isEmpty) {
     text.writeln('codebases: {}');
@@ -26,19 +46,40 @@ String renderManifest(List<Entry> entries, {List<Field> top = const []}) {
     text.writeln('codebases:');
     for (final (String name, List<Field> fields) in entries) {
       if (fields.isEmpty) {
-        text.writeln('  ${quoted(name)}: {}');
+        text.writeln('  ${written(name)}: {}');
         continue;
       }
-      text.writeln('  ${quoted(name)}:');
+      text.writeln('  ${written(name)}:');
       for (final (String key, String value) in fields) {
-        text.writeln('    ${quoted(key)}: ${quoted(value)}');
+        text.writeln('    ${written(key)}: ${written(value)}');
       }
     }
   }
   for (final (String key, String value) in top) {
-    text.writeln('${quoted(key)}: ${quoted(value)}');
+    text.writeln('${written(key)}: ${written(value)}');
   }
   return '$text';
+}
+
+/// Whether [text], written bare, reads back as written: one line, a plain
+/// scalar whose span is the whole of it, and the string it is where YAML
+/// reads a string.
+bool readsBare(String text) {
+  if (text.isEmpty || breaksLine(text)) {
+    return false;
+  }
+  final YamlNode node;
+  try {
+    node = loadYamlNode(text);
+  } on YamlException {
+    return false;
+  }
+  return switch (node) {
+    YamlScalar(style: .PLAIN, :final Object? value)
+        when node.span.text == text =>
+      value is! String || value == text,
+    _ => false,
+  };
 }
 
 /// [codebase] as a manifest writes it, its root left out where it is the
@@ -188,12 +229,16 @@ const Set<String> pubLetStand = {
   'when',
 };
 
-/// A codebase's name.
-final Gen<String> anyCodebaseName = .build(
-  (Draw draw) =>
-      draw(.element(_lowercase.split(''))) +
-      draw(.string(alphabet: .of('${_lowercase}0123456789_'))),
-);
+/// A codebase's name, the words YAML reads bare as a null or a bool among
+/// them.
+final Gen<String> anyCodebaseName = .oneOf([
+  .build(
+    (Draw draw) =>
+        draw(.element(_lowercase.split(''))) +
+        draw(.string(alphabet: .of('${_lowercase}0123456789_'))),
+  ),
+  .element(['null', 'true', 'false']),
+]);
 
 /// A Dart identifier: one drawn letter by letter, one opening on `_` as
 /// pub.dev's `_fe_analyzer_shared` does, or a word pub lets stand, in its
@@ -229,14 +274,50 @@ final Gen<String> anyPackageName = .build((Draw draw) {
 Gen<String> hexOfLength(int length) =>
     .string(alphabet: .of(_hex), minLength: length, maxLength: length);
 
-/// A full hash, SHA-1's or SHA-256's.
-final Gen<String> anyFullHash = .build(
-  (Draw draw) => draw(hexOfLength(draw(.element([40, 64])))),
-);
+/// The digits a full hash is drawn from.
+enum _HashForm {
+  /// Any hexadecimal digits.
+  hex,
 
-/// A root inside its repo, in its normal spelling.
+  /// Decimal digits alone, which YAML reads bare as an integer.
+  digits,
+
+  /// Decimal digits either side of one `e`, which YAML reads bare as a
+  /// float.
+  exponent,
+}
+
+/// A full hash, SHA-1's or SHA-256's, in each of [_HashForm]'s forms.
+final Gen<String> anyFullHash = .build((Draw draw) {
+  final int length = draw(.element([40, 64]));
+  return switch (draw(.element(_HashForm.values))) {
+    .hex => draw(hexOfLength(length)),
+    .digits => draw(_digitsOfLength(length)),
+    .exponent =>
+      '${draw(_digitsOfLength(1))}e${draw(_digitsOfLength(length - 2))}',
+  };
+});
+
+/// [length] decimal digits.
+Gen<String> _digitsOfLength(int length) =>
+    .string(alphabet: .of('0123456789'), minLength: length, maxLength: length);
+
+/// A root inside its repo, in its normal spelling, ones YAML reads bare as a
+/// number, a bool or a null among them.
 final Gen<String> anyNormalRoot = .list(
-  .element(['pkgs', 'app', 'b_c', 'tool']),
+  .element([
+    'pkgs',
+    'app',
+    'b_c',
+    'tool',
+    '1',
+    '0x1f',
+    'null',
+    'Null',
+    'NULL',
+    '~',
+    'true',
+  ]),
 ).map((List<String> parts) => parts.isEmpty ? '.' : parts.join('/'));
 
 /// A git URL.

@@ -443,6 +443,34 @@ enum _Off {
   };
 }
 
+/// Where in a hosted checkout a tool writes a file.
+enum _ToolPlace {
+  /// The checkout's top, beside the package.
+  top,
+
+  /// The package's own files.
+  package,
+
+  /// The package's `.dart_tool/`, beside its package config.
+  dartTool,
+
+  /// The package's example, where it serves one.
+  example;
+
+  /// The path, from the checkout's top in `/` separators, of the file of
+  /// this place that [at] names.
+  String file(int at) => switch (this) {
+    .top => 'tool/$at.txt',
+    .package => 'a-1.0.0/lib/tool$at.dart',
+    .dartTool => 'a-1.0.0/.dart_tool/tool/$at',
+    .example => 'a-1.0.0/example/out$at.txt',
+  };
+}
+
+/// A file a tool writes in a hosted checkout: its `place`, the index `at`
+/// that names it, and its `contents`.
+typedef _ToolWrite = (_ToolPlace place, int at, String contents);
+
 void main() {
   property('STO-6: A hosted checkout made afresh holds every file pub serves '
       'for the package at its version, unchanged but for the `pubspec.lock` of '
@@ -1007,6 +1035,60 @@ void main() {
       });
     }
   }, settings: .new(runs: 2, shrinkSteps: gitShrinks));
+
+  property(
+    'STO-28: A standing hosted checkout keeps every file a tool wrote in it '
+    "beside the files pub serves and the resolve's, and is handed out with "
+    "nothing run but its SDK's version read.",
+    (Draw draw) async {
+      final _Open open = draw(_open, label: 'open');
+      final List<_ToolWrite> writes = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              draw(.element(_ToolPlace.values)),
+              draw(.integer(min: 0, max: 9)),
+              draw(.string(alphabet: .lettersAndDigits)),
+            ),
+          ),
+          minLength: 1,
+        ),
+        label: 'writes',
+      );
+      for (final _Shape shape in _shapesOf(open)) {
+        await _onBench((_Bench bench) async {
+          bench.server.serve('a', '1.0.0', _served(shape));
+          final HostedCodebase codebase = hostedOf(
+            'a',
+            resolution: shape.resolution,
+          );
+          final Checkout first = await bench.lockedCheckout(codebase);
+          final Map<String, String> wrote = {
+            for (final (_ToolPlace place, int at, String contents) in writes)
+              if (place != .example || shape.example) place.file(at): contents,
+          };
+          for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
+            await writeFile(fileIn(bench.checkout, key), value);
+          }
+          bench.runner.commands.clear();
+          final Checkout second = await bench.fresh.checkout(
+            Hosted(codebase),
+            bench.locks,
+          );
+          expect(bench.runner.given, ['dart --version'], reason: '$shape');
+          expect(second, first, reason: '$shape');
+          for (final MapEntry<String, String>(:key, :value) in wrote.entries) {
+            expect(
+              await File(fileIn(bench.checkout, key)).readAsString(),
+              value,
+              reason: '$shape: $key',
+            );
+          }
+        });
+      }
+    },
+    settings: .new(runs: 2, shrinkSteps: gitShrinks),
+  );
 
   property(
     'STO-5: A hosted checkout is unpacked afresh, and then stands, where '

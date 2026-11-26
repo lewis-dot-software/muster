@@ -45,7 +45,7 @@ Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.da
 
 ### LOA-4: `Fetched` names its resolve's files
 
-The lock and the package config a `Fetched` names, a hosted package's example's among them, are the ones its codebase's resolve wrote, whatever its resolution.
+The lock and the package config a `Fetched` names, the example's among them, are the ones its codebase's resolve wrote, git or hosted, whatever its resolution.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
@@ -61,7 +61,7 @@ Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.da
 
 ### LOA-6: A refused load leaves no trace
 
-A load refused by its manifests or for want of a cache refuses for that fault, starting no process and writing no file.
+A load refused by its manifests or for want of a cache, a claim or a working directory refuses for that fault, starting no process and writing no file.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
@@ -85,7 +85,7 @@ Test: [test/surface_test.dart](../test/surface_test.dart)
 
 ### LOA-10: A refusal reads as one line
 
-The text a load refuses with is one line holding no control character but a tab, whatever its manifest holds and whatever its path.
+Every `LoadRefusal` reads as one line holding no control character but a tab, whatever its paths and reasons hold, and so does the refusal of a load of any manifest at any path.
 
 Test: [test/load/refusal_properties_test.dart](../test/load/refusal_properties_test.dart)
 
@@ -103,9 +103,33 @@ Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_t
 
 ### LOA-13: `NoCache` names its system's variables
 
-The `NoCache` text names exactly the variables its system weighs.
+The `NoCache` text names exactly the variables its system weighs, each of which alone names a cache there, and no other variable does.
 
 Test: [test/load/refusal_properties_test.dart](../test/load/refusal_properties_test.dart)
+
+### LOA-14: A scratch is made whatever the load gave
+
+A scratch is made at its pin, holding the pin's files, whatever its codebase's load gave and whether its clone was deleted since.
+
+Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
+
+### LOA-15: A move off every ref is `PinMissing`
+
+A move to a commit on none of its URL's branches or tags gives `MoveFailed` for `PinMissing`, naming that commit, the scratch left at the commit it was at and no checkout touched.
+
+Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
+
+### LOA-16: A scratch waits on a load's clone claim
+
+A scratch's make, move and disposal each wait on a load's claim on its clone, in an isolate or a process of its own, running no command until the load lets it go.
+
+Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
+
+### LOA-17: A failed scratch that cannot be removed stays
+
+A `ScratchFailed` whose directory cannot be removed leaves that directory in the temporary directory, carrying the failure of the act that failed and throwing nothing.
+
+Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
 
 ## Manifest
 
@@ -240,11 +264,41 @@ A directive the YAML reader warns of, opening a manifest, leaves its parse as it
 
 Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
 
+### MAN-21: A bare manifest parses as its quoted twin
+
+A manifest written with its keys and values bare parses as its quoted twin, a hash of digits alone and a name or a root YAML reads as a null, a bool or a number among them.
+
+Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
+
+### MAN-22: A refusal writes back what the manifest wrote
+
+A refused value's `written` is what the manifest wrote in its place, a plain value as its text with its quotes, a list, a mapping or nothing.
+
+Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
+
+### MAN-23: The first fault the parse weighs refuses
+
+Of several faults in a manifest, the one refused is the first the parse weighs: an unknown key at the top, then each codebase in the text's order, by its name, then the first key in the text's order it does not know, then its want of a kind, then its kind's keys in the order `git`, `commit`, `root` and `toolchain`, or `hosted`, `version`, `resolution` and `toolchain`.
+
+Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
+
+### MAN-24: A name met twice names both manifests
+
+A name met in two of a load's manifests refuses the load, naming it, the manifest it is first met in and the one it is met in again, whether each manifest is named, at the root or listed, and where one manifest is given twice.
+
+Test: [test/load/named_twice_properties_test.dart](../test/load/named_twice_properties_test.dart)
+
+### MAN-25: A git checkout holds its chosen lock
+
+A git checkout holds the lock chosen for each package it resolves as its `pubspec.lock`, its commit's before its kept lock, its `root` and its `example/` alike.
+
+Test: [test/store/placed_lock_properties_test.dart](../test/store/placed_lock_properties_test.dart)
+
 ## Store
 
 ### STO-1: Two loads never act on one clone or checkout together
 
-Two loads at once, as isolates of one process or as separate processes, never act on one clone or checkout together: the second waits, uses the first's clone with no clone or fetch of its own, and hands out the first's checkout untouched where they share one.
+Two loads at once, as isolates of one process or as separate processes, never act on one clone or checkout together, git or hosted: the second waits, uses the first's clone with no clone or fetch of its own, and hands out the first's checkout untouched where they share one.
 
 Test: [test/load/concurrency_properties_test.dart](../test/load/concurrency_properties_test.dart)
 
@@ -365,9 +419,9 @@ A stamp written and then read gives back the values it was written from.
 
 Test: [test/model/stamp_properties_test.dart](../test/model/stamp_properties_test.dart)
 
-### STO-19: `MUSTER_CACHE` wins on either system
+### STO-19: The cache follows its chain on either system
 
-`MUSTER_CACHE` is the cache on either system, whatever else is set.
+The cache is `MUSTER_CACHE` on either system where it is set, else on Windows `muster` under `LOCALAPPDATA`, and elsewhere `muster` under `XDG_CACHE_HOME` where that is an absolute path, else `.cache/muster` under `HOME`, and none where none of those stands, a variable set empty counting as unset and nothing else set moving it.
 
 Test: [test/model/cache_directory_test.dart](../test/model/cache_directory_test.dart)
 
@@ -417,3 +471,27 @@ Test: [test/model/clone_path_test.dart](../test/model/clone_path_test.dart)
 `macos` names Darwin's kernel, `linux` names Linux's, and no other system names one.
 
 Test: [test/store/locker_test.dart](../test/store/locker_test.dart)
+
+### STO-27: Loads over several codebases never wait on each other
+
+Two loads at once over several codebases, git and hosted, sharing a root or a clone alone, each in an order of its own, never wait on each other, and each gives every codebase `Fetched`.
+
+Test: [test/load/concurrency_properties_test.dart](../test/load/concurrency_properties_test.dart)
+
+### STO-28: A standing hosted checkout keeps what a tool wrote
+
+A standing hosted checkout keeps every file a tool wrote in it beside the files pub serves and the resolve's, and is handed out with nothing run but its SDK's version read.
+
+Test: [test/store/hosted_properties_test.dart](../test/store/hosted_properties_test.dart)
+
+### STO-29: A failed make leaves no stamp
+
+A make cut short or failed, git or hosted, leaves no stamp once it has touched the checkout, even one an earlier make wrote, and the stamp as it stood before then, so the next load makes the checkout again.
+
+Test: [test/load/concurrency_properties_test.dart](../test/load/concurrency_properties_test.dart)
+
+### STO-30: Any stamp bytes never fail a checkout
+
+Any bytes in a stamp file read as a stamp or as none, and never fail a checkout, which then stands.
+
+Test: [test/store/checkout_properties_test.dart](../test/store/checkout_properties_test.dart)

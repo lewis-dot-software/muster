@@ -31,6 +31,8 @@ codebases:
 | `resolution` | Hosted | `alone` or `as-dependency`, `alone` where it is left out |
 | `toolchain` | Both | `dart` or `flutter`, the one that resolves it, never left out |
 
+Every value is read as the text it is written as, quoted or not, so a commit of digits alone or a codebase named `null` reads as written, and a value left empty is none.
+
 A git URL is any URL git clones, an SSH one among them, that does not open on `-` and holds no control character but a tab, nor Unicode's line or paragraph separator. It is cloned as written, so two spellings of one repo are two clones. A commit is its full hash, 40 or 64 lowercase hexadecimal digits, never a branch or a tag, since those move. A `root` is a relative path that stays inside its repo, holds no `\`, and holds none of the characters a URL may not.
 
 A hosted package resolved `alone` takes its dev dependencies among its packages, as its own `pub get` would. One resolved `as-dependency` is the dependency of a package muster writes around it, its dev dependencies left out, for a package whose dev dependencies do not resolve.

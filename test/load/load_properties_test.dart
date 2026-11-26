@@ -4,10 +4,12 @@ import 'package:grit/grit.dart';
 import 'package:muster/muster.dart';
 import 'package:muster/src/load/loader.dart';
 import 'package:muster/src/load/locking.dart';
+import 'package:muster/src/load/process_loads.dart';
 import 'package:muster/src/model/around_pubspec.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/content_hash.dart';
+import 'package:muster/src/model/environment.dart';
 import 'package:muster/src/model/git_codebase.dart';
 import 'package:muster/src/model/kept_lock_path.dart';
 import 'package:muster/src/model/package.dart';
@@ -169,6 +171,8 @@ enum _Refusal {
   none,
   namedTwice,
   noCache,
+  noClaim,
+  noWorkingDirectory,
 }
 
 /// A codebase a load names, drawn: its [kind], the [toolchain] it resolves
@@ -620,9 +624,9 @@ void main() {
   );
 
   property(
-    'LOA-4: The lock and the package config a `Fetched` names, a hosted '
-    "package's example's among them, are the ones its codebase's resolve "
-    'wrote, whatever its resolution.',
+    'LOA-4: The lock and the package config a `Fetched` names, the '
+    "example's among them, are the ones its codebase's resolve wrote, git "
+    'or hosted, whatever its resolution.',
     (Draw draw) => inTemp((Directory temp) async {
       final bool example = draw(.boolean(), label: 'example');
       final _Bench bench = await .make(temp);
@@ -638,10 +642,11 @@ void main() {
           for (final _Handout handout in _Handout.values)
             switch (handout) {
               .git => entryOf(
-                await bench.codebase(
-                  'c${handout.index}',
-                  packageFiles('c${handout.index}'),
-                ),
+                await bench.codebase('c${handout.index}', {
+                  ...packageFiles('c${handout.index}'),
+                  if (example)
+                    'example/pubspec.yaml': examplePubspec('c${handout.index}'),
+                }),
               ),
               .alone => hostedEntryOf(hostedOf('h', name: 'c${handout.index}')),
               .asDependency => hostedEntryOf(
@@ -685,12 +690,20 @@ void main() {
             if (fetched.example case ExampleResolved(
               :final PackagePath package,
             ))
-              (.example, package, {'h_example', 'h'}),
+              (
+                .example,
+                package,
+                switch (handout) {
+                  .git => {'${name.name}_example', name.name},
+                  .alone || .asDependency => {'h_example', 'h'},
+                },
+              ),
           ];
-          expect(fetched.example, switch (handout) {
-            .alone || .asDependency when example => isA<ExampleResolved>(),
-            .git || .alone || .asDependency => isA<NoExample>(),
-          }, reason: handout.name);
+          expect(
+            fetched.example,
+            example ? isA<ExampleResolved>() : isA<NoExample>(),
+            reason: handout.name,
+          );
           for (final (Package package, PackagePath path, Set<String> names)
               in resolved) {
             final String reason = '${handout.name} ${package.name}';
@@ -714,10 +727,9 @@ void main() {
     settings: .new(runs: 3, shrinkSteps: gitShrinks),
   );
 
-  property('LOA-6: A load refused by its manifests or for want of a cache '
-      'refuses for that fault, starting no process and writing no file.', (
-    Draw draw,
-  ) async {
+  property('LOA-6: A load refused by its manifests or for want of a cache, '
+      'a claim or a working directory refuses for that fault, starting no '
+      'process and writing no file.', (Draw draw) async {
     final _Refusal refusal = draw(.element(_Refusal.values), label: 'refusal');
     final int before = draw(.integer(min: 0, max: 2), label: 'before');
     await inTemp((Directory temp) async {
@@ -735,7 +747,9 @@ void main() {
                 .notYaml ||
                 .unknownKey ||
                 .namedTwice ||
-                .noCache => before,
+                .noCache ||
+                .noClaim ||
+                .noWorkingDirectory => before,
               };
           i++
         )
@@ -770,30 +784,56 @@ void main() {
           );
           await bench.manifest('first', [twice], .variable);
           await bench.manifest('second', [twice], .variable);
-        case .noCache:
+        case .noCache || .noClaim || .noWorkingDirectory:
           await bench.manifest('cached', [
             await bench.codebase('cached', packageFiles('cached')),
           ], .variable);
       }
-      final Loader loader = switch (refusal) {
-        .noCache => loaderIn(
-          temp,
-          bench.runner,
-          variables: bench.variables,
-          cached: false,
-        ),
-        .notManifestName ||
-        .missing ||
-        .unreadable ||
-        .notYaml ||
-        .unknownKey ||
-        .none ||
-        .namedTwice => bench.loader(),
-      };
+      final Environment environment = (
+        variables: {
+          for (final MapEntry(:key, :value) in loadEnvironment(
+            temp,
+            bench.variables,
+          ).variables.entries)
+            if (refusal != .noCache || !cacheVariables.contains(key))
+              key: value,
+        },
+        os: .posix,
+      );
+      final ProcessLoads loads = .new(
+        environment: () => environment,
+        system: () => switch (refusal) {
+          .noClaim => 'freebsd',
+          .notManifestName ||
+          .missing ||
+          .unreadable ||
+          .notYaml ||
+          .unknownKey ||
+          .none ||
+          .namedTwice ||
+          .noCache ||
+          .noWorkingDirectory => Platform.operatingSystem,
+        },
+        directory: (Os os) async => switch (refusal) {
+          .noWorkingDirectory => throw const StoreFault(
+            StoreFailed('.', 'No such file or directory'),
+          ),
+          .notManifestName ||
+          .missing ||
+          .unreadable ||
+          .notYaml ||
+          .unknownKey ||
+          .none ||
+          .namedTwice ||
+          .noCache ||
+          .noClaim => .new(consumerIn(temp).path, os),
+        },
+        runner: (Environment _) => bench.runner,
+      );
       final Map<String, String> tree = await treeUnder(temp.path);
       bench.runner.commands.clear();
       expect(
-        await loader.load(),
+        await loads.load(),
         refusedFor(switch (refusal) {
           .notManifestName => isA<NotManifestName>(),
           .missing => isA<ManifestMissing>(),
@@ -811,12 +851,14 @@ void main() {
           .none => isA<NoManifest>(),
           .namedTwice => isA<CodebaseNamedTwice>(),
           .noCache => isA<NoCache>(),
+          .noClaim => isA<NoClaim>(),
+          .noWorkingDirectory => isA<NoWorkingDirectory>(),
         }),
       );
       expect(bench.runner.given, isEmpty);
       expect(await treeUnder(temp.path), tree);
     });
-  }, settings: .new(runs: 24, shrinkSteps: gitShrinks));
+  }, settings: .new(runs: 30, shrinkSteps: gitShrinks));
 
   property(
     'LOA-3: A load of git codebases right after another load hands out the '

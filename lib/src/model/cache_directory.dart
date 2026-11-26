@@ -1,3 +1,4 @@
+import 'cache_variable.dart';
 import 'environment.dart';
 import 'os.dart';
 
@@ -9,30 +10,36 @@ extension type const CacheDirectory._(({String path, Os os}) _directory) {
   /// `.cache/muster` under `HOME`, and on Windows `muster` under
   /// `LOCALAPPDATA` in place of either. A variable set empty counts as unset.
   ///
-  /// Null where none of the variables it would take is set.
+  /// Null where none of the variables it would take is set. No variable but
+  /// a [CacheVariable] its system weighs is read.
   static CacheDirectory? of(Environment environment) {
-    final Map<String, String> variables = environment.variables;
     final Os os = environment.os;
-    String? set(String name) => switch (variables[name]) {
-      null || '' => null,
-      final String value => value,
-    };
+    String? set(CacheVariable name) {
+      if (!name.weighedOn(os)) {
+        throw StateError('${name.variable} is not weighed on ${os.name}');
+      }
+      return switch (environment.variables[name.variable]) {
+        null || '' => null,
+        final String value => value,
+      };
+    }
+
     CacheDirectory at(String path) => ._((path: path, os: os));
-    if (set('MUSTER_CACHE') case final String cache) {
+    if (set(.musterCache) case final String cache) {
       return at(cache);
     }
     switch (os) {
       case .windows:
-        return switch (set('LOCALAPPDATA')) {
+        return switch (set(.localAppData)) {
           final String local => at(os.paths.join(local, 'muster')),
           null => null,
         };
       case .posix:
-        if (set('XDG_CACHE_HOME') case final String xdg
+        if (set(.xdgCacheHome) case final String xdg
             when os.paths.isAbsolute(xdg)) {
           return at(os.paths.join(xdg, 'muster'));
         }
-        return switch (set('HOME')) {
+        return switch (set(.home)) {
           final String home => at(os.paths.join(home, '.cache', 'muster')),
           null => null,
         };

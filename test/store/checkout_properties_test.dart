@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:grit/grit.dart';
+import 'package:muster/src/model/checkout.dart';
 import 'package:muster/src/model/checkout_path.dart';
 import 'package:muster/src/model/codebase.dart';
 import 'package:muster/src/model/commit.dart';
@@ -285,4 +287,79 @@ void main() {
     },
     settings: .new(runs: 15, shrinkSteps: gitShrinks),
   );
+
+  property(
+    'STO-30: Any bytes in a stamp file read as a stamp or as none, and never '
+    'fail a checkout, which then stands.',
+    (Draw draw) async {
+      await inTemp((Directory temp) async {
+        final _Bench bench = await .make(temp);
+        final Commit pin = await bench.origin.commit(null, _pinFiles({0}, 0));
+        await bench.origin.ref('refs/heads/main', pin);
+        final GitCodebase codebase = codebaseOf(bench.origin, pin);
+        final Checkout made = await bench.checkouts.checkout(
+          Git(codebase),
+          bench.locks,
+        );
+        final File stamp = .new(bench.checkout.stamp.path);
+        final List<int> bytes = draw(
+          _stampBytes(await stamp.readAsString()),
+          label: 'bytes',
+        );
+        await stamp.writeAsBytes(bytes);
+        expect(
+          await checkoutsIn(
+            temp,
+            bench.runner,
+          ).checkout(Git(codebase), bench.locks),
+          made,
+        );
+        bench.runner.commands.clear();
+        await checkoutsIn(
+          temp,
+          bench.runner,
+        ).checkout(Git(codebase), bench.locks);
+        expect(bench.runner.given, hasLength(2));
+        expect(bench.runner.given.last, contains(' status '));
+      });
+    },
+    settings: .new(runs: 25, shrinkSteps: gitShrinks),
+  );
 }
+
+/// The bytes a stamp file may hold in place of [stamp], the text a make
+/// wrote: any bytes at all, UTF-8 that is none among them, [stamp] cut short,
+/// one of its characters replaced, or one of its values swapped for another
+/// JSON value.
+Gen<List<int>> _stampBytes(String stamp) => .oneOf([
+  .list(.integer(min: 0, max: 255)),
+  .build(
+    (Draw draw) => utf8.encode(
+      stamp.substring(0, draw(.integer(min: 0, max: stamp.length))),
+    ),
+  ),
+  .build((Draw draw) {
+    final int at = draw(.integer(min: 0, max: stamp.length - 1));
+    final String by = draw(
+      .element(['{', '}', '[', '"', ',', ':', '0', 'a', '\u0000', 'é']),
+    );
+    return utf8.encode(stamp.replaceRange(at, at + 1, by));
+  }),
+  .build((Draw draw) {
+    final Map<String, Object?> json = jsonDecode(stamp) as Map<String, Object?>;
+    final String key = draw(.element(json.keys.toList()));
+    final Object? value = draw(
+      .element(<Object?>[
+        null,
+        1,
+        -1.5,
+        'x',
+        '',
+        true,
+        <Object?>[],
+        <String, Object?>{},
+      ]),
+    );
+    return utf8.encode(jsonEncode(json..[key] = value));
+  }),
+]);

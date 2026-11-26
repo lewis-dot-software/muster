@@ -9,7 +9,7 @@ void main() {
   test('a load on a POSIX system muster takes no claim on refuses, naming '
       'the system, before the manifests are sought', () async {
     expect(
-      await ProcessLoads(() => 'freebsd')
+      await ProcessLoads(system: () => 'freebsd')
           .load(named: ['/muster-no-such-directory/muster.yaml']),
       refusedFor(
         isA<NoClaim>().having((NoClaim n) => n.system, 'system', 'freebsd'),
@@ -20,7 +20,7 @@ void main() {
   test('a lock run on a POSIX system muster takes no claim on refuses, '
       'naming the system, before the manifests are sought', () async {
     expect(
-      await ProcessLoads(() => 'freebsd')
+      await ProcessLoads(system: () => 'freebsd')
           .lock(named: ['/muster-no-such-directory/muster.yaml']),
       isA<LockRefused>().having(
         (LockRefused r) => r.reason,

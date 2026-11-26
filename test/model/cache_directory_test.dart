@@ -70,29 +70,52 @@ void main() {
   });
 
   property(
-    'STO-19: `MUSTER_CACHE` is the cache on either system, whatever else is '
-    'set.',
+    'STO-19: The cache is `MUSTER_CACHE` on either system where it is set, '
+    'else on Windows `muster` under `LOCALAPPDATA`, and elsewhere `muster` '
+    'under `XDG_CACHE_HOME` where that is an absolute path, else '
+    '`.cache/muster` under `HOME`, and none where none of those stands, a '
+    'variable set empty counting as unset and nothing else set moving it.',
     (Draw draw) {
-      final String cache = draw(
-        .string(alphabet: .of(r'aZ09/\ .:-_'), minLength: 1),
-        label: 'cache',
-      );
-      final Map<String, String> others = {
+      final Os os = draw(.element(Os.values), label: 'os');
+      final Map<String, String> variables = {
         for (final String name in [
+          'MUSTER_CACHE',
           'XDG_CACHE_HOME',
           'HOME',
           'LOCALAPPDATA',
           'PATH',
+          'USERPROFILE',
         ])
           if (draw(
-                .element(<String?>[null, '', 'x', '/x', r'C:\x']),
+                .oneOf([
+                  .element(<String?>[null, '', 'x', '/x', r'C:\x']),
+                  .string(alphabet: .of(r'aZ09/\ .:-_'), minLength: 1),
+                ]),
                 label: name,
               )
               case final String value)
             name: value,
       };
-      final Os os = draw(.element(Os.values), label: 'os');
-      expect(_cache({...others, 'MUSTER_CACHE': cache}, os: os), cache);
+      String? set(String name) => switch (variables[name]) {
+        null || '' => null,
+        final String value => value,
+      };
+      final String? expected = switch ((os, set('MUSTER_CACHE'))) {
+        (_, final String cache) => cache,
+        (.windows, null) => switch (set('LOCALAPPDATA')) {
+          final String local => os.paths.join(local, 'muster'),
+          null => null,
+        },
+        (.posix, null) => switch ((set('XDG_CACHE_HOME'), set('HOME'))) {
+          (final String xdg, _) when xdg.startsWith('/') => os.paths.join(
+            xdg,
+            'muster',
+          ),
+          (_, final String home) => os.paths.join(home, '.cache', 'muster'),
+          (_, null) => null,
+        },
+      };
+      expect(_cache(variables, os: os), expected);
     },
   );
 }

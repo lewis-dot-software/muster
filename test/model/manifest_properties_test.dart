@@ -8,11 +8,14 @@ import 'package:muster/src/model/manifest_merge.dart';
 import 'package:muster/src/model/manifest_parse.dart';
 import 'package:muster/src/model/merge_manifests.dart';
 import 'package:muster/src/model/parse_manifest.dart';
+import 'package:muster/src/model/quoted.dart';
 import 'package:muster/src/model/repo_root.dart';
 import 'package:muster/src/model/resolution.dart';
 import 'package:muster/src/model/toolchain.dart';
+import 'package:muster/src/model/breaks_line.dart';
 import 'package:muster/src/model/manifest_refusal.dart';
 import 'package:muster/src/model/wanted.dart';
+import 'package:muster/src/model/written.dart';
 import 'package:test/test.dart';
 
 import '../support/lines_printed.dart';
@@ -310,6 +313,129 @@ String? _respelt(RepoRoot root, _Spelling spelling) => switch (spelling) {
   .detour => 'tool/../${root.path}',
 };
 
+/// A key of a codebase's whose value the parse weighs, each kind's in the
+/// order it weighs them.
+enum _Weighed {
+  git,
+  commit,
+  root,
+  gitToolchain,
+  hosted,
+  version,
+  resolution,
+  hostedToolchain;
+
+  /// The keys a codebase of [codebase]'s kind weighs, in the order it
+  /// weighs them.
+  static List<_Weighed> of(Codebase codebase) => switch (codebase) {
+    Git() => [.git, .commit, .root, .gitToolchain],
+    Hosted() => [.hosted, .version, .resolution, .hostedToolchain],
+  };
+
+  /// The key as the manifest writes it.
+  String get key => switch (this) {
+    .gitToolchain || .hostedToolchain => 'toolchain',
+    .git || .commit || .root || .hosted || .version || .resolution => name,
+  };
+
+  /// What the key wants of its value.
+  Wanted get wanted => switch (this) {
+    .git => .gitUrl,
+    .commit => .fullHash,
+    .root => .rootInsideRepo,
+    .gitToolchain || .hostedToolchain => .toolchain,
+    .hosted => .packageName,
+    .version => .version,
+    .resolution => .resolution,
+  };
+
+  /// Whether a codebase of its kind refuses where the key is left out.
+  bool get required => switch (this) {
+    .root || .resolution => false,
+    .git ||
+    .commit ||
+    .gitToolchain ||
+    .hosted ||
+    .version ||
+    .hostedToolchain => true,
+  };
+
+  /// Text the key cannot take.
+  Gen<String> get bad => switch (this) {
+    .git => _badUrl,
+    .commit => _badCommit,
+    .root => _badRoot,
+    .gitToolchain || .hostedToolchain => _badToolchain,
+    .hosted => _badPackage,
+    .version => _badVersion,
+    .resolution => _badResolution,
+  };
+}
+
+/// How a manifest writes a value where a mapping or a plain value is wanted.
+enum _Form {
+  bare,
+  singleQuoted,
+  doubleQuoted,
+  flowList,
+  blockList,
+  flowMapping,
+  blockMapping,
+  nothing;
+
+  /// Whether the form writes a mapping.
+  bool get mapping => switch (this) {
+    .flowMapping || .blockMapping => true,
+    .bare ||
+    .singleQuoted ||
+    .doubleQuoted ||
+    .flowList ||
+    .blockList ||
+    .nothing => false,
+  };
+}
+
+/// A value as a manifest writes it `after` its key's `:`, and a matcher of
+/// the [Written] a refusal of it must carry.
+typedef _Value = ({String after, Matcher written});
+
+/// [text] written in [form] after a key's `:`, a block's lines indented
+/// [indent] spaces, a bare or single-quoted [text] that would not read back
+/// as written double-quoted instead.
+_Value _valueOf(_Form form, String text, int indent) {
+  final String pad = ' ' * indent;
+  _Value plain(String written) => (
+    after: ' $written',
+    written: isA<WrittenText>().having((w) => w.text, 'text', written),
+  );
+  return switch (form) {
+    .bare when readsBare(text) => plain(text),
+    .singleQuoted when !breaksLine(text) => plain(
+      "'${text.replaceAll("'", "''")}'",
+    ),
+    .bare || .singleQuoted || .doubleQuoted => plain(quoted(text)),
+    .flowList => (after: ' [a, 1]', written: isA<WrittenList>()),
+    .blockList => (after: '\n$pad- a\n$pad- 1', written: isA<WrittenList>()),
+    .flowMapping => (after: ' {a: b}', written: isA<WrittenMapping>()),
+    .blockMapping => (after: '\n${pad}a: b', written: isA<WrittenMapping>()),
+    .nothing => (after: ' # none', written: isA<WrittenNothing>()),
+  };
+}
+
+/// Where a value refuses: the whole manifest, its `codebases`, a codebase's
+/// own value, a codebase's name, or one of its weighed keys.
+enum _At { top, codebases, codebase, name, field }
+
+/// What stands in a manifest's text until a test writes a value there.
+const String _here = 'written_here';
+
+/// A fault the parse can meet in a codebase.
+enum _Fault { name, unknown, missing, bad }
+
+/// One fault drawn: the `fault`, and the index `at` of the codebase it is
+/// in.
+typedef _Drawn = (_Fault fault, int at);
+
 /// The codebases [text] parses to, which must stand.
 List<Codebase> _parsed(String text) => switch (parseManifest(text)) {
   ManifestParsed(:final Manifest manifest) => manifest.codebases,
@@ -336,6 +462,7 @@ _Placed _with(Draw draw, List<Codebase> codebases, Codebase codebase) {
 void main() {
   property("MAN-12: A key muster does not know, at the top or in a codebase, "
       "refuses the load, naming that key's path from the top.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<Codebase> codebases = draw(anyCodebases(), label: 'codebases');
     final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final int target = draw(
@@ -345,7 +472,9 @@ void main() {
     if (target == entries.length) {
       final String key = _unknownAmong(draw(_anyKey, label: 'drawn'), _topKeys);
       expect(
-        parseManifest(renderManifest(entries, top: [(key, 'x')])),
+        parseManifest(
+          renderManifest(entries, top: [(key, 'x')], writing: writing),
+        ),
         unknownKey([key]),
       );
       return;
@@ -358,13 +487,14 @@ void main() {
     );
     entries[target] = (name, [...fields]..insert(at, (key, 'x')));
     expect(
-      parseManifest(renderManifest(entries)),
+      parseManifest(renderManifest(entries, writing: writing)),
       unknownKey(['codebases', name, key]),
     );
   });
 
   property("MAN-17: A git URL or a `root` holding a character that breaks a "
       "line refuses the load, naming its key's path.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<GitCodebase> codebases = draw(
       someGitCodebases,
       label: 'codebases',
@@ -391,7 +521,7 @@ void main() {
       ],
     );
     expect(
-      parseManifest(renderManifest(entries)),
+      parseManifest(renderManifest(entries, writing: writing)),
       badValue(['codebases', codebase.name.name, key.name], key.wanted),
     );
   });
@@ -401,6 +531,7 @@ void main() {
       "not a full hash, a toolchain that is not `dart` or `flutter`, a `root` "
       r"that leaves its repo or holds a `\`, or a codebase name that is not "
       "`[a-z][a-z0-9_]*`.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<GitCodebase> codebases = draw(
       someGitCodebases,
       label: 'codebases',
@@ -425,7 +556,7 @@ void main() {
       case .name:
         entries[target] = (text, fields);
         expect(
-          parseManifest(renderManifest(entries)),
+          parseManifest(renderManifest(entries, writing: writing)),
           badValue(['codebases', text], .codebaseName),
         );
         return;
@@ -447,7 +578,7 @@ void main() {
       ],
     );
     expect(
-      parseManifest(renderManifest(entries)),
+      parseManifest(renderManifest(entries, writing: writing)),
       badValue(['codebases', name, key], wanted),
     );
   });
@@ -455,6 +586,7 @@ void main() {
   property("MAN-9: A hosted codebase's `hosted` is a pub package name and its "
       "`version` a version pub reads, and any other text refuses the load, "
       "naming its key's path.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<Codebase> others = draw(anyCodebases(), label: 'others');
     final HostedCodebase codebase = draw(
       anyHostedCodebase(),
@@ -486,7 +618,7 @@ void main() {
                   : field,
           ],
         );
-        expect(_parsed(renderManifest(entries)), codebases);
+        expect(_parsed(renderManifest(entries, writing: writing)), codebases);
       case final _HostedBad which:
         final String text = draw(switch (which) {
           .package => _badPackage,
@@ -504,7 +636,7 @@ void main() {
           ],
         );
         expect(
-          parseManifest(renderManifest(entries)),
+          parseManifest(renderManifest(entries, writing: writing)),
           badValue(['codebases', name, key], wanted),
         );
     }
@@ -514,6 +646,7 @@ void main() {
       "but `alone` or `as-dependency` refuses, naming its key's path.", (
     Draw draw,
   ) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<Codebase> others = draw(anyCodebases(), label: 'others');
     final HostedCodebase codebase = draw(
       anyHostedCodebase(),
@@ -541,7 +674,7 @@ void main() {
       case null:
         entries[target] = (name, rest);
         expect(
-          _parsed(renderManifest(entries))[target],
+          _parsed(renderManifest(entries, writing: writing))[target],
           Hosted((
             name: codebase.name,
             package: codebase.package,
@@ -553,7 +686,7 @@ void main() {
       case final String text:
         entries[target] = (name, [...rest, ('resolution', text)]);
         expect(
-          parseManifest(renderManifest(entries)),
+          parseManifest(renderManifest(entries, writing: writing)),
           badValue(['codebases', name, 'resolution'], .resolution),
         );
     }
@@ -564,6 +697,7 @@ void main() {
       "the first key of the kind its first kind's key does not name.", (
     Draw draw,
   ) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
     final List<Entry> entries = codebases.map(anyEntryOf).toList();
     final int target = draw(
@@ -584,7 +718,7 @@ void main() {
           ],
         );
         expect(
-          parseManifest(renderManifest(entries)),
+          parseManifest(renderManifest(entries, writing: writing)),
           refused(
             isA<MissingKind>().having(
               (MissingKind r) => r.path,
@@ -625,7 +759,7 @@ void main() {
             .$1;
         entries[target] = (name, mixed);
         expect(
-          parseManifest(renderManifest(entries)),
+          parseManifest(renderManifest(entries, writing: writing)),
           unknownKey(['codebases', name, refusedKey]),
         );
     }
@@ -634,6 +768,7 @@ void main() {
   property("MAN-10: A git codebase missing `git`, `commit` or `toolchain`, or "
       "a hosted one missing `hosted`, `version` or `toolchain`, refuses the "
       "load, naming that key's path.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<Codebase> drawn = draw(someCodebases, label: 'drawn');
     final int at = draw(.integer(min: 0, max: drawn.length - 1), label: 'at');
     final _Gap gap = draw(.element(_Gap.values), label: 'gap');
@@ -669,7 +804,7 @@ void main() {
       ],
     );
     expect(
-      parseManifest(renderManifest(entries)),
+      parseManifest(renderManifest(entries, writing: writing)),
       missingKey(['codebases', name, key]),
     );
   });
@@ -677,13 +812,21 @@ void main() {
   property("MAN-7: A parse gives the codebases back in the manifests' order, "
       "each under its own name, and the first name met twice across them "
       "refuses, naming it and the manifests it is met in.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final List<List<Codebase>> manifests = draw(
       .list(anyCodebases(names: .element(['a', 'b', 'c', 'd', 'e', 'f']))),
       label: 'manifests',
     );
     final ManifestMerge merge = mergeManifests([
       for (final List<Codebase> codebases in manifests)
-        .new(_parsed(renderManifest(codebases.map(anyEntryOf).toList()))),
+        .new(
+          _parsed(
+            renderManifest(
+              codebases.map(anyEntryOf).toList(),
+              writing: writing,
+            ),
+          ),
+        ),
     ]);
     final Map<String, int> seen = {};
     for (final (int index, List<Codebase> codebases) in manifests.indexed) {
@@ -715,9 +858,13 @@ void main() {
     'MAN-20: A directive the YAML reader warns of, opening a manifest, leaves '
     'its parse as it stands without one, and prints nothing.',
     (Draw draw) {
+      final Writing writing = draw(.element(Writing.values), label: 'writing');
       final List<Codebase> codebases = draw(anyCodebases(), label: 'codebases');
       final String directive = draw(_warnedDirective, label: 'directive');
-      final String text = renderManifest(codebases.map(anyEntryOf).toList());
+      final String text = renderManifest(
+        codebases.map(anyEntryOf).toList(),
+        writing: writing,
+      );
       late final List<Codebase> parsed;
       expect(
         linesPrinted(() => parsed = _parsed('$directive\n---\n$text')),
@@ -725,6 +872,274 @@ void main() {
       );
       expect(parsed, codebases);
     },
+  );
+
+  property(
+    'MAN-21: A manifest written with its keys and values bare parses as its '
+    'quoted twin, a hash of digits alone and a name or a root YAML reads as a '
+    'null, a bool or a number among them.',
+    (Draw draw) {
+      final List<Codebase> codebases = draw(anyCodebases(), label: 'codebases');
+      final List<Entry> entries = codebases.map(anyEntryOf).toList();
+      expect(_parsed(renderManifest(entries, writing: .plain)), codebases);
+    },
+    settings: .new(runs: 500),
+  );
+
+  property(
+    "MAN-22: A refused value's `written` is what the manifest wrote in its "
+    'place, a plain value as its text with its quotes, a list, a mapping or '
+    'nothing.',
+    (Draw draw) {
+      final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
+      final List<Entry> entries = codebases.map(anyEntryOf).toList();
+      final int target = draw(
+        .integer(min: 0, max: entries.length - 1),
+        label: 'target',
+      );
+      final _At at = draw(.element(_At.values), label: 'at');
+      final _Form form = draw(
+        .element([
+          for (final _Form form in _Form.values)
+            if (!form.mapping || at == .field) form,
+        ]),
+        label: 'form',
+      );
+      final (String name, List<Field> fields) = entries[target];
+      final Gen<String> anyText = .oneOf([
+        anyCodebaseName,
+        anyFullHash,
+        anyCanonicalVersion,
+      ]);
+      final String manifest;
+      final List<String> keys;
+      final Wanted wanted;
+      final _Value value;
+      switch (at) {
+        case .top:
+          value = _valueOf(form, draw(anyText, label: 'text'), 0);
+          (manifest, keys, wanted) = (value.after.trimLeft(), [], .mapping);
+        case .codebases:
+          value = _valueOf(form, draw(anyText, label: 'text'), 2);
+          (manifest, keys, wanted) = (
+            'codebases:${value.after}\n',
+            ['codebases'],
+            .mapping,
+          );
+        case .codebase:
+          value = _valueOf(form, draw(anyText, label: 'text'), 4);
+          entries[target] = (name, []);
+          (manifest, keys, wanted) = (
+            renderManifest(entries).replaceFirst(
+              '  ${quoted(name)}: {}\n',
+              '  ${quoted(name)}:${value.after}\n',
+            ),
+            ['codebases', name],
+            .mapping,
+          );
+        case .name:
+          // A key is written as a plain value alone.
+          final String bad = draw(_badName, label: 'bad');
+          value = _valueOf(
+            switch (form) {
+              .bare || .singleQuoted || .doubleQuoted => form,
+              .flowList ||
+              .blockList ||
+              .flowMapping ||
+              .blockMapping ||
+              .nothing => .doubleQuoted,
+            },
+            bad,
+            0,
+          );
+          entries[target] = (_here, fields);
+          (manifest, keys, wanted) = (
+            renderManifest(entries).replaceFirst(
+              '  ${quoted(_here)}:',
+              '  ${value.after.trimLeft()}:',
+            ),
+            ['codebases', bad],
+            .codebaseName,
+          );
+        case .field:
+          final _Weighed weighed = draw(
+            .element(_Weighed.of(codebases[target])),
+            label: 'weighed',
+          );
+          value = _valueOf(form, draw(weighed.bad, label: 'bad'), 6);
+          entries[target] = (
+            name,
+            [
+              for (final Field field in fields)
+                if (field.$1 != weighed.key) field,
+              (weighed.key, _here),
+            ],
+          );
+          (manifest, keys, wanted) = (
+            renderManifest(entries).replaceFirst(
+              '${quoted(weighed.key)}: ${quoted(_here)}',
+              '${quoted(weighed.key)}:${value.after}',
+            ),
+            ['codebases', name, weighed.key],
+            weighed.wanted,
+          );
+      }
+      expect(
+        parseManifest(manifest),
+        refused(
+          isA<BadValue>()
+              .having((r) => r.path, 'path', pathOf(keys))
+              .having((r) => r.wanted, 'wanted', wanted)
+              .having((r) => r.written, 'written', value.written),
+        ),
+      );
+    },
+    settings: .new(runs: 500),
+  );
+
+  property(
+    'MAN-23: Of several faults in a manifest, the one refused is the first '
+    'the parse weighs: an unknown key at the top, then each codebase in the '
+    "text's order, by its name, then the first key in the text's order it "
+    'does not know, then its want of a kind, then its kind\'s keys in the '
+    'order `git`, `commit`, `root` and `toolchain`, or `hosted`, `version`, '
+    '`resolution` and `toolchain`.',
+    (Draw draw) {
+      final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
+      final List<_Drawn> faults = draw(
+        .list(
+          .build(
+            (Draw draw) => (
+              draw(.element(_Fault.values)),
+              draw(.integer(min: 0, max: codebases.length - 1)),
+            ),
+          ),
+          minLength: 2,
+          maxLength: 6,
+        ),
+        label: 'faults',
+      );
+      final String? topKey = draw(
+        .oneOf([
+          _anyKey.map((String key) => _unknownAmong(key, _topKeys)),
+          .element([null]),
+        ]),
+        label: 'top',
+      );
+      final Writing writing = draw(.element(Writing.values), label: 'writing');
+      final List<Entry> entries = [];
+      final List<Matcher?> refusals = [];
+      for (final (int i, Codebase codebase) in codebases.indexed) {
+        final Iterable<_Fault> own = [
+          for (final (_Fault fault, int at) in faults)
+            if (at == i) fault,
+        ];
+        String name = codebase.name.name;
+        List<Field> fields = [...anyEntryOf(codebase).$2];
+        final List<_Weighed> weighed = _Weighed.of(codebase);
+        final Map<_Weighed, _Fault> atKey = {};
+        Matcher? named;
+        for (final _Fault fault in own) {
+          switch (fault) {
+            case .name when named == null:
+              name = draw(_badName, label: 'name');
+              named = badValue(['codebases', name], .codebaseName);
+            case .name:
+              break;
+            case .unknown:
+              final String key = _unknownAmong(
+                draw(_anyKey, label: 'unknown'),
+                _codebaseKeys,
+              );
+              if (fields.every((Field field) => field.$1 != key)) {
+                final int place = draw(
+                  .integer(min: 0, max: fields.length),
+                  label: 'place',
+                );
+                fields.insert(place, (key, 'x'));
+              }
+            case .missing || .bad:
+              final _Weighed key = draw(
+                .element([
+                  for (final _Weighed key in weighed)
+                    if (fault == .bad || key.required) key,
+                ]),
+                label: 'key',
+              );
+              if (atKey.containsKey(key)) {
+                break;
+              }
+              atKey[key] = fault;
+              fields = switch (fault) {
+                .missing => [
+                  for (final Field field in fields)
+                    if (field.$1 != key.key) field,
+                ],
+                .bad || .name || .unknown => [
+                  for (final Field field in fields)
+                    if (field.$1 != key.key) field,
+                  (key.key, draw(key.bad, label: 'bad')),
+                ],
+              };
+          }
+        }
+        final String? unknown = [
+          for (final Field field in fields)
+            if (!_codebaseKeys.contains(field.$1)) field.$1,
+        ].firstOrNull;
+        entries.add((name, fields));
+        final bool anyKind = fields.any(
+          (Field field) => weighed.any(
+            (_Weighed key) => key.key == field.$1 && key.key != 'toolchain',
+          ),
+        );
+        final _Weighed? first = weighed
+            .where((_Weighed key) => atKey.containsKey(key))
+            .firstOrNull;
+        refusals.add(
+          named ??
+              switch (unknown) {
+                final String key => unknownKey(['codebases', name, key]),
+                null when !anyKind => refused(
+                  isA<MissingKind>().having(
+                    (MissingKind r) => r.path,
+                    'path',
+                    pathOf(['codebases', name]),
+                  ),
+                ),
+                null => switch ((first, first == null ? null : atKey[first])) {
+                  (final _Weighed key, .missing) => missingKey([
+                    'codebases',
+                    name,
+                    key.key,
+                  ]),
+                  (final _Weighed key, _) => badValue([
+                    'codebases',
+                    name,
+                    key.key,
+                  ], key.wanted),
+                  (null, _) => null,
+                },
+              },
+        );
+      }
+      // Two codebases a fault renamed alike would be one key twice, which is
+      // no fault of muster's to weigh.
+      if (entries.map((Entry entry) => entry.$1).toSet().length <
+          entries.length) {
+        return;
+      }
+      final String manifest = renderManifest(
+        entries,
+        top: [if (topKey != null) (topKey, 'x')],
+        writing: writing,
+      );
+      expect(parseManifest(manifest), switch (topKey) {
+        final String key => unknownKey([key]),
+        null => refusals.nonNulls.firstOrNull ?? isA<ManifestParsed>(),
+      }, reason: manifest);
+    },
+    settings: .new(runs: 500),
   );
 
   final Gen<GitCodebase> nearby = anyGitCodebase(
@@ -736,6 +1151,7 @@ void main() {
       "agree on URL as written, commit, `root` and toolchain, and neither a "
       "rename, a `root` spelt another way, the keys' order nor the codebases "
       "beside it moves the key.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final GitCodebase a = draw(nearby, label: 'a');
     final GitCodebase b = draw(nearby, label: 'b');
     final List<GitCodebase> others = draw(anyGitCodebases(), label: 'others');
@@ -765,7 +1181,7 @@ void main() {
         for (final GitCodebase other in others)
           if (other.name.name != renamed) entryOf(other),
         (renamed, reversed ? fields.reversed.toList() : fields),
-      ]),
+      ], writing: writing),
     );
     expect(LockKey.of(parsed.last), LockKey.of(Git(a)));
   });
@@ -777,6 +1193,7 @@ void main() {
   property("MAN-5: Two hosted codebases' kept locks share a key exactly when "
       "their package, version, resolution and toolchain are the same, and "
       "never share one with a git codebase.", (Draw draw) {
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
     final HostedCodebase a = draw(nearbyHosted, label: 'a');
     final HostedCodebase b = draw(nearbyHosted, label: 'b');
     final GitCodebase git = draw(anyGitCodebase(), label: 'git');
@@ -804,7 +1221,7 @@ void main() {
     final List<Codebase> parsed = _parsed(
       renderManifest([
         ('renamed', reversed ? respelt.reversed.toList() : respelt),
-      ]),
+      ], writing: writing),
     );
     expect(LockKey.of(parsed.single), LockKey.of(Hosted(a)));
   });
