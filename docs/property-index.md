@@ -7,13 +7,17 @@ aliases: properties, invariants, property tests, property numbers
 
 Every property the code holds, each by its number beside its property test. A section holds each part of the code, named as its `area/` label names it, and a property sits under the part whose code holds it, the ones a reader most needs first. A number is the part's code and the property's place in its section, `LOA-1` and on, so it says at a glance which part holds the property, and none is worn twice.
 
-A property's test wears its number and its words as its title, a property of three or more conditions read as one sentence there, its lead clause then each condition in order.
+A property's test wears its number and its words as its title, a property listed as a lead clause and its bullets read as one sentence there, its lead clause then each bullet in order.
 
 ## CLI
 
 ### CLI-1: Fetch prints a row per codebase
 
-`muster fetch` prints one row for each codebase in the load's order, its name, its outcome and that outcome's own detail, and each failure's note to standard error in its row's order, exiting 0 when every outcome is `Fetched`, 1 when any is not, and 2 with the refusal's line alone when the load is refused.
+`muster fetch`:
+
+- Prints one row for each codebase in the load's order, its name, its outcome and that outcome's own detail.
+- Prints each failure's note to standard error in its row's order.
+- Exits 0 when every outcome is `Fetched`, 1 when any is not, and 2 with the refusal's line alone when the load is refused.
 
 Test: [test/cli/cli_properties_test.dart](../test/cli/cli_properties_test.dart)
 
@@ -27,7 +31,11 @@ Test: [test/cli/cli_properties_test.dart](../test/cli/cli_properties_test.dart)
 
 ### LOA-1: A codebase's failure is its outcome
 
-Every failure a codebase meets, git or hosted, comes back as its own outcome other than `Fetched`, every other codebase still getting its own, and none throws out of `Loader.load`.
+Of every failure a codebase meets, git or hosted:
+
+- It comes back as its own outcome other than `Fetched`.
+- Every other codebase still gets its own.
+- None throws out of `Loader.load`.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
@@ -39,7 +47,11 @@ Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.da
 
 ### LOA-3: A second load changes nothing
 
-A load of git codebases right after another load hands out the same packages, examples and SDK versions, writes no file, and runs nothing but its SDK version reads and its git statuses.
+A load of git codebases right after another load:
+
+- Hands out the same packages, examples and SDK versions.
+- Writes no file.
+- Runs nothing but its SDK version reads and its git statuses.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
@@ -61,19 +73,32 @@ Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.da
 
 ### LOA-6: A refused load leaves no trace
 
-A load refused by its manifests or for want of a cache, a claim or a working directory refuses for that fault, starting no process and writing no file.
+A load refused by its manifests or for want of a cache, a claim or a working directory:
+
+- Refuses for that fault.
+- Starts no process.
+- Writes no file.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
 ### LOA-7: A scratch moves apart from every checkout
 
-A scratch worktree moves to any commit of its URL's, fetching one its clone lacks, without touching any consumer's checkout, and is gone with its clone's record of it once disposed of, a second disposal giving `Disposed` too.
+A scratch worktree:
+
+- Moves to any commit of its URL's, fetching one its clone lacks.
+- Touches no consumer's checkout.
+- Is gone with its clone's record of it once disposed of.
+- Gives `Disposed` on a second disposal too.
 
 Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
 
 ### LOA-8: A failed scratch is an outcome
 
-A scratch that cannot be made comes back as `NotNamed`, starting no process, or as `ScratchFailed` for the act that failed, leaving no directory behind, never as a throw.
+A scratch that cannot be made:
+
+- Comes back as `NotNamed`, starting no process, or as `ScratchFailed` for the act that failed.
+- Leaves no directory behind.
+- Never throws.
 
 Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
 
@@ -91,7 +116,11 @@ Test: [test/load/refusal_properties_test.dart](../test/load/refusal_properties_t
 
 ### LOA-11: Each SDK version is read once
 
-A load reads each toolchain's SDK version once where any codebase, git or hosted, names it and never otherwise, each codebase it resolves carrying that version and each of a failed read failing with it.
+Of each toolchain's SDK version:
+
+- A load reads it once where any codebase, git or hosted, names it, and never otherwise.
+- Each codebase the load resolves carries it.
+- Each codebase of a failed read fails with it.
 
 Test: [test/load/load_properties_test.dart](../test/load/load_properties_test.dart)
 
@@ -115,7 +144,11 @@ Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_t
 
 ### LOA-15: A move off every ref is `PinMissing`
 
-A move to a commit on none of its URL's branches or tags gives `MoveFailed` for `PinMissing`, naming that commit, the scratch left at the commit it was at and no checkout touched.
+A move to a commit on none of its URL's branches or tags:
+
+- Gives `MoveFailed` for `PinMissing`, naming that commit.
+- Leaves the scratch at the commit it was at.
+- Touches no checkout.
 
 Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
 
@@ -127,7 +160,11 @@ Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_t
 
 ### LOA-17: A failed scratch that cannot be removed stays
 
-A `ScratchFailed` whose directory cannot be removed leaves that directory in the temporary directory, carrying the failure of the act that failed and throwing nothing.
+A `ScratchFailed` whose directory cannot be removed:
+
+- Leaves that directory in the temporary directory.
+- Carries the failure of the act that failed.
+- Throws nothing.
 
 Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_test.dart)
 
@@ -135,13 +172,21 @@ Test: [test/load/scratch_properties_test.dart](../test/load/scratch_properties_t
 
 ### MAN-1: A lock writes what is lacking, then nothing
 
-`muster lock` writes a kept lock for each package that needs one and has none, leaves every existing lock untouched, and removes every lock and partial its manifest no longer names, so a second run changes nothing.
+`muster lock`:
+
+- Writes a kept lock for each package that needs one and has none.
+- Leaves every existing lock untouched.
+- Removes every lock and partial its manifest no longer names, so a second run changes nothing.
 
 Test: [test/load/lock_properties_test.dart](../test/load/lock_properties_test.dart)
 
 ### MAN-2: A git package takes its commit's lock first
 
-The lock chosen for each package a git codebase resolves, its `root` and an `example/` with a pubspec of its own, is the `pubspec.lock` its commit holds there, else its kept lock, and with neither the first such package, the root's before the example's, is the one lacking.
+The lock chosen for each package a git codebase resolves, its `root` and an `example/` with a pubspec of its own, is:
+
+- The `pubspec.lock` its commit holds there.
+- Else its kept lock.
+- And with neither, the first such package, the root's before the example's, is the one lacking.
 
 Test: [test/model/choose_properties_test.dart](../test/model/choose_properties_test.dart)
 
@@ -278,7 +323,13 @@ Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properti
 
 ### MAN-23: The first fault the parse weighs refuses
 
-Of several faults in a manifest, the one refused is the first the parse weighs: an unknown key at the top, then each codebase in the text's order, by its name, then the first key in the text's order it does not know, then its want of a kind, then its kind's keys in the order `git`, `commit`, `root` and `toolchain`, or `hosted`, `version`, `resolution` and `toolchain`.
+Of several faults in a manifest, the one refused is the first the parse weighs, in this order:
+
+- An unknown key at the top.
+- Then each codebase in the text's order, by its name.
+- Then the first key in the text's order it does not know.
+- Then its want of a kind.
+- Then its kind's keys in the order `git`, `commit`, `root` and `toolchain`, or `hosted`, `version`, `resolution` and `toolchain`.
 
 Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
 
@@ -298,7 +349,11 @@ Test: [test/store/placed_lock_properties_test.dart](../test/store/placed_lock_pr
 
 ### STO-1: Two loads never act on one clone or checkout together
 
-Two loads at once, as isolates of one process or as separate processes, never act on one clone or checkout together, git or hosted: the second waits, uses the first's clone with no clone or fetch of its own, and hands out the first's checkout untouched where they share one.
+Two loads at once, as isolates of one process or as separate processes, never act on one clone or checkout together, git or hosted, and the second:
+
+- Waits.
+- Uses the first's clone with no clone or fetch of its own.
+- Hands out the first's checkout untouched where they share one.
 
 Test: [test/load/concurrency_properties_test.dart](../test/load/concurrency_properties_test.dart)
 
@@ -349,7 +404,11 @@ Test: [test/store/hosted_properties_test.dart](../test/store/hosted_properties_t
 
 ### STO-7: A dead or failed load's claim never blocks the next
 
-A claim held by a load that crashed, which never released it, or that failed, which released it as the failure unwound, never blocks a later load, which hands out the checkout made whole and leaves no temporary clone.
+Of a claim held by a load that crashed, which never released it, or that failed, which released it as the failure unwound:
+
+- It never blocks a later load.
+- That load hands out the checkout made whole.
+- That load leaves no temporary clone.
 
 Test: [test/load/concurrency_properties_test.dart](../test/load/concurrency_properties_test.dart)
 
@@ -421,19 +480,32 @@ Test: [test/model/stamp_properties_test.dart](../test/model/stamp_properties_tes
 
 ### STO-19: The cache follows its chain on either system
 
-The cache is `MUSTER_CACHE` on either system where it is set, else on Windows `muster` under `LOCALAPPDATA`, and elsewhere `muster` under `XDG_CACHE_HOME` where that is an absolute path, else `.cache/muster` under `HOME`, and none where none of those stands, a variable set empty counting as unset and nothing else set moving it.
+The cache is:
+
+- `MUSTER_CACHE` on either system where it is set.
+- Else on Windows `muster` under `LOCALAPPDATA`.
+- Elsewhere `muster` under `XDG_CACHE_HOME` where that is an absolute path, else `.cache/muster` under `HOME`.
+- None where none of those stands, a variable set empty counting as unset and nothing else set moving it.
 
 Test: [test/model/cache_directory_test.dart](../test/model/cache_directory_test.dart)
 
 ### STO-20: A hosted checkout starts no git
 
-A hosted codebase's lock and checkout take no clone's claim, start no git and make no cache.
+A hosted codebase's lock and checkout:
+
+- Take no clone's claim.
+- Start no git.
+- Make no cache.
 
 Test: [test/store/hosted_properties_test.dart](../test/store/hosted_properties_test.dart)
 
 ### STO-21: A clone sweeps every unheld temporary clone
 
-A clone removes every temporary clone in the cache whose claim no other hold has, and leaves every one whose claim is held, never waiting on it, and every entry that is no temporary clone.
+A clone:
+
+- Removes every temporary clone in the cache whose claim no other hold has.
+- Leaves every one whose claim is held, never waiting on it.
+- Leaves every entry that is no temporary clone.
 
 Test: [test/store/cache_properties_test.dart](../test/store/cache_properties_test.dart)
 

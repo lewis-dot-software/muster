@@ -257,10 +257,10 @@ Matcher _failedBy(Executable executable) => isA<CommandFailed>().having(
 
 void main() {
   property(
-    "LOA-11: A load reads each toolchain's SDK version once where any "
-    'codebase, git or hosted, names it and never otherwise, each codebase it '
-    'resolves carrying that version and each of a failed read failing with '
-    'it.',
+    "LOA-11: Of each toolchain's SDK version: a load reads it once "
+    "where any codebase, git or hosted, names it, and never otherwise, "
+    "each codebase the load resolves carries it, each codebase of a "
+    "failed read fails with it.",
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Versioned> drawn = draw(
         .list(
@@ -727,9 +727,9 @@ void main() {
     settings: .new(runs: 3, shrinkSteps: gitShrinks),
   );
 
-  property('LOA-6: A load refused by its manifests or for want of a cache, '
-      'a claim or a working directory refuses for that fault, starting no '
-      'process and writing no file.', (Draw draw) async {
+  property('LOA-6: A load refused by its manifests or for want of a cache, a '
+      'claim or a working directory: refuses for that fault, starts no '
+      'process, writes no file.', (Draw draw) async {
     final _Refusal refusal = draw(.element(_Refusal.values), label: 'refusal');
     final int before = draw(.integer(min: 0, max: 2), label: 'before');
     await inTemp((Directory temp) async {
@@ -861,8 +861,8 @@ void main() {
   }, settings: .new(runs: 30, shrinkSteps: gitShrinks));
 
   property(
-    'LOA-3: A load of git codebases right after another load hands out the '
-    'same packages, examples and SDK versions, writes no file, and runs '
+    'LOA-3: A load of git codebases right after another load: hands out '
+    'the same packages, examples and SDK versions, writes no file, runs '
     'nothing but its SDK version reads and its git statuses.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Repeated> draws = draw(
@@ -940,9 +940,9 @@ void main() {
   );
 
   property(
-    'LOA-1: Every failure a codebase meets, git or hosted, comes back as its '
-    'own outcome other than `Fetched`, every other codebase still getting '
-    'its own, and none throws out of `Loader.load`.',
+    'LOA-1: Of every failure a codebase meets, git or hosted: it comes '
+    'back as its own outcome other than `Fetched`, every other codebase '
+    'still gets its own, none throws out of `Loader.load`.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Fault> faults = draw(
         .list(.element(_Fault.values), minLength: 1),

@@ -1259,39 +1259,35 @@ void main() {
     }
   }, settings: .new(runs: 1, shrinkSteps: gitShrinks));
 
-  property(
-    "STO-20: A hosted codebase's lock and checkout take no clone's claim, "
-    'start no git and make no cache.',
-    (Draw draw) {
-      final Resolution resolution = draw(
-        .element(Resolution.values),
-        label: 'resolution',
-      );
-      final int count = draw(.integer(min: 1, max: 2), label: 'count');
-      final bool again = draw(.boolean(), label: 'again');
-      return _onBench((_Bench bench) async {
-        for (int n = 0; n < count; n++) {
-          serveLeaf(bench.server, 'p$n', '1.0.0');
-          final HostedCodebase codebase = hostedOf(
-            'p$n',
-            name: 'app$n',
-            resolution: resolution,
-          );
-          await bench.lockedCheckout(codebase);
-          if (again) {
-            await bench.fresh.checkout(Hosted(codebase), bench.locks);
-          }
+  property("STO-20: A hosted codebase's lock and checkout: take no clone's "
+      "claim, start no git, make no cache.", (Draw draw) {
+    final Resolution resolution = draw(
+      .element(Resolution.values),
+      label: 'resolution',
+    );
+    final int count = draw(.integer(min: 1, max: 2), label: 'count');
+    final bool again = draw(.boolean(), label: 'again');
+    return _onBench((_Bench bench) async {
+      for (int n = 0; n < count; n++) {
+        serveLeaf(bench.server, 'p$n', '1.0.0');
+        final HostedCodebase codebase = hostedOf(
+          'p$n',
+          name: 'app$n',
+          resolution: resolution,
+        );
+        await bench.lockedCheckout(codebase);
+        if (again) {
+          await bench.fresh.checkout(Hosted(codebase), bench.locks);
         }
-        expect(
-          bench.runner.commands.where((command) => command.executable == .git),
-          isEmpty,
-        );
-        expect(
-          await Directory(cacheDirectoryIn(bench.temp).path).exists(),
-          isFalse,
-        );
-      });
-    },
-    settings: .new(runs: 8, shrinkSteps: gitShrinks),
-  );
+      }
+      expect(
+        bench.runner.commands.where((command) => command.executable == .git),
+        isEmpty,
+      );
+      expect(
+        await Directory(cacheDirectoryIn(bench.temp).path).exists(),
+        isFalse,
+      );
+    });
+  }, settings: .new(runs: 8, shrinkSteps: gitShrinks));
 }

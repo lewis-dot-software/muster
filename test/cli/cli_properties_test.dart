@@ -84,80 +84,79 @@ Future<String> _rowsOf(FixedLoads loads, String verb) async {
 }
 
 void main() {
-  property(
-    'CLI-1: `muster fetch` prints one row for each codebase in the load\'s '
-    "order, its name, its outcome and that outcome's own detail, and each "
-    "failure's note to standard error in its row's order, exiting 0 when "
-    'every outcome is `Fetched`, 1 when any is not, and 2 with the '
-    "refusal's line alone when the load is refused.",
-    (Draw draw) async {
-      final List<DrawnOutcome> drawn = draw(.list(anyOutcome), label: 'drawn');
-      final int refusal = draw(
-        .integer(
-          min: -RefusalCase.every.length,
-          max: RefusalCase.every.length - 1,
-        ),
-        label: 'refusal',
-      );
-      final Map<CodebaseName, FetchOutcome> outcomes = {
-        for (final (GitCodebase codebase, FetchOutcome outcome) in drawn)
-          codebase.name: outcome,
-      };
-      final StringBuffer out = .new();
-      final StringBuffer err = .new();
-      final ExitCode code = await Cli(
-        refusal < 0
-            ? FixedLoads.loading(outcomes)
-            : FixedLoads(loads: Refused(RefusalCase.every[refusal])),
-        out,
-        err,
-      ).run(['fetch']);
-      if (refusal >= 0) {
-        expect('$out', isEmpty);
-        expect('$err', '${RefusalCase.every[refusal]}\n');
-        expect(code, ExitCode.refused);
-        return;
-      }
-      expect(
-        [
-          for (final List<String> cells in linesOf('$out'))
-            switch (cells) {
-              [final String name, final String outcome, final String detail] =>
-                [name, outcome, _read(detail)],
-              _ => cells,
-            },
-        ],
-        [
-          ['name', 'outcome', 'detail'],
-          for (final MapEntry(
-                key: CodebaseName name,
-                value: FetchOutcome outcome,
-              )
-              in outcomes.entries)
-            _outcomeRow(name.name, outcome),
-        ],
-      );
-      final List<String> notes = [
+  property("CLI-1: `muster fetch`: prints one row for each codebase in the "
+      "load's order, its name, its outcome and that outcome's own detail, "
+      "prints each failure's note to standard error in its row's order, "
+      "exits 0 when every outcome is `Fetched`, 1 when any is not, and 2 "
+      "with the refusal's line alone when the load is refused.", (
+    Draw draw,
+  ) async {
+    final List<DrawnOutcome> drawn = draw(.list(anyOutcome), label: 'drawn');
+    final int refusal = draw(
+      .integer(
+        min: -RefusalCase.every.length,
+        max: RefusalCase.every.length - 1,
+      ),
+      label: 'refusal',
+    );
+    final Map<CodebaseName, FetchOutcome> outcomes = {
+      for (final (GitCodebase codebase, FetchOutcome outcome) in drawn)
+        codebase.name: outcome,
+    };
+    final StringBuffer out = .new();
+    final StringBuffer err = .new();
+    final ExitCode code = await Cli(
+      refusal < 0
+          ? FixedLoads.loading(outcomes)
+          : FixedLoads(loads: Refused(RefusalCase.every[refusal])),
+      out,
+      err,
+    ).run(['fetch']);
+    if (refusal >= 0) {
+      expect('$out', isEmpty);
+      expect('$err', '${RefusalCase.every[refusal]}\n');
+      expect(code, ExitCode.refused);
+      return;
+    }
+    expect(
+      [
+        for (final List<String> cells in linesOf('$out'))
+          switch (cells) {
+            [final String name, final String outcome, final String detail] => [
+              name,
+              outcome,
+              _read(detail),
+            ],
+            _ => cells,
+          },
+      ],
+      [
+        ['name', 'outcome', 'detail'],
         for (final MapEntry(key: CodebaseName name, value: FetchOutcome outcome)
             in outcomes.entries)
-          if (outcome case final FetchFailure failure)
-            if (failureNote(failure) case final String note)
-              '${name.name}: $note\n',
-      ];
-      expect('$err', notes.join());
-      expect(
-        code,
-        outcomes.values.every(
-              (FetchOutcome o) => switch (o) {
-                Fetched() => true,
-                FetchFailure() => false,
-              },
-            )
-            ? ExitCode.done
-            : ExitCode.failed,
-      );
-    },
-  );
+          _outcomeRow(name.name, outcome),
+      ],
+    );
+    final List<String> notes = [
+      for (final MapEntry(key: CodebaseName name, value: FetchOutcome outcome)
+          in outcomes.entries)
+        if (outcome case final FetchFailure failure)
+          if (failureNote(failure) case final String note)
+            '${name.name}: $note\n',
+    ];
+    expect('$err', notes.join());
+    expect(
+      code,
+      outcomes.values.every(
+            (FetchOutcome o) => switch (o) {
+              Fetched() => true,
+              FetchFailure() => false,
+            },
+          )
+          ? ExitCode.done
+          : ExitCode.failed,
+    );
+  });
 
   property("CLI-2: Every row `muster fetch` and `muster lock` print holds its "
       "header's three cells, each one line with no control character that "

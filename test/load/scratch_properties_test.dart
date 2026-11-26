@@ -143,122 +143,118 @@ enum _Failing {
 }
 
 void main() {
-  property(
-    'LOA-7: A scratch worktree moves to any commit of its URL\'s, fetching '
-    "one its clone lacks, without touching any consumer's checkout, and is "
-    "gone with its clone's record of it once disposed of, a second disposal "
-    'giving `Disposed` too.',
-    (Draw draw) async {
-      final List<Set<int>> history = draw(
-        .list(
-          .set(.integer(min: 0, max: _pool.length - 1)),
-          minLength: 2,
-          maxLength: 4,
-        ),
-        label: 'history',
-      );
-      final int published = draw(
-        .integer(min: 1, max: history.length),
-        label: 'published',
-      );
-      final int pin = draw(.integer(min: 0, max: published - 1), label: 'pin');
-      final List<_Move> moves = draw(
-        .list(
-          .build(
-            (Draw draw) => (
-              draw(.integer(min: 0, max: history.length - 1)),
-              draw(.element(_Dirt.values)),
-            ),
+  property("LOA-7: A scratch worktree: moves to any commit of its URL's, "
+      "fetching one its clone lacks, touches no consumer's checkout, is "
+      "gone with its clone's record of it once disposed of, gives "
+      "`Disposed` on a second disposal too.", (Draw draw) async {
+    final List<Set<int>> history = draw(
+      .list(
+        .set(.integer(min: 0, max: _pool.length - 1)),
+        minLength: 2,
+        maxLength: 4,
+      ),
+      label: 'history',
+    );
+    final int published = draw(
+      .integer(min: 1, max: history.length),
+      label: 'published',
+    );
+    final int pin = draw(.integer(min: 0, max: published - 1), label: 'pin');
+    final List<_Move> moves = draw(
+      .list(
+        .build(
+          (Draw draw) => (
+            draw(.integer(min: 0, max: history.length - 1)),
+            draw(.element(_Dirt.values)),
           ),
-          minLength: 1,
-          maxLength: 4,
         ),
-        label: 'moves',
-      );
-      await inTemp((Directory temp) async {
-        final SpyRunner runner = .new(hermetic(temp));
-        final Origin origin = await .make(temp, runner);
-        final List<Commit> commits = [];
-        Commit? parent;
-        for (int i = 0; i < history.length; i++) {
-          parent = await origin.commit(parent, _commitFiles(i, history[i]));
-          commits.add(parent);
+        minLength: 1,
+        maxLength: 4,
+      ),
+      label: 'moves',
+    );
+    await inTemp((Directory temp) async {
+      final SpyRunner runner = .new(hermetic(temp));
+      final Origin origin = await .make(temp, runner);
+      final List<Commit> commits = [];
+      Commit? parent;
+      for (int i = 0; i < history.length; i++) {
+        parent = await origin.commit(parent, _commitFiles(i, history[i]));
+        commits.add(parent);
+      }
+      // The commits past the published ones are on no ref until the
+      // scratch is made, so its clone lacks them.
+      await origin.ref('refs/heads/main', commits[published - 1]);
+      final GitCodebase app = codebaseOf(origin, commits[pin]);
+      final String manifest = atRoot(temp);
+      await writeManifest(manifest, [app]);
+      final List<String> roots = [
+        consumerIn(temp).path,
+        p.join(temp.path, 'other'),
+      ];
+      Future<Load> loadAt(String root) =>
+          loaderIn(temp, runner, root: root).load(named: [manifest]);
+      Muster? muster;
+      for (final String root in roots) {
+        final Load load = await loadAt(root);
+        expect(load, loadedWith({'app': isA<Fetched>()}));
+        muster ??= (load as Loaded).muster;
+      }
+      final Map<String, Map<String, String>> before = {
+        for (final String root in roots) root: await treeUnder(root),
+      };
+      final Scratching made = await muster!.scratch(app.name);
+      final Scratch scratch = switch (made) {
+        Scratched(:final Scratch scratch) => scratch,
+        NotNamed() || NotGit() || ScratchFailed() => fail('$made'),
+      };
+      final String at = scratch.package.path;
+      if (published < commits.length) {
+        await origin.ref('refs/heads/later', commits.last);
+      }
+      for (final (int to, _Dirt dirt) in moves) {
+        switch (dirt) {
+          case .none:
+            break;
+          case .editTracked:
+            await File(p.join(at, 'pubspec.yaml')).writeAsString('edited');
+          case .addUntracked:
+            await writeFile(p.join(at, 'stray', 'a.txt'), 'stray');
+          case .addIgnored:
+            await writeFile(p.join(at, 'ignored', 'a.txt'), 'ignored');
         }
-        // The commits past the published ones are on no ref until the
-        // scratch is made, so its clone lacks them.
-        await origin.ref('refs/heads/main', commits[published - 1]);
-        final GitCodebase app = codebaseOf(origin, commits[pin]);
-        final String manifest = atRoot(temp);
-        await writeManifest(manifest, [app]);
-        final List<String> roots = [
-          consumerIn(temp).path,
-          p.join(temp.path, 'other'),
-        ];
-        Future<Load> loadAt(String root) =>
-            loaderIn(temp, runner, root: root).load(named: [manifest]);
-        Muster? muster;
-        for (final String root in roots) {
-          final Load load = await loadAt(root);
-          expect(load, loadedWith({'app': isA<Fetched>()}));
-          muster ??= (load as Loaded).muster;
-        }
-        final Map<String, Map<String, String>> before = {
-          for (final String root in roots) root: await treeUnder(root),
-        };
-        final Scratching made = await muster!.scratch(app.name);
-        final Scratch scratch = switch (made) {
-          Scratched(:final Scratch scratch) => scratch,
-          NotNamed() || NotGit() || ScratchFailed() => fail('$made'),
-        };
-        final String at = scratch.package.path;
-        if (published < commits.length) {
-          await origin.ref('refs/heads/later', commits.last);
-        }
-        for (final (int to, _Dirt dirt) in moves) {
-          switch (dirt) {
-            case .none:
-              break;
-            case .editTracked:
-              await File(p.join(at, 'pubspec.yaml')).writeAsString('edited');
-            case .addUntracked:
-              await writeFile(p.join(at, 'stray', 'a.txt'), 'stray');
-            case .addIgnored:
-              await writeFile(p.join(at, 'ignored', 'a.txt'), 'ignored');
-          }
-          expect(await scratch.move(commits[to]), isA<Moved>());
-          expect(await headOf(at, runner), commits[to].hash);
-          expect(await filesUnder(at), _commitFiles(to, history[to]));
-          for (final String root in roots) {
-            expect(await treeUnder(root), before[root], reason: root);
-          }
-        }
-        expect(await scratch.dispose(), isA<Disposed>());
-        expect(await scratch.dispose(), isA<Disposed>());
-        expect(await Directory(at).exists(), isFalse);
-        expect(await scratchesLeft(temp), isEmpty);
-        expect(
-          (await worktreesOf(cloneOf(temp, app), runner))..sort(),
-          [
-            for (final String root in roots)
-              await Directory(p.join(root, '.dart_tool', 'muster', 'app'))
-                  .resolveSymbolicLinks(),
-          ]..sort(),
-        );
+        expect(await scratch.move(commits[to]), isA<Moved>());
+        expect(await headOf(at, runner), commits[to].hash);
+        expect(await filesUnder(at), _commitFiles(to, history[to]));
         for (final String root in roots) {
           expect(await treeUnder(root), before[root], reason: root);
-          runner.commands.clear();
-          expect(await loadAt(root), loadedWith({'app': isA<Fetched>()}));
-          expect(runner.given, isNot(contains(contains('worktree add'))));
-          expect(runner.given, isNot(contains(contains('checkout'))));
         }
-      });
-    },
-    settings: .new(runs: 10, shrinkSteps: gitShrinks),
-  );
+      }
+      expect(await scratch.dispose(), isA<Disposed>());
+      expect(await scratch.dispose(), isA<Disposed>());
+      expect(await Directory(at).exists(), isFalse);
+      expect(await scratchesLeft(temp), isEmpty);
+      expect(
+        (await worktreesOf(cloneOf(temp, app), runner))..sort(),
+        [
+          for (final String root in roots)
+            await Directory(p.join(root, '.dart_tool', 'muster', 'app'))
+                .resolveSymbolicLinks(),
+        ]..sort(),
+      );
+      for (final String root in roots) {
+        expect(await treeUnder(root), before[root], reason: root);
+        runner.commands.clear();
+        expect(await loadAt(root), loadedWith({'app': isA<Fetched>()}));
+        expect(runner.given, isNot(contains(contains('worktree add'))));
+        expect(runner.given, isNot(contains(contains('checkout'))));
+      }
+    });
+  }, settings: .new(runs: 10, shrinkSteps: gitShrinks));
 
-  property('LOA-8: A scratch that cannot be made comes back as `NotNamed`, '
-      'starting no process, or as `ScratchFailed` for the act that failed, '
-      'leaving no directory behind, never as a throw.', (Draw draw) async {
+  property('LOA-8: A scratch that cannot be made: comes back as `NotNamed`, '
+      'starting no process, or as `ScratchFailed` for the act that '
+      'failed, leaves no directory behind, never throws.', (Draw draw) async {
     final _Fault fault = draw(.element(_Fault.values), label: 'fault');
     final String letters = draw(
       .string(alphabet: .lowerCase),
@@ -475,68 +471,63 @@ void main() {
     settings: .new(runs: 12, shrinkSteps: gitShrinks),
   );
 
-  property(
-    "LOA-15: A move to a commit on none of its URL's branches or tags gives "
-    '`MoveFailed` for `PinMissing`, naming that commit, the scratch left at '
-    'the commit it was at and no checkout touched.',
-    (Draw draw) async {
-      final List<bool> strays = draw(
-        .list(.boolean(), minLength: 1, maxLength: 4),
-        label: 'strays',
-      );
-      await inTemp((Directory temp) async {
-        final SpyRunner runner = .new(hermetic(temp));
-        final Origin origin = await .make(temp, runner);
-        final Commit pin = await origin.commit(null, _commitFiles(0, {}));
-        final Commit next = await origin.commit(pin, _commitFiles(1, {0}));
-        await origin.ref('refs/heads/main', next);
-        final GitCodebase app = codebaseOf(origin, pin);
-        await writeManifest(atRoot(temp), [app]);
-        final Muster muster = switch (await loaderIn(temp, runner).load()) {
-          Loaded(:final Muster muster) => muster,
-          Refused(:final LoadRefusal reason) => fail('refused: $reason'),
-        };
-        final Map<String, String> before = await treeUnder(
-          consumerIn(temp).path,
-        );
-        final Scratch scratch = switch (await muster.scratch(app.name)) {
-          Scratched(:final Scratch scratch) => scratch,
-          final Scratching made &&
-              (NotNamed() || NotGit() || ScratchFailed()) =>
-            fail('$made'),
-        };
-        final String at = scratch.package.path;
-        Commit was = pin;
-        for (final (int i, bool stray) in strays.indexed) {
-          if (stray) {
-            // A commit of the origin's that no ref reaches.
-            final Commit lost = await origin.commit(was, {'lost$i.txt': ''});
-            final Map<String, String> held = await filesUnder(at);
-            expect(
-              await scratch.move(lost),
-              isA<MoveFailed>().having(
-                (MoveFailed m) => m.failure,
-                'failure',
-                isA<PinMissing>().having(
-                  (PinMissing m) => m.commit,
-                  'commit',
-                  lost,
-                ),
+  property("LOA-15: A move to a commit on none of its URL's branches or tags: "
+      "gives `MoveFailed` for `PinMissing`, naming that commit, leaves "
+      "the scratch at the commit it was at, touches no checkout.", (
+    Draw draw,
+  ) async {
+    final List<bool> strays = draw(
+      .list(.boolean(), minLength: 1, maxLength: 4),
+      label: 'strays',
+    );
+    await inTemp((Directory temp) async {
+      final SpyRunner runner = .new(hermetic(temp));
+      final Origin origin = await .make(temp, runner);
+      final Commit pin = await origin.commit(null, _commitFiles(0, {}));
+      final Commit next = await origin.commit(pin, _commitFiles(1, {0}));
+      await origin.ref('refs/heads/main', next);
+      final GitCodebase app = codebaseOf(origin, pin);
+      await writeManifest(atRoot(temp), [app]);
+      final Muster muster = switch (await loaderIn(temp, runner).load()) {
+        Loaded(:final Muster muster) => muster,
+        Refused(:final LoadRefusal reason) => fail('refused: $reason'),
+      };
+      final Map<String, String> before = await treeUnder(consumerIn(temp).path);
+      final Scratch scratch = switch (await muster.scratch(app.name)) {
+        Scratched(:final Scratch scratch) => scratch,
+        final Scratching made && (NotNamed() || NotGit() || ScratchFailed()) =>
+          fail('$made'),
+      };
+      final String at = scratch.package.path;
+      Commit was = pin;
+      for (final (int i, bool stray) in strays.indexed) {
+        if (stray) {
+          // A commit of the origin's that no ref reaches.
+          final Commit lost = await origin.commit(was, {'lost$i.txt': ''});
+          final Map<String, String> held = await filesUnder(at);
+          expect(
+            await scratch.move(lost),
+            isA<MoveFailed>().having(
+              (MoveFailed m) => m.failure,
+              'failure',
+              isA<PinMissing>().having(
+                (PinMissing m) => m.commit,
+                'commit',
+                lost,
               ),
-            );
-            expect(await headOf(at, runner), was.hash);
-            expect(await filesUnder(at), held);
-          } else {
-            was = was == pin ? next : pin;
-            expect(await scratch.move(was), isA<Moved>());
-          }
-          expect(await treeUnder(consumerIn(temp).path), before);
+            ),
+          );
+          expect(await headOf(at, runner), was.hash);
+          expect(await filesUnder(at), held);
+        } else {
+          was = was == pin ? next : pin;
+          expect(await scratch.move(was), isA<Moved>());
         }
-        expect(await scratch.dispose(), isA<Disposed>());
-      });
-    },
-    settings: .new(runs: 8, shrinkSteps: gitShrinks),
-  );
+        expect(await treeUnder(consumerIn(temp).path), before);
+      }
+      expect(await scratch.dispose(), isA<Disposed>());
+    });
+  }, settings: .new(runs: 8, shrinkSteps: gitShrinks));
 
   property(
     "LOA-16: A scratch's make, move and disposal each wait on a load's claim "
@@ -552,76 +543,69 @@ void main() {
     settings: .new(runs: 1),
   );
 
-  property(
-    'LOA-17: A `ScratchFailed` whose directory cannot be removed leaves that '
-    'directory in the temporary directory, carrying the failure of the act '
-    'that failed and throwing nothing.',
-    (Draw draw) async {
-      final _Failing failing = draw(
-        .element(_Failing.values),
-        label: 'failing',
-      );
-      await inTemp((Directory temp) async {
-        if (await skippedUnlessModesDeny(temp)) {
-          return;
+  property('LOA-17: A `ScratchFailed` whose directory cannot be removed: '
+      'leaves that directory in the temporary directory, carries the '
+      'failure of the act that failed, throws nothing.', (Draw draw) async {
+    final _Failing failing = draw(.element(_Failing.values), label: 'failing');
+    await inTemp((Directory temp) async {
+      if (await skippedUnlessModesDeny(temp)) {
+        return;
+      }
+      final SpyRunner runner = .new(hermetic(temp));
+      final Origin origin = await .make(temp, runner);
+      final Commit pin = await origin.commit(null, packageFiles('app'));
+      switch (failing) {
+        case .pinMissing:
+          break;
+        case .unstartable || .worktreeAdd:
+          await origin.ref('refs/heads/main', pin);
+      }
+      final GitCodebase app = codebaseOf(origin, pin);
+      await writeManifest(atRoot(temp), [app]);
+      final Muster muster = switch (await loaderIn(temp, runner).load()) {
+        Loaded(:final Muster muster) => muster,
+        Refused(:final LoadRefusal reason) => fail('refused: $reason'),
+      };
+      Directory? locked;
+      // The scratch's directory is made before its first command, so a
+      // directory written into it then, its mode denying its removal,
+      // keeps it from being removed.
+      runner.before = (Command command) async {
+        if (locked == null) {
+          final List<String> made = await scratchesLeft(temp);
+          locked = await .new(p.join(made.single, 'locked')).create();
+          await File(p.join(locked!.path, 'kept.txt')).writeAsString('');
+          await chmod('500', locked!);
         }
-        final SpyRunner runner = .new(hermetic(temp));
-        final Origin origin = await .make(temp, runner);
-        final Commit pin = await origin.commit(null, packageFiles('app'));
         switch (failing) {
-          case .pinMissing:
+          case .unstartable:
+            throw const StoreFault(Unstartable(.git));
+          case .pinMissing || .worktreeAdd:
             break;
-          case .unstartable || .worktreeAdd:
-            await origin.ref('refs/heads/main', pin);
         }
-        final GitCodebase app = codebaseOf(origin, pin);
-        await writeManifest(atRoot(temp), [app]);
-        final Muster muster = switch (await loaderIn(temp, runner).load()) {
-          Loaded(:final Muster muster) => muster,
-          Refused(:final LoadRefusal reason) => fail('refused: $reason'),
-        };
-        Directory? locked;
-        // The scratch's directory is made before its first command, so a
-        // directory written into it then, its mode denying its removal,
-        // keeps it from being removed.
-        runner.before = (Command command) async {
-          if (locked == null) {
-            final List<String> made = await scratchesLeft(temp);
-            locked = await .new(p.join(made.single, 'locked')).create();
-            await File(p.join(locked!.path, 'kept.txt')).writeAsString('');
-            await chmod('500', locked!);
-          }
-          switch (failing) {
-            case .unstartable:
-              throw const StoreFault(Unstartable(.git));
-            case .pinMissing || .worktreeAdd:
-              break;
-          }
-        };
-        try {
-          expect(
-            await muster.scratch(app.name),
-            _failedWith(switch (failing) {
-              .unstartable => isA<Unstartable>(),
-              .pinMissing => isA<PinMissing>(),
-              .worktreeAdd => isA<CommandFailed>(),
-            }),
-          );
-          final List<String> left = await scratchesLeft(temp);
-          expect(left, hasLength(1));
-          expect(
-            await File(p.join(left.single, 'locked', 'kept.txt')).exists(),
-            isTrue,
-          );
-        } finally {
-          if (locked case final Directory directory) {
-            await chmod('700', directory);
-          }
+      };
+      try {
+        expect(
+          await muster.scratch(app.name),
+          _failedWith(switch (failing) {
+            .unstartable => isA<Unstartable>(),
+            .pinMissing => isA<PinMissing>(),
+            .worktreeAdd => isA<CommandFailed>(),
+          }),
+        );
+        final List<String> left = await scratchesLeft(temp);
+        expect(left, hasLength(1));
+        expect(
+          await File(p.join(left.single, 'locked', 'kept.txt')).exists(),
+          isTrue,
+        );
+      } finally {
+        if (locked case final Directory directory) {
+          await chmod('700', directory);
         }
-      });
-    },
-    settings: .new(runs: 6, shrinkSteps: gitShrinks),
-  );
+      }
+    });
+  }, settings: .new(runs: 6, shrinkSteps: gitShrinks));
 }
 
 /// A scratch's [act] while a load [apart] holds its clone's claim, paused at

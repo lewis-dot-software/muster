@@ -997,150 +997,147 @@ void main() {
     settings: .new(runs: 500),
   );
 
-  property(
-    'MAN-23: Of several faults in a manifest, the one refused is the first '
-    'the parse weighs: an unknown key at the top, then each codebase in the '
-    "text's order, by its name, then the first key in the text's order it "
-    'does not know, then its want of a kind, then its kind\'s keys in the '
-    'order `git`, `commit`, `root` and `toolchain`, or `hosted`, `version`, '
-    '`resolution` and `toolchain`.',
-    (Draw draw) {
-      final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
-      final List<_Drawn> faults = draw(
-        .list(
-          .build(
-            (Draw draw) => (
-              draw(.element(_Fault.values)),
-              draw(.integer(min: 0, max: codebases.length - 1)),
-            ),
+  property("MAN-23: Of several faults in a manifest, the one refused is the "
+      "first the parse weighs, in this order: an unknown key at the top, "
+      "then each codebase in the text's order, by its name, then the "
+      "first key in the text's order it does not know, then its want of a "
+      "kind, then its kind's keys in the order `git`, `commit`, `root` "
+      "and `toolchain`, or `hosted`, `version`, `resolution` and "
+      "`toolchain`.", (Draw draw) {
+    final List<Codebase> codebases = draw(someCodebases, label: 'codebases');
+    final List<_Drawn> faults = draw(
+      .list(
+        .build(
+          (Draw draw) => (
+            draw(.element(_Fault.values)),
+            draw(.integer(min: 0, max: codebases.length - 1)),
           ),
-          minLength: 2,
-          maxLength: 6,
         ),
-        label: 'faults',
-      );
-      final String? topKey = draw(
-        .oneOf([
-          _anyKey.map((String key) => _unknownAmong(key, _topKeys)),
-          .element([null]),
-        ]),
-        label: 'top',
-      );
-      final Writing writing = draw(.element(Writing.values), label: 'writing');
-      final List<Entry> entries = [];
-      final List<Matcher?> refusals = [];
-      for (final (int i, Codebase codebase) in codebases.indexed) {
-        final Iterable<_Fault> own = [
-          for (final (_Fault fault, int at) in faults)
-            if (at == i) fault,
-        ];
-        String name = codebase.name.name;
-        List<Field> fields = [...anyEntryOf(codebase).$2];
-        final List<_Weighed> weighed = _Weighed.of(codebase);
-        final Map<_Weighed, _Fault> atKey = {};
-        Matcher? named;
-        for (final _Fault fault in own) {
-          switch (fault) {
-            case .name when named == null:
-              name = draw(_badName, label: 'name');
-              named = badValue(['codebases', name], .codebaseName);
-            case .name:
+        minLength: 2,
+        maxLength: 6,
+      ),
+      label: 'faults',
+    );
+    final String? topKey = draw(
+      .oneOf([
+        _anyKey.map((String key) => _unknownAmong(key, _topKeys)),
+        .element([null]),
+      ]),
+      label: 'top',
+    );
+    final Writing writing = draw(.element(Writing.values), label: 'writing');
+    final List<Entry> entries = [];
+    final List<Matcher?> refusals = [];
+    for (final (int i, Codebase codebase) in codebases.indexed) {
+      final Iterable<_Fault> own = [
+        for (final (_Fault fault, int at) in faults)
+          if (at == i) fault,
+      ];
+      String name = codebase.name.name;
+      List<Field> fields = [...anyEntryOf(codebase).$2];
+      final List<_Weighed> weighed = _Weighed.of(codebase);
+      final Map<_Weighed, _Fault> atKey = {};
+      Matcher? named;
+      for (final _Fault fault in own) {
+        switch (fault) {
+          case .name when named == null:
+            name = draw(_badName, label: 'name');
+            named = badValue(['codebases', name], .codebaseName);
+          case .name:
+            break;
+          case .unknown:
+            final String key = _unknownAmong(
+              draw(_anyKey, label: 'unknown'),
+              _codebaseKeys,
+            );
+            if (fields.every((Field field) => field.$1 != key)) {
+              final int place = draw(
+                .integer(min: 0, max: fields.length),
+                label: 'place',
+              );
+              fields.insert(place, (key, 'x'));
+            }
+          case .missing || .bad:
+            final _Weighed key = draw(
+              .element([
+                for (final _Weighed key in weighed)
+                  if (fault == .bad || key.required) key,
+              ]),
+              label: 'key',
+            );
+            if (atKey.containsKey(key)) {
               break;
-            case .unknown:
-              final String key = _unknownAmong(
-                draw(_anyKey, label: 'unknown'),
-                _codebaseKeys,
-              );
-              if (fields.every((Field field) => field.$1 != key)) {
-                final int place = draw(
-                  .integer(min: 0, max: fields.length),
-                  label: 'place',
-                );
-                fields.insert(place, (key, 'x'));
-              }
-            case .missing || .bad:
-              final _Weighed key = draw(
-                .element([
-                  for (final _Weighed key in weighed)
-                    if (fault == .bad || key.required) key,
-                ]),
-                label: 'key',
-              );
-              if (atKey.containsKey(key)) {
-                break;
-              }
-              atKey[key] = fault;
-              fields = switch (fault) {
-                .missing => [
-                  for (final Field field in fields)
-                    if (field.$1 != key.key) field,
-                ],
-                .bad || .name || .unknown => [
-                  for (final Field field in fields)
-                    if (field.$1 != key.key) field,
-                  (key.key, draw(key.bad, label: 'bad')),
-                ],
-              };
-          }
+            }
+            atKey[key] = fault;
+            fields = switch (fault) {
+              .missing => [
+                for (final Field field in fields)
+                  if (field.$1 != key.key) field,
+              ],
+              .bad || .name || .unknown => [
+                for (final Field field in fields)
+                  if (field.$1 != key.key) field,
+                (key.key, draw(key.bad, label: 'bad')),
+              ],
+            };
         }
-        final String? unknown = [
-          for (final Field field in fields)
-            if (!_codebaseKeys.contains(field.$1)) field.$1,
-        ].firstOrNull;
-        entries.add((name, fields));
-        final bool anyKind = fields.any(
-          (Field field) => weighed.any(
-            (_Weighed key) => key.key == field.$1 && key.key != 'toolchain',
-          ),
-        );
-        final _Weighed? first = weighed
-            .where((_Weighed key) => atKey.containsKey(key))
-            .firstOrNull;
-        refusals.add(
-          named ??
-              switch (unknown) {
-                final String key => unknownKey(['codebases', name, key]),
-                null when !anyKind => refused(
-                  isA<MissingKind>().having(
-                    (MissingKind r) => r.path,
-                    'path',
-                    pathOf(['codebases', name]),
-                  ),
-                ),
-                null => switch ((first, first == null ? null : atKey[first])) {
-                  (final _Weighed key, .missing) => missingKey([
-                    'codebases',
-                    name,
-                    key.key,
-                  ]),
-                  (final _Weighed key, _) => badValue([
-                    'codebases',
-                    name,
-                    key.key,
-                  ], key.wanted),
-                  (null, _) => null,
-                },
-              },
-        );
       }
-      // Two codebases a fault renamed alike would be one key twice, which is
-      // no fault of muster's to weigh.
-      if (entries.map((Entry entry) => entry.$1).toSet().length <
-          entries.length) {
-        return;
-      }
-      final String manifest = renderManifest(
-        entries,
-        top: [if (topKey != null) (topKey, 'x')],
-        writing: writing,
+      final String? unknown = [
+        for (final Field field in fields)
+          if (!_codebaseKeys.contains(field.$1)) field.$1,
+      ].firstOrNull;
+      entries.add((name, fields));
+      final bool anyKind = fields.any(
+        (Field field) => weighed.any(
+          (_Weighed key) => key.key == field.$1 && key.key != 'toolchain',
+        ),
       );
-      expect(parseManifest(manifest), switch (topKey) {
-        final String key => unknownKey([key]),
-        null => refusals.nonNulls.firstOrNull ?? isA<ManifestParsed>(),
-      }, reason: manifest);
-    },
-    settings: .new(runs: 500),
-  );
+      final _Weighed? first = weighed
+          .where((_Weighed key) => atKey.containsKey(key))
+          .firstOrNull;
+      refusals.add(
+        named ??
+            switch (unknown) {
+              final String key => unknownKey(['codebases', name, key]),
+              null when !anyKind => refused(
+                isA<MissingKind>().having(
+                  (MissingKind r) => r.path,
+                  'path',
+                  pathOf(['codebases', name]),
+                ),
+              ),
+              null => switch ((first, first == null ? null : atKey[first])) {
+                (final _Weighed key, .missing) => missingKey([
+                  'codebases',
+                  name,
+                  key.key,
+                ]),
+                (final _Weighed key, _) => badValue([
+                  'codebases',
+                  name,
+                  key.key,
+                ], key.wanted),
+                (null, _) => null,
+              },
+            },
+      );
+    }
+    // Two codebases a fault renamed alike would be one key twice, which is
+    // no fault of muster's to weigh.
+    if (entries.map((Entry entry) => entry.$1).toSet().length <
+        entries.length) {
+      return;
+    }
+    final String manifest = renderManifest(
+      entries,
+      top: [if (topKey != null) (topKey, 'x')],
+      writing: writing,
+    );
+    expect(parseManifest(manifest), switch (topKey) {
+      final String key => unknownKey([key]),
+      null => refusals.nonNulls.firstOrNull ?? isA<ManifestParsed>(),
+    }, reason: manifest);
+  }, settings: .new(runs: 500));
 
   final Gen<GitCodebase> nearby = anyGitCodebase(
     urls: .element(['/srv/a.git', '/srv/a.git/', '/srv/b.git']),

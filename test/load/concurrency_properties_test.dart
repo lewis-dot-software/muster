@@ -232,54 +232,49 @@ bool _reachesUrl(Command command) => switch (command.executable) {
 };
 
 void main() {
-  property(
-    'STO-1: Two loads at once, as isolates of one process or as separate '
-    'processes, never act on one clone or checkout together, git or hosted: '
-    "the second waits, uses the first's clone with no clone or fetch of its "
-    "own, and hands out the first's checkout untouched where they share one.",
-    (Draw draw) async {
-      for (final _Kind kind in _Kind.values) {
-        for (final Apart firstApart in Apart.values) {
-          for (final Apart secondApart in Apart.values) {
-            for (final Pause pause in kind.pauses) {
-              for (final _Shared shared in kind.shared) {
-                for (final _Before before in _Before.values) {
-                  await _contend(
-                    kind,
-                    firstApart,
-                    secondApart,
-                    pause,
-                    shared,
-                    before,
-                  );
-                }
+  property("STO-1: Two loads at once, as isolates of one process or as "
+      "separate processes, never act on one clone or checkout together, "
+      "git or hosted, and the second: waits, uses the first's clone with "
+      "no clone or fetch of its own, hands out the first's checkout "
+      "untouched where they share one.", (Draw draw) async {
+    for (final _Kind kind in _Kind.values) {
+      for (final Apart firstApart in Apart.values) {
+        for (final Apart secondApart in Apart.values) {
+          for (final Pause pause in kind.pauses) {
+            for (final _Shared shared in kind.shared) {
+              for (final _Before before in _Before.values) {
+                await _contend(
+                  kind,
+                  firstApart,
+                  secondApart,
+                  pause,
+                  shared,
+                  before,
+                );
               }
             }
           }
         }
       }
-    },
-    settings: .new(runs: 1),
-  );
+    }
+  }, settings: .new(runs: 1));
 
-  property(
-    'STO-7: A claim held by a load that crashed, which never released it, or '
-    'that failed, which released it as the failure unwound, never blocks a '
-    'later load, which hands out the checkout made whole and leaves no '
-    'temporary clone.',
-    (Draw draw) async {
-      for (final Apart apart in Apart.values) {
-        for (final Pause pause in _Kind.git.pauses) {
-          for (final _Ending ending in _Ending.values) {
-            for (final _Before before in _Before.values) {
-              await _endThenLoad(apart, pause, ending, before);
-            }
+  property('STO-7: Of a claim held by a load that crashed, which never '
+      'released it, or that failed, which released it as the failure '
+      'unwound: it never blocks a later load, that load hands out the '
+      'checkout made whole, that load leaves no temporary clone.', (
+    Draw draw,
+  ) async {
+    for (final Apart apart in Apart.values) {
+      for (final Pause pause in _Kind.git.pauses) {
+        for (final _Ending ending in _Ending.values) {
+          for (final _Before before in _Before.values) {
+            await _endThenLoad(apart, pause, ending, before);
           }
         }
       }
-    },
-    settings: .new(runs: 1),
-  );
+    }
+  }, settings: .new(runs: 1));
 
   property('STO-27: Two loads at once over several codebases, git and hosted, '
       'sharing a root or a clone alone, each in an order of its own, never '

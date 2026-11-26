@@ -143,103 +143,95 @@ void main() {
     });
   }, settings: _explore);
 
-  property(
-    'STO-21: A clone removes every temporary clone in the cache whose claim '
-    'no other hold has, and leaves every one whose claim is held, never '
-    'waiting on it, and every entry that is no temporary clone.',
-    (Draw draw) async {
-      final bool own = draw(.boolean(), label: 'own');
-      // Whether the cache holds the clone already, so the call finds it
-      // standing rather than making it.
-      final bool warm = draw(.boolean(), label: 'warm');
-      final bool ownBare = draw(.boolean(), label: 'ownBare');
-      final List<_Other> others = draw(
-        .list(
-          .build(
-            (Draw draw) => (held: draw(.boolean()), bare: draw(.boolean())),
-          ),
-          maxLength: 4,
-        ),
-        label: 'others',
+  property('STO-21: A clone: removes every temporary clone in the cache whose '
+      'claim no other hold has, leaves every one whose claim is held, '
+      'never waiting on it, leaves every entry that is no temporary '
+      'clone.', (Draw draw) async {
+    final bool own = draw(.boolean(), label: 'own');
+    // Whether the cache holds the clone already, so the call finds it
+    // standing rather than making it.
+    final bool warm = draw(.boolean(), label: 'warm');
+    final bool ownBare = draw(.boolean(), label: 'ownBare');
+    final List<_Other> others = draw(
+      .list(
+        .build((Draw draw) => (held: draw(.boolean()), bare: draw(.boolean()))),
+        maxLength: 4,
+      ),
+      label: 'others',
+    );
+    final Set<int> strays = draw(
+      .set(.integer(min: 0, max: 3)),
+      label: 'strays',
+    );
+    await inTemp((Directory temp) async {
+      final SpyRunner runner = .new(hermetic(temp));
+      final Origin origin = await .make(temp, runner);
+      final Cache cache = cacheIn(
+        temp,
+        runner,
+        .new(testLocker, () async => fail('a held claim was waited on')),
       );
-      final Set<int> strays = draw(
-        .set(.integer(min: 0, max: 3)),
-        label: 'strays',
-      );
-      await inTemp((Directory temp) async {
-        final SpyRunner runner = .new(hermetic(temp));
-        final Origin origin = await .make(temp, runner);
-        final Cache cache = cacheIn(
-          temp,
-          runner,
-          .new(testLocker, () async => fail('a held claim was waited on')),
-        );
-        final Commit pin = await origin.commit();
-        await origin.ref('refs/heads/main', pin);
-        if (warm) {
-          await cache.clone(origin.url, pin);
-        }
-        final List<GitUrl> otherUrls = [
-          for (int i = 0; i < others.length; i++)
-            .parse('https://example.com/$i.git')!,
-        ];
-        final List<String> leftOthers = [
-          for (final (int i, _Other other) in others.indexed)
-            _leftFor(cache.directory, otherUrls[i], bare: other.bare),
-        ];
-        final List<String> strayPool = _strays(cache.directory);
-        final List<String> strayNames = [
-          for (final int i in strays) strayPool[i],
-        ];
-        for (final String name in [
-          if (own) _leftFor(cache.directory, origin.url, bare: ownBare),
-          ...leftOthers,
-          ...strayNames,
-        ]) {
-          await File(p.join(cache.directory.path, name, 'HEAD'))
-              .create(recursive: true);
-        }
-        final Completer<void> go = .new();
-        final List<Future<void>> holders = [];
-        for (final (int i, _Other other) in others.indexed) {
-          if (other.held) {
-            final Completer<void> taken = .new();
-            holders.add(
-              Claims(testLocker).holding(
-                ClonePath.of(cache.directory, otherUrls[i]).claim,
-                () {
+      final Commit pin = await origin.commit();
+      await origin.ref('refs/heads/main', pin);
+      if (warm) {
+        await cache.clone(origin.url, pin);
+      }
+      final List<GitUrl> otherUrls = [
+        for (int i = 0; i < others.length; i++)
+          .parse('https://example.com/$i.git')!,
+      ];
+      final List<String> leftOthers = [
+        for (final (int i, _Other other) in others.indexed)
+          _leftFor(cache.directory, otherUrls[i], bare: other.bare),
+      ];
+      final List<String> strayPool = _strays(cache.directory);
+      final List<String> strayNames = [
+        for (final int i in strays) strayPool[i],
+      ];
+      for (final String name in [
+        if (own) _leftFor(cache.directory, origin.url, bare: ownBare),
+        ...leftOthers,
+        ...strayNames,
+      ]) {
+        await File(p.join(cache.directory.path, name, 'HEAD'))
+            .create(recursive: true);
+      }
+      final Completer<void> go = .new();
+      final List<Future<void>> holders = [];
+      for (final (int i, _Other other) in others.indexed) {
+        if (other.held) {
+          final Completer<void> taken = .new();
+          holders.add(
+            Claims(testLocker)
+                .holding(ClonePath.of(cache.directory, otherUrls[i]).claim, () {
                   taken.complete();
                   return go.future;
-                },
-              ),
-            );
-            await taken.future;
-          }
+                }),
+          );
+          await taken.future;
         }
-        await cache.clone(origin.url, pin);
-        final List<String> standing = [
-          await for (final FileSystemEntity entity in Directory(
-            cache.directory.path,
-          ).list())
-            p.basename(entity.path),
-        ];
-        expect(
-          standing.where(
-            (String name) =>
-                ClonePath.ofTemporary(cache.directory, name) != null,
-          ),
-          unorderedEquals([
-            for (final (int i, _Other other) in others.indexed)
-              if (other.held) leftOthers[i],
-          ]),
-        );
-        expect(standing, containsAll(strayNames));
-        go.complete();
-        await Future.wait(holders);
-      });
-    },
-    settings: .new(runs: 20, shrinkSteps: gitShrinks),
-  );
+      }
+      await cache.clone(origin.url, pin);
+      final List<String> standing = [
+        await for (final FileSystemEntity entity in Directory(
+          cache.directory.path,
+        ).list())
+          p.basename(entity.path),
+      ];
+      expect(
+        standing.where(
+          (String name) => ClonePath.ofTemporary(cache.directory, name) != null,
+        ),
+        unorderedEquals([
+          for (final (int i, _Other other) in others.indexed)
+            if (other.held) leftOthers[i],
+        ]),
+      );
+      expect(standing, containsAll(strayNames));
+      go.complete();
+      await Future.wait(holders);
+    });
+  }, settings: .new(runs: 20, shrinkSteps: gitShrinks));
 }
 
 /// The name of a temporary clone of [url]'s in [cache], as a make cut short

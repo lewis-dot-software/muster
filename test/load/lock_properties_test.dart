@@ -96,10 +96,10 @@ Gen<List<int>> _orderOf(int length) => .build((Draw draw) {
 
 void main() {
   property(
-    'MAN-1: `muster lock` writes a kept lock for each package that needs one '
-    'and has none, leaves every existing lock untouched, and removes every '
-    'lock and partial its manifest no longer names, so a second run changes '
-    'nothing.',
+    'MAN-1: `muster lock`: writes a kept lock for each package that '
+    'needs one and has none, leaves every existing lock untouched, '
+    'removes every lock and partial its manifest no longer names, so a '
+    'second run changes nothing.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<_Codebase> draws = draw(
         .list(_codebase, minLength: 1),
