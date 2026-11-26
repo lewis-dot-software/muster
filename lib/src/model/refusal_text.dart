@@ -12,7 +12,8 @@ String refusalText(LoadRefusal refusal) => switch (refusal) {
         'none '
         'in MUSTER_MANIFESTS',
   NotManifestName(:final String path) =>
-    "${onOneLine(path)}: a manifest's file name ends .yaml",
+    "${onOneLine(path)}: a manifest's file name ends .yaml after a stem of "
+        'its own',
   ManifestMissing(:final manifest) =>
     '${onOneLine(manifest.path)}: no such manifest',
   ManifestUnreadable(:final manifest, :final String reason) =>

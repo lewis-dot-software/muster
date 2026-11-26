@@ -25,7 +25,7 @@ A kept lock is a lock muster keeps beside a manifest, in `<stem>_locks/`, so `mu
 
 The key is a hash of every manifest value the resolve turns on: the source, the git URL as written or the hosted package's name, then the pin, `root` for a git codebase, `resolution` for a hosted one, and the toolchain. So an edit to any of those, a URL spelled another way among them, finds no lock and the next load returns `Unlocked` until `muster lock` runs again, never a resolution on a lock made for other values.
 
-A load copies a kept lock into its package as `pubspec.lock` before it resolves, so a git checkout carries one as a file its pin lacks.
+A load copies a kept lock as `pubspec.lock` into the directory its package resolves in before it resolves, `muster_around` for a hosted package resolved `as-dependency`, so a git checkout carries one as a file its pin lacks and the lock pub served at a hosted package's top stands.
 
 ## Writing them
 
@@ -33,7 +33,7 @@ A load copies a kept lock into its package as `pubspec.lock` before it resolves,
 dart run muster lock
 ```
 
-`muster lock` resolves afresh each package that needs a kept lock and has none, in its codebase's checkout made again at its pin, and writes the lock that resolve gives. It leaves every lock that stands, so a lock is written afresh by deleting its file and running it again. It then removes every lock in the directory that no codebase of its manifest names, so a codebase dropped or edited leaves nothing behind.
+`muster lock` resolves afresh each package that needs a kept lock and has none, in its codebase's checkout made again at its pin, any lock in the directory it resolves in removed first, `muster_around` for a hosted package resolved `as-dependency`, and writes the lock that resolve gives. It leaves every lock that stands, so a lock is written afresh by deleting its file and running it again. It then removes every lock in the directory that no codebase of its manifest names, so a codebase dropped or edited leaves nothing behind.
 
 Each lock is written to `<file>.partial` beside it and then moved into place, so a write cut short never leaves part of a lock. A file there whose name ends neither `.lock` nor `.lock.partial` is left alone.
 

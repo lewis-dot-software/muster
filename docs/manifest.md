@@ -45,7 +45,7 @@ A codebase's key is its name, `[a-z][a-z0-9_]*`, and names its checkout's direct
 
 ## The manifests a load reads
 
-`Muster.load()` reads `muster.yaml` at its root and every manifest `MUSTER_MANIFESTS` lists, a path list in the platform's separator, `:` and `;` on Windows. A manifest's file name ends `.yaml`, and one named that is missing refuses the load ([refusals](refusals.md)).
+`Muster.load()` reads `muster.yaml` at its root and every manifest `MUSTER_MANIFESTS` lists, a path list in the platform's separator, `:` and `;` on Windows. A manifest's file name ends `.yaml` after a stem of its own, so `.yaml` alone is refused, and one named that is missing refuses the load ([refusals](refusals.md)).
 
 `Muster.load(manifests: [...])` reads the manifests given in place of both. Its `root` is the directory the checkouts stand under, `.dart_tool/muster/` inside it, and is the working directory where it is left out. A relative path, a manifest's or the root's, is read against the working directory. Wherever its manifests sit, a load's checkouts stand under its root.
 

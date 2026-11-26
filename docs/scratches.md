@@ -5,7 +5,7 @@ aliases: Scratch, Muster.scratch, move, dispose, older commits, replay, worktree
 
 # Scratches
 
-A scratch is a worktree of a git codebase's clone in a temporary directory, a test's own to move to any commit. A checkout is shared by every test file that loads its codebase, so none may move it off its pin, and a test that must, such as one replaying older commits, takes a scratch instead.
+A scratch is a worktree of a git codebase's clone in a temporary directory, a test's own to move to any commit. A checkout is shared by every test file that loads its codebase, so none may move it off its pin, and a test that must, such as one replaying older commits or one running the codebase's own tests, takes a scratch instead.
 
 ## Making one
 

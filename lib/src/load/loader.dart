@@ -74,9 +74,10 @@ class Loader implements Loads {
   /// manifests' order.
   ///
   /// Refuses, with no process started and no file written, on the first fault
-  /// the manifests meet: a manifest whose file name does not end `.yaml`, one
-  /// named that is missing, any that is unreadable or refuses to parse, a load
-  /// with no manifest at all, a name met twice, or no cache.
+  /// the manifests meet: a manifest whose file name does not end `.yaml`
+  /// after a stem of its own, one named that is missing, any that is
+  /// unreadable or refuses to parse, a load with no manifest at all, a name
+  /// met twice, or no cache.
   ///
   /// Every expected failure a codebase meets is its outcome, and the load
   /// goes on to the next. Another load acting on a codebase's clone or

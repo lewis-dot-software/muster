@@ -60,4 +60,6 @@ Each reads back as its `path`. A hosted package resolved `as-dependency` has its
 
 A codebase's checkout sits under `.dart_tool/muster/<name>/` at the load's root. A git codebase's package is its `root` inside it, and a hosted one's is unpacked there as `<package>-<version>/`. The first load makes it and resolves it, and each load after hands it out untouched while it stands at its pin, resolved on the same lock by the same SDK. Any other checkout is made again.
 
-A tool may write beside a checkout's tracked files, and what it writes there lasts across loads. It never moves a checkout off its pin or edits a tracked file ([scratches](scratches.md)).
+A tool may write beside a checkout's tracked files, and what it writes there lasts across loads, but for a package's `pubspec.lock` and `.dart_tool/package_config.json`, which a load reads to find the checkout standing. It never moves a checkout off its pin or edits a tracked file ([scratches](scratches.md)).
+
+A run of the codebase's own tests in its checkout is exposed, since `dart test` or `flutter test` may rewrite both files as it starts, and a load beside it or after it then finds the checkout no longer standing and makes it again, removing whatever the run made there. A tool that runs a git codebase's tests runs them in a scratch, and a hosted package's in a copy of the package outside its checkout, since a hosted codebase has no scratch.

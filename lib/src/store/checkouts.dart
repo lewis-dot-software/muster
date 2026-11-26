@@ -267,7 +267,8 @@ class Checkouts {
     final List<KeptLockPath> written = [];
     for (final Package package in lacking) {
       final PackagePath path = packageInCheckout(at, codebase, package);
-      // A lock it was served would seed the resolve, which starts from none.
+      // A lock where it resolves would seed the resolve, which starts from
+      // none.
       await removeFile(path.lock.path);
       await _runner.run(codebase.toolchain.lock(path));
       final KeptLockPath kept = keptLockOf(locks, codebase, package);

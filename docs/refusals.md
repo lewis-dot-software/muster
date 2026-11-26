@@ -14,7 +14,7 @@ Each refusal reads as the line `muster fetch` prints for it, naming its case and
 | Case | Carries | Refuses |
 |---|---|---|
 | `NoManifest` | `root` | A load with no manifest: none named, no `muster.yaml` at its root, and none in `MUSTER_MANIFESTS` |
-| `NotManifestName` | `path` | A manifest whose file name does not end `.yaml` |
+| `NotManifestName` | `path` | A manifest whose file name does not end `.yaml` after a stem of its own, `.yaml` alone among them |
 | `ManifestMissing` | `manifest` | A manifest named that is not there |
 | `ManifestUnreadable` | `manifest`, `reason` | A manifest whose file could not be read, for the reason the system gave |
 | `ManifestInvalid` | `manifest`, `refusal` | A manifest whose text refused to parse, for its `ManifestRefusal` |

@@ -245,7 +245,7 @@ void main() {
             'none in MUSTER_MANIFESTS',
         r'"/consumer/a\nb.yml": a manifest'
             "'"
-            r's file name ends .yaml',
+            r's file name ends .yaml after a stem of its own',
         r'"/consumer/a\nb.yaml": no such manifest',
         r'/consumer/c.yaml: "Permission\ndenied"',
         r'/consumer/c.yaml: not YAML: "line 1\nline 2"',
