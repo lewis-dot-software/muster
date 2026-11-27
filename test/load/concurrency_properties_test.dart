@@ -19,6 +19,7 @@ import '../support/git_shrinks.dart';
 import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/manifests.dart';
+import '../support/order_of.dart';
 import '../support/origin.dart';
 import '../support/outcome_case.dart';
 import '../support/package_server.dart';
@@ -286,11 +287,11 @@ void main() {
       label: 'count',
     );
     final List<_Several> firstOrder = draw(
-      _orderOf(_Several.values),
+      orderOf(_Several.values),
       label: 'first order',
     ).take(count).toList();
     final List<_Several> secondOrder = draw(
-      _orderOf(firstOrder),
+      orderOf(firstOrder),
       label: 'second order',
     );
     final List<_Several> drawn = firstOrder;
@@ -544,15 +545,6 @@ enum _Several {
     .h => .hosted,
   };
 }
-
-/// Every order of [items], each item once.
-Gen<List<T>> _orderOf<T>(List<T> items) => .build((Draw draw) {
-  final List<T> left = .of(items);
-  return [
-    for (int i = 0; i < items.length; i++)
-      left.removeAt(draw(.integer(min: 0, max: left.length - 1))),
-  ];
-});
 
 /// Two loads at once of the codebases [firstOrder] names, each from a
 /// manifest of its own in its own order, the second's [secondOrder], the

@@ -20,6 +20,7 @@ import '../support/hosted.dart';
 import '../support/loads.dart';
 import '../support/locks.dart';
 import '../support/manifests.dart';
+import '../support/order_of.dart';
 import '../support/origin.dart';
 import '../support/package_server.dart';
 import '../support/packages.dart';
@@ -83,16 +84,6 @@ final List<_Hosted> _hostedCases = [
       ])
         (resolution: resolution, example: example, standing: standing),
 ];
-
-/// An order of [length] items, each index below [length] once, drawn as a
-/// shuffle that takes each next item from those left.
-Gen<List<int>> _orderOf(int length) => .build((Draw draw) {
-  final List<int> left = [for (int i = 0; i < length; i++) i];
-  return [
-    for (int n = length; n > 0; n--)
-      left.removeAt(draw(.integer(min: 0, max: n - 1))),
-  ];
-});
 
 void main() {
   property(
@@ -208,7 +199,7 @@ void main() {
     '`Fetched`.',
     (Draw draw) => inTemp((Directory temp) async {
       final List<int> order = draw(
-        _orderOf(_hostedCases.length),
+        orderOf([for (int i = 0; i < _hostedCases.length; i++) i]),
         label: 'order',
       );
       final PackageServer server = await .start();
