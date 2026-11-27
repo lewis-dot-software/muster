@@ -317,7 +317,12 @@ Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properti
 
 ### MAN-22: A refusal writes back what the manifest wrote
 
-A refused value's `written` is what the manifest wrote in its place, a plain value as its text with its quotes, a list, a mapping or nothing.
+A refused value's `written` is what the manifest wrote in its place:
+
+- A plain value as its text with its quotes.
+- A list.
+- A mapping.
+- Or nothing.
 
 Test: [test/model/manifest_properties_test.dart](../test/model/manifest_properties_test.dart)
 

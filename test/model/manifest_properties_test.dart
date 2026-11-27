@@ -888,7 +888,7 @@ void main() {
 
   property(
     "MAN-22: A refused value's `written` is what the manifest wrote in its "
-    'place, a plain value as its text with its quotes, a list, a mapping or '
+    'place: a plain value as its text with its quotes, a list, a mapping, or '
     'nothing.',
     (Draw draw) {
       final List<Codebase> codebases = draw(someCodebases, label: 'codebases');

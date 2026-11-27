@@ -61,11 +61,11 @@ String renderManifest(
   return '$text';
 }
 
-/// Whether [text], written bare, reads back as written: one line, a plain
-/// scalar whose span is the whole of it, and the string it is where YAML
-/// reads a string.
+/// Whether [text], written bare, reads back as written: one line with no
+/// space at either end, which a plain scalar drops, a plain scalar whose
+/// span is the whole of it, and the string it is where YAML reads a string.
 bool readsBare(String text) {
-  if (text.isEmpty || breaksLine(text)) {
+  if (text.isEmpty || breaksLine(text) || text.trim() != text) {
     return false;
   }
   final YamlNode node;
